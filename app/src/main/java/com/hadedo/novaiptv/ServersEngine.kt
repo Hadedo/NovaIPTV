@@ -56,7 +56,7 @@ data class SeriesDetails(
 )
 
 data class QualityVariant(
-    val qualityTag: String, // "4K UHD", "1080p FHD", "720p HD", "SD / LOW", "BACKUP"
+    val qualityTag: String, // "4K UHD", "1080p FHD", "720p HD", "SD / LOW", "بث قياسي"
     val priority: Int,
     val rawName: String,
     val item: MediaItemModel
@@ -66,7 +66,8 @@ data class GroupedSportsChannel(
     val cleanName: String,
     val category: String,
     val logo: String,
-    val variants: List<QualityVariant>
+    val variants: List<QualityVariant>,
+    val isLiveEvent: Boolean = false
 )
 
 data class EpgProgram(
@@ -199,7 +200,50 @@ object ServersEngine {
         }
     }
 
-    // جلب القنوات، الأفلام، أو المسلسلات
+    // التحقق من القنوات الفاصلة الوهمية مثل ##### BEIN #####
+    fun isSeparatorChannel(name: String): Boolean {
+        val cleaned = name.trim()
+        if (cleaned.isBlank()) return true
+        if (cleaned.startsWith("###") || cleaned.startsWith("---") || cleaned.startsWith("===") || cleaned.startsWith("***")) return true
+        val lettersAndDigits = cleaned.count { it.isLetterOrDigit() }
+        return lettersAndDigits < 2
+    }
+
+    // اكتشاف وسم الجودة تلقائياً وإضافته لاسم الباقة إذا كان السيرفر يخفيه
+    fun enrichCategoryQualities(items: List<MediaItemModel>): List<MediaItemModel> {
+        val byCat = items.groupBy { it.category }
+        val catLabelMap = mutableMapOf<String, String>()
+
+        for ((catName, chList) in byCat) {
+            val upperCat = catName.uppercase()
+            val hasExplicitTag = listOf("4K", "UHD", "FHD", "1080", "HD", "720", "SD", "LOW", "MINI", "HEVC", "RAW").any { upperCat.contains(it) }
+            if (hasExplicitTag || chList.isEmpty()) {
+                catLabelMap[catName] = catName
+            } else {
+                var c4k = 0; var cFhd = 0; var cHd = 0; var cSd = 0
+                for (ch in chList.take(25)) {
+                    val u = ch.name.uppercase()
+                    when {
+                        u.contains("4K") || u.contains("UHD") || u.contains("2160") -> c4k++
+                        u.contains("FHD") || u.contains("1080") || u.contains("RAW") || u.contains("HEVC") -> cFhd++
+                        u.contains("LOW") || u.contains("MINI") || u.contains("SD") || u.contains("480") -> cSd++
+                        u.contains("HD") || u.contains("720") -> cHd++
+                    }
+                }
+                val detected = when {
+                    c4k > 0 && c4k >= cFhd && c4k >= cHd -> "4K"
+                    cFhd > 0 && cFhd >= cHd && cFhd >= cSd -> "FHD"
+                    cSd > 0 && cSd > cHd -> "SD / LOW"
+                    cHd > 0 -> "HD"
+                    else -> ""
+                }
+                catLabelMap[catName] = if (detected.isNotEmpty()) "$catName [$detected]" else catName
+            }
+        }
+        return items.map { it.copy(category = catLabelMap[it.category] ?: it.category) }
+    }
+
+    // جلب القنوات، الأفلام، أو المسلسلات مع فلترة الفواصل وتوضيح جودات الباقات
     suspend fun loadXtream(host: String, user: String, pass: String, type: String): List<MediaItemModel> = withContext(Dispatchers.IO) {
         val list = mutableListOf<MediaItemModel>()
         try {
@@ -219,14 +263,16 @@ object ServersEngine {
             val catArr = JSONArray(fetchJson("$base/player_api.php?username=$user&password=$pass&action=$catAction"))
             for (i in 0 until catArr.length()) {
                 val c = catArr.getJSONObject(i)
-                catMap[c.optString("category_id")] = c.optString("category_name", "عام")
+                catMap[c.optString("category_id")] = c.optString("category_name", "عام").trim()
             }
 
             val streamArr = JSONArray(fetchJson("$base/player_api.php?username=$user&password=$pass&action=$streamAction"))
             for (i in 0 until streamArr.length()) {
                 val s = streamArr.getJSONObject(i)
-                val id = if (type == "series") s.optString("series_id") else s.optString("stream_id")
                 val rawTitle = s.optString("name", "بدون اسم")
+                if (isSeparatorChannel(rawTitle)) continue
+
+                val id = if (type == "series") s.optString("series_id") else s.optString("stream_id")
                 val cleanTitle = cleanMediaName(rawTitle)
                 val catName = catMap[s.optString("category_id")] ?: "عام"
                 val icon = if (type == "series") s.optString("cover") else s.optString("stream_icon")
@@ -240,7 +286,7 @@ object ServersEngine {
                 list.add(MediaItemModel(id, cleanTitle, playUrl, catName, icon, type))
             }
         } catch (_: Exception) {}
-        list
+        if (type == "live") enrichCategoryQualities(list) else list
     }
 
     // جلب المواسم والحلقات الكاملة لأي مسلسل (Series Seasons & Episodes)
@@ -325,9 +371,11 @@ object ServersEngine {
                 .getJSONObject("js").getJSONArray("data")
             for (i in 0 until chArr.length()) {
                 val ch = chArr.getJSONObject(i)
+                val rawTitle = ch.optString("name", "قناة")
+                if (isSeparatorChannel(rawTitle)) continue
                 val cmd = ch.optString("cmd").removePrefix("ffmpeg ")
                 if (cmd.isNotBlank()) {
-                    list.add(MediaItemModel(ch.optString("id"), cleanMediaName(ch.optString("name", "قناة")), cmd, "Stalker Live", ch.optString("logo"), "live"))
+                    list.add(MediaItemModel(ch.optString("id"), cleanMediaName(rawTitle), cmd, "Stalker Live", ch.optString("logo"), "live"))
                 }
             }
         } catch (_: Exception) {}
@@ -337,7 +385,8 @@ object ServersEngine {
     // تنظيف أسماء الأفلام والقنوات من الرموز المزعجة
     fun cleanMediaName(raw: String): String {
         return raw
-            .replace(Regex("^[#|*\\-\\[\\(]+\\s*"), "")
+            .replace(Regex("^[#|*\\-\\[\\(=]+\\s*"), "")
+            .replace(Regex("\\s*[#|*\\-=]+$"), "")
             .replace(Regex("^(AR|EN|FR|TR|KU|VIP|4K|FHD|HD|SD)\\s*[:|\\-]\\s*", RegexOption.IGNORE_CASE), "")
             .trim()
     }
@@ -354,55 +403,106 @@ object ServersEngine {
         }
     }
 
-    // فلترة القنوات الرياضية وتجميع الجودات في بطاقة واحدة (Sports Hub Grouping)
-    fun groupSportsChannels(allChannels: List<MediaItemModel>): List<GroupedSportsChannel> {
-        val sportsKeywords = listOf("sport", "bein", "ssc", "alkass", "kass", "ad sport", "abu dhabi", "alrabiaa", "sky sport", "dazn", "espn", "رياض", "بين", "الكأس", "السعودية الرياضية", "أبو ظبي", "الرابعة")
-        val sportsOnly = allChannels.filter { ch ->
-            val combined = "${ch.category} ${ch.name}".lowercase()
-            sportsKeywords.any { combined.contains(it) }
+    // الترتيب الطبيعي للأرقام (Channel 1 قبل Channel 2 وقبل Channel 10)
+    private fun naturalCompare(a: String, b: String): Int {
+        val regex = Regex("(\\d+|\\D+)")
+        val partsA = regex.findAll(a.lowercase()).map { it.value }.toList()
+        val partsB = regex.findAll(b.lowercase()).map { it.value }.toList()
+        val len = minOf(partsA.size, partsB.size)
+        for (i in 0 until len) {
+            val pA = partsA[i]
+            val pB = partsB[i]
+            val numA = pA.toLongOrNull()
+            val numB = pB.toLongOrNull()
+            val cmp = if (numA != null && numB != null) {
+                numA.compareTo(numB)
+            } else {
+                pA.compareTo(pB)
+            }
+            if (cmp != 0) return cmp
         }
+        return partsA.size.compareTo(partsB.size)
+    }
 
+    // محرك تجميع الجودات الموحد والترتيب النظيف لأي قائمة قنوات (مباشر + رياضة)
+    fun groupChannelsByQuality(channels: List<MediaItemModel>, markLiveEvents: Boolean = false): List<GroupedSportsChannel> {
         val groupedMap = linkedMapOf<String, MutableList<QualityVariant>>()
 
-        for (ch in sportsOnly) {
-            val upper = ch.name.uppercase()
+        for (ch in channels) {
+            if (isSeparatorChannel(ch.name)) continue
+            val upper = "${ch.name} ${ch.category}".uppercase()
             val (qTag, prio) = when {
                 upper.contains("4K") || upper.contains("UHD") || upper.contains("2160") -> Pair("4K UHD", 1)
                 upper.contains("FHD") || upper.contains("1080") || upper.contains("RAW") || upper.contains("HEVC") -> Pair("1080p FHD", 2)
-                upper.contains("HD") || upper.contains("720") -> Pair("720p HD", 3)
                 upper.contains("LOW") || upper.contains("MINI") || upper.contains("SD") || upper.contains("480") -> Pair("SD / LOW (للنت الضعيف)", 4)
+                upper.contains("HD") || upper.contains("720") -> Pair("720p HD", 3)
                 else -> Pair("بث قياسي / احتياطي", 5)
             }
 
-            // استخراج الاسم الأساسي للقناة بدون كلمات الجودة لتجميعها معاً
             val baseName = ch.name
-                .replace(Regex("\\b(4K|UHD|FHD|1080P|720P|HD|SD|LOW|MINI|HEVC|H265|RAW|VIP|BACKUP|VEGA|MULTI)\\b", RegexOption.IGNORE_CASE), "")
-                .replace(Regex("[\\[\\]\\(\\)\\|\\-_:]+"), " ")
+                .replace(Regex("\\b(4K|UHD|FHD|1080P|720P|HD|SD|LOW|MINI|HEVC|H265|RAW|VIP|BACKUP|VEGA|MULTI|SOURCE|S1|S2)\\b", RegexOption.IGNORE_CASE), "")
+                .replace(Regex("[\\[\\]\\(\\)\\|\\-_:#*]+"), " ")
                 .replace(Regex("\\s+"), " ")
                 .trim()
                 .ifBlank { ch.name }
 
             val key = baseName.lowercase()
             val list = groupedMap.getOrPut(key) { mutableListOf() }
-            list.add(QualityVariant(qTag, prio, ch.name, ch))
+            list.add(QualityVariant(qTag, prio, "${ch.name} (${ch.category})", ch))
         }
 
-        return groupedMap.values.map { variants ->
+        val result = groupedMap.values.map { variants ->
             val sorted = variants.sortedBy { it.priority }
             val first = sorted.first().item
             val displayBase = first.name
-                .replace(Regex("\\b(4K|UHD|FHD|1080P|720P|HD|SD|LOW|MINI|HEVC|H265|RAW|VIP|BACKUP|VEGA|MULTI)\\b", RegexOption.IGNORE_CASE), "")
-                .replace(Regex("[\\[\\]\\(\\)\\|\\-_:]+"), " ")
+                .replace(Regex("\\b(4K|UHD|FHD|1080P|720P|HD|SD|LOW|MINI|HEVC|H265|RAW|VIP|BACKUP|VEGA|MULTI|SOURCE|S1|S2)\\b", RegexOption.IGNORE_CASE), "")
+                .replace(Regex("[\\[\\]\\(\\)\\|\\-_:#*]+"), " ")
                 .replace(Regex("\\s+"), " ")
                 .trim()
                 .ifBlank { first.name }
+
+            val combinedText = "${first.category} ${first.name}".lowercase()
+            val isEvent = markLiveEvents && (
+                combinedText.contains(" vs ") || combinedText.contains(" x ") ||
+                combinedText.contains("event") || combinedText.contains("match") ||
+                combinedText.contains("مبار") || combinedText.contains("نقل") ||
+                combinedText.contains("ppv") || combinedText.contains("live event") ||
+                Regex("\\b\\d{1,2}:\\d{2}\\b").containsMatchIn(first.name)
+            )
+
             GroupedSportsChannel(
                 cleanName = displayBase,
                 category = first.category,
                 logo = sorted.firstOrNull { it.item.logo.isNotBlank() }?.item?.logo ?: "",
-                variants = sorted
+                variants = sorted,
+                isLiveEvent = isEvent
             )
         }
+
+        return result.sortedWith { a, b -> naturalCompare(a.cleanName, b.cleanName) }
+    }
+
+    // فلترة القنوات الرياضية الحقيقية فقط (استبعاد الأفلام والمسلسلات والترفيه)
+    fun groupSportsChannels(allChannels: List<MediaItemModel>): List<GroupedSportsChannel> {
+        val excludeKeywords = listOf(
+            "movie", "series", "drama", "action", "cinema", "entertainment", "kids", "cartoon", "news", "doc", "music", "box office", "star ",
+            "افلام", "أفلام", "مسلسل", "دراما", "سينما", "ترفيه", "اطفال", "أطفال", "كرتون", "اخبار", "أخبار", "وثائق"
+        )
+        val sportsKeywords = listOf(
+            "sport", "bein sport", "ssc", "alkass", "kass", "ad sport", "abu dhabi sport", "alrabiaa", "sky sport", "dazn", "espn", "arena sport", "super sport", "tnt sport", "euro sport", "eurosport",
+            "رياض", "الكأس", "السعودية الرياضية", "أبو ظبي الرياضية", "الرابعة الرياضية", "مبار", "كأس", "دوري"
+        )
+
+        val sportsOnly = allChannels.filter { ch ->
+            if (isSeparatorChannel(ch.name)) return@filter false
+            val combined = "${ch.category} ${ch.name}".lowercase()
+            val isExcluded = excludeKeywords.any { combined.contains(it) }
+            val isSport = sportsKeywords.any { combined.contains(it) } ||
+                (combined.contains("bein") && !isExcluded)
+            !isExcluded && isSport
+        }
+
+        return groupChannelsByQuality(sportsOnly, markLiveEvents = true)
     }
 }
 // END_ENGINE
