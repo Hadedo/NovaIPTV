@@ -155,7 +155,7 @@ fun getStrings(lang: String): AppStrings = when (lang) {
     else -> AppStrings("الرئيسية", "مباشر", "الرياضة", "السينما", "الإعدادات", "واصل المشاهدة", "شاهدته مؤخراً", "مجلداتي", "المنصات", "ابحث في القنوات والأفلام...", "الكل", "أفلام", "مسلسلات", "تعدد الشاشات (4)", "وضع الأطفال", "الإعدادات", "إضافة اشتراك", "تحديث القوائم", "المواسم والحلقات", "اختر جودة البث")
 }
 
-@OptIn(UnstableApi::class, ExperimentalFoundationApi::class)
+@OptIn(markerClass = [UnstableApi::class, ExperimentalFoundationApi::class])
 @Composable
 fun NovaIptvUltimateApp(isInPipMode: Boolean) {
     val context = LocalContext.current
