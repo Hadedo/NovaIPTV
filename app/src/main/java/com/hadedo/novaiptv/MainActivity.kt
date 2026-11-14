@@ -7,6 +7,9 @@ import android.content.pm.ActivityInfo
 import android.os.Build
 import android.os.Bundle
 import android.util.Rational
+import android.view.View
+import android.view.WindowInsets
+import android.view.WindowInsetsController
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
@@ -33,9 +36,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.core.view.WindowCompat
-import androidx.core.view.WindowInsetsCompat
-import androidx.core.view.WindowInsetsControllerCompat
 import androidx.media3.common.MediaItem
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
@@ -115,15 +115,29 @@ fun NovaIptvModernApp() {
 
     LaunchedEffect(isFullScreen) {
         activity?.let { act ->
-            val window = act.window
-            val controller = WindowCompat.getInsetsController(window, window.decorView)
             if (isFullScreen) {
                 act.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
-                controller.hide(WindowInsetsCompat.Type.systemBars())
-                controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    act.window.insetsController?.let {
+                        it.hide(WindowInsets.Type.statusBars() or WindowInsets.Type.navigationBars())
+                        it.systemBarsBehavior = WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                    }
+                } else {
+                    @Suppress("DEPRECATION")
+                    act.window.decorView.systemUiVisibility = (
+                        View.SYSTEM_UI_FLAG_FULLSCREEN or
+                        View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
+                        View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                    )
+                }
             } else {
                 act.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
-                controller.show(WindowInsetsCompat.Type.systemBars())
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    act.window.insetsController?.show(WindowInsets.Type.statusBars() or WindowInsets.Type.navigationBars())
+                } else {
+                    @Suppress("DEPRECATION")
+                    act.window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_VISIBLE
+                }
             }
         }
     }
@@ -247,6 +261,304 @@ fun NovaIptvModernApp() {
                         view.resizeMode = resizeModes[resizeModeIndex].first
                     },
                     modifier = Modifier.fillMaxSize()
+                )
+
+                Row(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(10.dp)
+                        .background(Color(0x99000000), RoundedCornerShape(20.dp))
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = resizeModes[resizeModeIndex].second,
+                        color = Color(0xFF38BDF8),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier
+                            .clickable { resizeModeIndex = (resizeModeIndex + 1) % resizeModes.size }
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
+
+                    IconButton(
+                        onClick = { enterPip() },
+                        modifier = Modifier.size(28.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.PictureInPictureAlt,
+                            contentDescription = "نافذة عائمة",
+                            tint = Color.White,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+
+                    IconButton(
+                        onClick = { isFullScreen = !isFullScreen },
+                        modifier = Modifier.size(28.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (isFullScreen) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
+                            contentDescription = "ملء الشاشة",
+                            tint = Color.White,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+            }
+
+            if (!isFullScreen) {
+                if (selectedTab == 0) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Text(
+                            text = "إعدادات الاتصال والاشتراك",
+                            color = Color.White,
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            listOf("Xtream كود", "Stalker ماك", "رابط M3U / أكستريم").forEachIndexed { idx, title ->
+                                FilterChip(
+                                    selected = serverMode == idx,
+                                    onClick = { serverMode = idx },
+                                    label = { Text(title, fontSize = 11.sp) },
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        when (serverMode) {
+                            0 -> {
+                                OutlinedTextField(
+                                    value = xtHost,
+                                    onValueChange = { xtHost = it },
+                                    label = { Text("رابط السيرفر (http://domain:port)") },
+                                    singleLine = true,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                OutlinedTextField(
+                                    value = xtUser,
+                                    onValueChange = { xtUser = it },
+                                    label = { Text("اسم المستخدم") },
+                                    singleLine = true,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                OutlinedTextField(
+                                    value = xtPass,
+                                    onValueChange = { xtPass = it },
+                                    label = { Text("كلمة المرور") },
+                                    singleLine = true,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                                Spacer(modifier = Modifier.height(12.dp))
+                                Button(
+                                    onClick = {
+                                        prefs.edit()
+                                            .putString("xt_host", xtHost)
+                                            .putString("xt_user", xtUser)
+                                            .putString("xt_pass", xtPass)
+                                            .apply()
+                                        scope.launch {
+                                            isLoading = true
+                                            mediaList = ServersEngine.loadXtream(xtHost, xtUser, xtPass, "live")
+                                            isLoading = false
+                                            if (mediaList.isNotEmpty()) selectedTab = 1
+                                            else statusMessage = "تعذر الاتصال بالسيرفر"
+                                        }
+                                    },
+                                    modifier = Modifier.fillMaxWidth().height(48.dp)
+                                ) {
+                                    Text("تشغيل وحفظ البيانات", fontWeight = FontWeight.Bold)
+                                }
+                            }
+
+                            1 -> {
+                                OutlinedTextField(
+                                    value = stPortal,
+                                    onValueChange = { stPortal = it },
+                                    label = { Text("رابط البورتال (http://portal.com/c)") },
+                                    singleLine = true,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                OutlinedTextField(
+                                    value = stMac,
+                                    onValueChange = { stMac = it },
+                                    label = { Text("عنوان الماك (MAC Address)") },
+                                    singleLine = true,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                                Spacer(modifier = Modifier.height(12.dp))
+                                Button(
+                                    onClick = {
+                                        prefs.edit().putString("st_portal", stPortal).putString("st_mac", stMac).apply()
+                                        scope.launch {
+                                            isLoading = true
+                                            mediaList = ServersEngine.loadStalker(stPortal, stMac)
+                                            isLoading = false
+                                            if (mediaList.isNotEmpty()) selectedTab = 1
+                                            else statusMessage = "فشل الاتصال ببورتال Stalker"
+                                        }
+                                    },
+                                    modifier = Modifier.fillMaxWidth().height(48.dp)
+                                ) {
+                                    Text("اتصال بـ Stalker", fontWeight = FontWeight.Bold)
+                                }
+                            }
+
+                            2 -> {
+                                OutlinedTextField(
+                                    value = m3uUrl,
+                                    onValueChange = { m3uUrl = it },
+                                    label = { Text("ضع رابط M3U أو رابط Xtream الكامل هنا") },
+                                    singleLine = true,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                                Spacer(modifier = Modifier.height(12.dp))
+                                Button(
+                                    onClick = {
+                                        prefs.edit().putString("m3u_url", m3uUrl).apply()
+                                        scope.launch {
+                                            isLoading = true
+                                            val extracted = ServersEngine.parseXtreamFromUrl(m3uUrl)
+                                            if (extracted != null) {
+                                                xtHost = extracted.host
+                                                xtUser = extracted.user
+                                                xtPass = extracted.pass
+                                                serverMode = 0
+                                                prefs.edit()
+                                                    .putString("xt_host", xtHost)
+                                                    .putString("xt_user", xtUser)
+                                                    .putString("xt_pass", xtPass)
+                                                    .apply()
+                                                mediaList = ServersEngine.loadXtream(xtHost, xtUser, xtPass, "live")
+                                            } else {
+                                                val raw = M3uParser.loadFromUrl(m3uUrl)
+                                                mediaList = raw.mapIndexed { idx, ch ->
+                                                    MediaItemModel("$idx", ch.name, ch.url, ch.group)
+                                                }
+                                            }
+                                            isLoading = false
+                                            if (mediaList.isNotEmpty()) selectedTab = 1
+                                            else statusMessage = "لم يتم العثور على قنوات في هذا الرابط"
+                                        }
+                                    },
+                                    modifier = Modifier.fillMaxWidth().height(48.dp)
+                                ) {
+                                    Text("تحليل وتشغيل الرابط تلقائياً", fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+
+                        if (isLoading) {
+                            Spacer(modifier = Modifier.height(16.dp))
+                            CircularProgressIndicator(modifier = Modifier.align(Alignment.CenterHorizontally))
+                        } else if (statusMessage.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Text(text = statusMessage, color = Color(0xFF38BDF8), fontSize = 13.sp)
+                        }
+                    }
+                } else {
+                    LazyRow(
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        items(categories) { cat ->
+                            FilterChip(
+                                selected = selectedCategory == cat,
+                                onClick = { selectedCategory = cat },
+                                label = { Text(cat, fontSize = 12.sp) }
+                            )
+                        }
+                    }
+
+                    OutlinedTextField(
+                        value = searchQuery,
+                        onValueChange = { searchQuery = it },
+                        placeholder = { Text("ابحث في ${filteredList.size} قناة...") },
+                        leadingIcon = { Icon(Icons.Default.Search, null) },
+                        singleLine = true,
+                        shape = RoundedCornerShape(14.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 8.dp)
+                    )
+
+                    if (isLoading) {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator()
+                        }
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            items(filteredList) { item ->
+                                val isPlaying = currentMedia?.url == item.url
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(14.dp))
+                                        .background(
+                                            if (isPlaying) Brush.horizontalGradient(
+                                                listOf(Color(0xFF1D4ED8), Color(0xFF0284C7))
+                                            ) else Brush.horizontalGradient(
+                                                listOf(Color(0xFF131B2E), Color(0xFF1E293B))
+                                            )
+                                        )
+                                        .clickable { playStream(item) }
+                                        .padding(14.dp)
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(38.dp)
+                                                .clip(CircleShape)
+                                                .background(Color(0x3338BDF8)),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.PlayArrow,
+                                                contentDescription = null,
+                                                tint = Color.White
+                                            )
+                                        }
+                                        Spacer(modifier = Modifier.width(12.dp))
+                                        Column {
+                                            Text(
+                                                text = item.name,
+                                                color = Color.White,
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 15.sp
+                                            )
+                                            Text(
+                                                text = item.category,
+                                                color = Color(0xFF94A3B8),
+                                                fontSize = 12.sp
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+              modifier = Modifier.fillMaxSize()
                 )
 
                 Row(
