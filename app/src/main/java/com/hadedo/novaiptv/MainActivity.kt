@@ -31,6 +31,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -74,8 +75,10 @@ import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.CaptionStyleCompat
 import androidx.media3.ui.PlayerView
 import coil.compose.AsyncImage
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -137,7 +140,6 @@ fun saveServersList(prefs: android.content.SharedPreferences, list: List<SavedSe
     prefs.edit().putString("saved_servers_json", arr.toString()).apply()
 }
 
-// قاموس اللغات الفوري (عربي، إنجليزي، فرنسي، تركي، كردي)
 data class AppStrings(
     val home: String, val live: String, val sports: String, val cinema: String, val hub: String,
     val continueWatching: String, val recentChannels: String, val myFolders: String, val platforms: String,
@@ -164,7 +166,6 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
     val prefs = remember { context.getSharedPreferences("nova_neon_prefs", Context.MODE_PRIVATE) }
     val audioManager = remember { context.getSystemService(Context.AUDIO_SERVICE) as AudioManager }
 
-    // إعدادات اللغة والسمات والألوان
     var appLang by remember { mutableStateOf(prefs.getString("app_lang", "ar") ?: "ar") }
     val str = remember(appLang) { getStrings(appLang) }
     val layoutDir = if (appLang == "ar" || appLang == "ku") LayoutDirection.Rtl else LayoutDirection.Ltr
@@ -191,7 +192,6 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
     val greenText = Color(0xFF4ADE80)
     val greenBadge = Color(0xFF1E3A2F)
 
-    // إعدادات الأداء والمشغل المتقدمة
     var startupTab by remember { mutableIntStateOf(prefs.getInt("startup_tab", 0)) }
     var selectedTab by remember { mutableIntStateOf(startupTab) }
     var turboMode by remember { mutableStateOf(prefs.getBoolean("turbo_mode", false)) }
@@ -209,14 +209,12 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
     ServersEngine.streamFormat = streamFmt
     ServersEngine.sameHostProxy = sameHost
 
-    // وضع الأطفال والرقابة الأبوية وإخفاء الباقات
     var kidsMode by remember { mutableStateOf(false) }
     var parentalPin by remember { mutableStateOf(prefs.getString("parental_pin", "0000") ?: "0000") }
     var showPinDialog by remember { mutableStateOf(false) }
     var pinActionCallback by remember { mutableStateOf<() -> Unit>({}) }
     var hiddenCategories by remember { mutableStateOf(prefs.getStringSet("hidden_cats", emptySet()) ?: emptySet()) }
 
-    // السيرفرات والبيانات المخزنة محلياً
     var servers by remember { mutableStateOf(loadSavedServers(prefs)) }
     var activeServerId by remember { mutableStateOf(prefs.getString("active_server_id", "") ?: "") }
     val activeServer = servers.find { it.id == activeServerId }
@@ -232,7 +230,6 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
     var recentChannels by remember { mutableStateOf(AppStorage.getRecentChannels(context)) }
     var customFolders by remember { mutableStateOf(AppStorage.getCustomFolders(context)) }
 
-    // حالات المشغل والشاشات
     var currentMedia by remember { mutableStateOf<MediaItemModel?>(null) }
     var currentEpg by remember { mutableStateOf<EpgProgram?>(null) }
     var videoResolution by remember { mutableStateOf("") }
@@ -248,7 +245,6 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
         Pair(AspectRatioFrameLayout.RESIZE_MODE_ZOOM, "تكبير")
     )
 
-    // نافذة اختيار الجودة الموحدة (تعمل في تبويب مباشر وتبويب الرياضة)
     var selectedQualityGroup by remember { mutableStateOf<GroupedSportsChannel?>(null) }
     var selectedSeriesItem by remember { mutableStateOf<MediaItemModel?>(null) }
     var loadedSeriesDetails by remember { mutableStateOf<SeriesDetails?>(null) }
@@ -270,12 +266,10 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
     var showCategoriesManager by remember { mutableStateOf(false) }
     var showBackupDialog by remember { mutableStateOf(false) }
 
-    // فلاتر التصفح
     var cinemaSubTab by remember { mutableIntStateOf(0) }
-    var sportsSubFilter by remember { mutableIntStateOf(0) } // 0 = المباريات المباشرة, 1 = كل القنوات الرياضية
+    var sportsSubFilter by remember { mutableIntStateOf(0) }
     var selectedLangFilter by remember { mutableStateOf("الكل") }
     var selectedPlatformFilter by remember { mutableStateOf("") }
-    var selectedLiveCategory by remember { mutableStateOf("الكل") }
     var searchQuery by remember { mutableStateOf("") }
 
     val voiceLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { res ->
@@ -394,7 +388,9 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
             val cachedVod = if (!forceRefresh) AppStorage.loadMediaCache(context, srv.id, "vod") else null
             val cachedSeries = if (!forceRefresh) AppStorage.loadMediaCache(context, srv.id, "series") else null
 
-            if (cachedLive != null) liveList = ServersEngine.enrichCategoryQualities(cachedLive)
+            if (cachedLive != null) {
+                liveList = withContext(Dispatchers.Default) { ServersEngine.enrichCategoryQualities(cachedLive) }
+            }
             if (cachedVod != null) vodList = cachedVod
             if (cachedSeries != null) seriesList = cachedSeries
 
@@ -435,7 +431,7 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                         .mapIndexed { idx, ch ->
                             MediaItemModel("$idx", ServersEngine.cleanMediaName(ch.name), ch.url, ch.group)
                         }
-                    val freshM3u = ServersEngine.enrichCategoryQualities(rawM3u)
+                    val freshM3u = withContext(Dispatchers.Default) { ServersEngine.enrichCategoryQualities(rawM3u) }
                     liveList = freshM3u
                     AppStorage.saveMediaCache(context, srv.id, "live", freshM3u)
                     isLoading = false
@@ -541,36 +537,45 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
         prefs.edit().putStringSet("fav_ids", updated).apply()
     }
 
-    val safeLiveList = remember(liveList, kidsMode, hiddenCategories) {
-        liveList.filter { item ->
-            val notHidden = !hiddenCategories.contains(item.category) && !ServersEngine.isSeparatorChannel(item.name)
-            if (kidsMode) {
-                val t = "${item.category} ${item.name}".lowercase()
-                notHidden && (t.contains("kids") || t.contains("cartoon") || t.contains("anime") || t.contains("spacetoon") || t.contains("mbc3") || t.contains("أطفال") || t.contains("كرتون") || t.contains("سبيستون"))
-            } else notHidden
+    val safeLiveList by produceState(initialValue = emptyList<MediaItemModel>(), liveList, kidsMode, hiddenCategories) {
+        value = withContext(Dispatchers.Default) {
+            liveList.filter { item ->
+                val notHidden = !hiddenCategories.contains(item.category) && !ServersEngine.isSeparatorChannel(item.name)
+                if (kidsMode) {
+                    val t = "${item.category} ${item.name}".lowercase()
+                    notHidden && (t.contains("kids") || t.contains("cartoon") || t.contains("anime") || t.contains("spacetoon") || t.contains("mbc3") || t.contains("أطفال") || t.contains("كرتون") || t.contains("سبيستون"))
+                } else notHidden
+            }
         }
     }
 
-    val safeVodList = remember(vodList, kidsMode, hiddenCategories) {
-        vodList.filter { item ->
-            val notHidden = !hiddenCategories.contains(item.category)
-            if (kidsMode) notHidden && ServersEngine.detectContentLanguage(item) == "أنمي وكرتون" else notHidden
+    val safeVodList by produceState(initialValue = emptyList<MediaItemModel>(), vodList, kidsMode, hiddenCategories) {
+        value = withContext(Dispatchers.Default) {
+            vodList.filter { item ->
+                val notHidden = !hiddenCategories.contains(item.category)
+                if (kidsMode) notHidden && ServersEngine.detectContentLanguage(item) == "أنمي وكرتون" else notHidden
+            }
         }
     }
 
-    val safeSeriesList = remember(seriesList, kidsMode, hiddenCategories) {
-        seriesList.filter { item ->
-            val notHidden = !hiddenCategories.contains(item.category)
-            if (kidsMode) notHidden && ServersEngine.detectContentLanguage(item) == "أنمي وكرتون" else notHidden
+    val safeSeriesList by produceState(initialValue = emptyList<MediaItemModel>(), seriesList, kidsMode, hiddenCategories) {
+        value = withContext(Dispatchers.Default) {
+            seriesList.filter { item ->
+                val notHidden = !hiddenCategories.contains(item.category)
+                if (kidsMode) notHidden && ServersEngine.detectContentLanguage(item) == "أنمي وكرتون" else notHidden
+            }
         }
     }
 
-    val groupedSports = remember(safeLiveList) { ServersEngine.groupSportsChannels(safeLiveList) }
+    val groupedSports by produceState(initialValue = emptyList<GroupedSportsChannel>(), safeLiveList) {
+        value = withContext(Dispatchers.Default) {
+            ServersEngine.groupSportsChannels(safeLiveList)
+        }
+    }
 
     CompositionLocalProvider(LocalLayoutDirection provides layoutDir) {
         MaterialTheme(colorScheme = darkColorScheme(primary = accentColor, background = bgColor, surface = cardColor)) {
 
-            // وضع تعدد الشاشات (Multi-Screen up to 4 Channels)
             if (isMultiScreenMode) {
                 Column(modifier = Modifier.fillMaxSize().background(Color.Black)) {
                     Row(
@@ -662,7 +667,6 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                 return@MaterialTheme
             }
 
-            // مكون مشغل الفيديو الاحترافي
             @Composable
             fun ProPlayerViewport(modifier: Modifier) {
                 Box(
@@ -803,7 +807,6 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
             ) { padding ->
                 Column(modifier = Modifier.fillMaxSize().padding(padding).background(bgColor)) {
 
-                    // الشريط العلوي الذكي (مبدل الحسابات + تعدد الشاشات + وضع الأطفال + التحديث)
                     Row(
                         modifier = Modifier.fillMaxWidth().background(cardColor).padding(horizontal = 12.dp, vertical = 8.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -875,7 +878,6 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                         }
                     }
 
-                    // المشغل المصغر أعلى الشاشة عند تشغيل أي بث
                     if (currentMedia != null) {
                         ProPlayerViewport(Modifier.fillMaxWidth().height(210.dp))
                     }
@@ -1015,34 +1017,41 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                                 }
                             }
 
-                            // 1: البث المباشر المنظم (باقات واضحة الجودة + دمج الجودات + ترتيب رقمي)
+                            // 1: البث المباشر (قائمة باقات عمودية سريعة مع عداد القنوات وسهم الدخول)
                             1 -> {
-                                val cats = remember(safeLiveList) { listOf(str.all, "المفضلة") + safeLiveList.map { it.category }.distinct() }
-                                val filteredRawLive = remember(safeLiveList, selectedLiveCategory, searchQuery, favoriteIds) {
-                                    safeLiveList.filter { item ->
-                                        val matchCat = when (selectedLiveCategory) {
-                                            str.all -> true
-                                            "المفضلة" -> favoriteIds.contains(item.id)
-                                            else -> item.category == selectedLiveCategory
-                                        }
-                                        matchCat && (searchQuery.isBlank() || item.name.contains(searchQuery, ignoreCase = true))
+                                var openedLiveCategory by remember { mutableStateOf<String?>(null) }
+
+                                BackHandler(enabled = openedLiveCategory != null) {
+                                    openedLiveCategory = null
+                                    searchQuery = ""
+                                }
+
+                                val categoryStats by produceState(
+                                    initialValue = emptyList<Pair<String, Int>>(),
+                                    safeLiveList, favoriteIds
+                                ) {
+                                    value = withContext(Dispatchers.Default) {
+                                        val counts = safeLiveList.groupingBy { it.category }.eachCount()
+                                        val result = ArrayList<Pair<String, Int>>(counts.size + 2)
+                                        result.add(str.all to safeLiveList.size)
+                                        result.add("المفضلة" to safeLiveList.count { favoriteIds.contains(it.id) })
+                                        counts.forEach { (cat, count) -> result.add(cat to count) }
+                                        result
                                     }
                                 }
-                                val groupedLive = remember(filteredRawLive) { ServersEngine.groupChannelsByQuality(filteredRawLive) }
 
-                                Column(modifier = Modifier.fillMaxSize()) {
-                                    LazyRow(contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                        items(cats) { c ->
-                                            FilterChip(selected = selectedLiveCategory == c, onClick = { selectedLiveCategory = c }, label = { Text(c, fontSize = 11.sp) })
-                                        }
-                                    }
-                                    Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                                        OutlinedTextField(
-                                            value = searchQuery,
-                                            onValueChange = { searchQuery = it },
-                                            placeholder = { Text(str.searchHint, fontSize = 12.sp) },
-                                            leadingIcon = { Icon(Icons.Default.Search, null) },
-                                            trailingIcon = {
+                                Column(modifier = Modifier.fillMaxSize().padding(horizontal = 10.dp)) {
+                                    OutlinedTextField(
+                                        value = searchQuery,
+                                        onValueChange = { searchQuery = it },
+                                        placeholder = { Text(str.searchHint, fontSize = 12.sp) },
+                                        leadingIcon = { Icon(Icons.Default.Search, null, tint = accentColor) },
+                                        trailingIcon = {
+                                            if (searchQuery.isNotEmpty()) {
+                                                IconButton(onClick = { searchQuery = "" }) {
+                                                    Icon(Icons.Default.Close, null, tint = Color.Gray)
+                                                }
+                                            } else {
                                                 IconButton(onClick = {
                                                     try {
                                                         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
@@ -1052,53 +1061,147 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                                                         voiceLauncher.launch(intent)
                                                     } catch (_: Exception) {}
                                                 }) { Icon(Icons.Default.Mic, null, tint = accentColor) }
-                                            },
-                                            singleLine = true,
-                                            shape = RoundedCornerShape(14.dp),
-                                            modifier = Modifier.weight(1f)
-                                        )
-                                    }
-                                    Spacer(modifier = Modifier.height(6.dp))
-                                    LazyVerticalGrid(columns = GridCells.Fixed(3), contentPadding = PaddingValues(8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        items(groupedLive) { grp ->
-                                            val primaryItem = grp.variants.first().item
-                                            val isFav = grp.variants.any { favoriteIds.contains(it.item.id) }
-                                            Column(
-                                                horizontalAlignment = Alignment.CenterHorizontally,
-                                                modifier = Modifier
-                                                    .clip(RoundedCornerShape(14.dp))
-                                                    .background(cardColor)
-                                                    .border(1.dp, if (grp.variants.any { it.item.url == currentMedia?.url }) accentColor else Color(0x18FFFFFF), RoundedCornerShape(14.dp))
-                                                    .clickable {
-                                                        if (grp.variants.size == 1) startPlayback(primaryItem)
-                                                        else selectedQualityGroup = grp
+                                            }
+                                        },
+                                        singleLine = true,
+                                        shape = RoundedCornerShape(14.dp),
+                                        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)
+                                    )
+
+                                    if (openedLiveCategory == null && searchQuery.isBlank()) {
+                                        Text("الباقات (${categoryStats.size})", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp, modifier = Modifier.padding(vertical = 6.dp, horizontal = 4.dp))
+                                        LazyColumn(
+                                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                                            contentPadding = PaddingValues(bottom = 12.dp),
+                                            modifier = Modifier.fillMaxSize()
+                                        ) {
+                                            items(categoryStats, key = { it.first }) { (catName, count) ->
+                                                Row(
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .clip(RoundedCornerShape(14.dp))
+                                                        .background(cardColor)
+                                                        .clickable { openedLiveCategory = catName }
+                                                        .padding(horizontal = 14.dp, vertical = 14.dp),
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.SpaceBetween
+                                                ) {
+                                                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                                                        Icon(
+                                                            if (catName == "المفضلة") Icons.Default.Favorite else Icons.Default.LiveTv,
+                                                            null,
+                                                            tint = accentColor,
+                                                            modifier = Modifier.size(20.dp)
+                                                        )
+                                                        Spacer(modifier = Modifier.width(12.dp))
+                                                        Text(
+                                                            catName,
+                                                            color = Color.White,
+                                                            fontSize = 14.sp,
+                                                            fontWeight = FontWeight.SemiBold,
+                                                            maxLines = 1,
+                                                            overflow = TextOverflow.Ellipsis
+                                                        )
                                                     }
-                                                    .padding(8.dp)
-                                            ) {
-                                                Box(modifier = Modifier.fillMaxWidth().height(60.dp)) {
-                                                    AsyncImage(model = grp.logo, contentDescription = grp.cleanName, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize())
-                                                    Icon(
-                                                        if (isFav) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                                                        null,
-                                                        tint = if (isFav) accentColor else Color.Gray,
-                                                        modifier = Modifier.align(Alignment.TopEnd).size(17.dp).clickable { toggleFavorite(primaryItem.id) }
-                                                    )
-                                                    Icon(
-                                                        Icons.Default.CreateNewFolder,
-                                                        null,
-                                                        tint = Color.Gray,
-                                                        modifier = Modifier.align(Alignment.TopStart).size(16.dp).clickable { folderTargetItem = primaryItem }
-                                                    )
+                                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                                        Text("$count", color = Color.Gray, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                                                        Spacer(modifier = Modifier.width(6.dp))
+                                                        Icon(Icons.Default.KeyboardArrowLeft, null, tint = Color.Gray, modifier = Modifier.size(20.dp))
+                                                    }
                                                 }
-                                                Spacer(modifier = Modifier.height(4.dp))
-                                                Text(grp.cleanName, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                                Spacer(modifier = Modifier.height(3.dp))
-                                                if (grp.variants.size > 1) {
-                                                    Box(modifier = Modifier.background(greenBadge, RoundedCornerShape(10.dp)).padding(horizontal = 6.dp, vertical = 2.dp)) {
-                                                        Text("${grp.variants.size} جودات", color = greenText, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                                            }
+                                        }
+                                    } else {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(vertical = 4.dp)
+                                                .clip(RoundedCornerShape(12.dp))
+                                                .background(cardColor)
+                                                .clickable {
+                                                    openedLiveCategory = null
+                                                    searchQuery = ""
+                                                }
+                                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Icon(Icons.Default.ArrowForward, null, tint = accentColor, modifier = Modifier.size(20.dp))
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Text(
+                                                if (searchQuery.isNotBlank()) "نتائج البحث عن: $searchQuery" else (openedLiveCategory ?: ""),
+                                                color = Color.White,
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 14.sp,
+                                                modifier = Modifier.weight(1f)
+                                            )
+                                            Text("كل الباقات", color = accentColor, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                        }
+
+                                        val groupedLive by produceState(
+                                            initialValue = emptyList<GroupedSportsChannel>(),
+                                            safeLiveList, openedLiveCategory, searchQuery, favoriteIds
+                                        ) {
+                                            value = withContext(Dispatchers.Default) {
+                                                val filtered = safeLiveList.filter { item ->
+                                                    val matchCat = when {
+                                                        searchQuery.isNotBlank() -> true
+                                                        openedLiveCategory == str.all -> true
+                                                        openedLiveCategory == "المفضلة" -> favoriteIds.contains(item.id)
+                                                        else -> item.category == openedLiveCategory
                                                     }
-                                                } else {
-                                                    Text(grp.variants.first().qualityTag.substringBefore(" "), color = Color.Gray, fontSize = 9.sp)
+                                                    matchCat && (searchQuery.isBlank() || item.name.contains(searchQuery, ignoreCase = true))
+                                                }
+                                                ServersEngine.groupChannelsByQuality(filtered.take(1000))
+                                            }
+                                        }
+
+                                        Spacer(modifier = Modifier.height(6.dp))
+                                        LazyVerticalGrid(
+                                            columns = GridCells.Fixed(3),
+                                            contentPadding = PaddingValues(bottom = 12.dp),
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            items(groupedLive) { grp ->
+                                                val primaryItem = grp.variants.first().item
+                                                val isFav = grp.variants.any { favoriteIds.contains(it.item.id) }
+                                                Column(
+                                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                                    modifier = Modifier
+                                                        .clip(RoundedCornerShape(14.dp))
+                                                        .background(cardColor)
+                                                        .border(1.dp, if (grp.variants.any { it.item.url == currentMedia?.url }) accentColor else Color(0x18FFFFFF), RoundedCornerShape(14.dp))
+                                                        .clickable {
+                                                            if (grp.variants.size == 1) startPlayback(primaryItem)
+                                                            else selectedQualityGroup = grp
+                                                        }
+                                                        .padding(8.dp)
+                                                ) {
+                                                    Box(modifier = Modifier.fillMaxWidth().height(58.dp)) {
+                                                        AsyncImage(model = grp.logo, contentDescription = grp.cleanName, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize())
+                                                        Icon(
+                                                            if (isFav) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                                                            null,
+                                                            tint = if (isFav) accentColor else Color.Gray,
+                                                            modifier = Modifier.align(Alignment.TopEnd).size(17.dp).clickable { toggleFavorite(primaryItem.id) }
+                                                        )
+                                                        Icon(
+                                                            Icons.Default.CreateNewFolder,
+                                                            null,
+                                                            tint = Color.Gray,
+                                                            modifier = Modifier.align(Alignment.TopStart).size(16.dp).clickable { folderTargetItem = primaryItem }
+                                                        )
+                                                    }
+                                                    Spacer(modifier = Modifier.height(4.dp))
+                                                    Text(grp.cleanName, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                                    Spacer(modifier = Modifier.height(3.dp))
+                                                    if (grp.variants.size > 1) {
+                                                        Box(modifier = Modifier.background(greenBadge, RoundedCornerShape(10.dp)).padding(horizontal = 6.dp, vertical = 2.dp)) {
+                                                            Text("${grp.variants.size} جودات", color = greenText, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                                                        }
+                                                    } else {
+                                                        Text(grp.variants.first().qualityTag.substringBefore(" "), color = Color.Gray, fontSize = 9.sp)
+                                                    }
                                                 }
                                             }
                                         }
@@ -1221,7 +1324,6 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                                 var customUaInput by remember { mutableStateOf(userAgent) }
 
                                 Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                    // إدارة الاشتراكات
                                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                                         Text("الاشتراكات المحفوظة (${servers.size})", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                                         Text("+ ${str.addConnection}", color = accentColor, fontWeight = FontWeight.Bold, fontSize = 13.sp, modifier = Modifier.clickable { editingServer = null; showAddServerDialog = true })
@@ -1264,7 +1366,6 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
 
                                     HorizontalDivider(color = Color(0x22FFFFFF))
 
-                                    // اللغة والسمة
                                     Text("لغة التطبيق (Language):", color = accentColor, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                                     LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                         val langs = listOf("ar" to "العربية", "en" to "English", "fr" to "Français", "tr" to "Türkçe", "ku" to "کوردی")
@@ -1291,7 +1392,6 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                                         }
                                     }
 
-                                    // إعدادات المشغل وفك الترميز
                                     Text("نوع فك الترميز (Decoder):", color = accentColor, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                         listOf("auto" to "تلقائي", "hw" to "Hardware (4K)", "sw" to "Software").forEach { (k, lbl) ->
