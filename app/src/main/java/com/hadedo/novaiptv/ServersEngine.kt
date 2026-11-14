@@ -71,7 +71,7 @@ data class GroupedSportsChannel(
     val category: String,
     val logo: String,
     val variants: List<QualityVariant>,
-    val regionTag: String = "global" // "arab", "global"
+    val regionTag: String = "global"
 )
 
 data class LiveMatchInfo(
@@ -84,7 +84,7 @@ data class LiveMatchInfo(
     val awayTeam: String,
     val awayLogo: String,
     val awayScore: String,
-    val statusState: String, // "in", "pre", "post"
+    val statusState: String,
     val statusText: String,
     val suggestedBroadcaster: String
 )
@@ -116,7 +116,6 @@ object ServersEngine {
         return conn.inputStream.bufferedReader().use { it.readText() }
     }
 
-    // جلب مباريات اليوم الحية من ESPN لجميع البطولات العالمية والعربية
     suspend fun fetchTodayMatches(lang: String = "ar"): List<LiveMatchInfo> = withContext(Dispatchers.IO) {
         val matches = ArrayList<LiveMatchInfo>()
         try {
@@ -202,7 +201,6 @@ object ServersEngine {
             }
         } catch (_: Exception) {}
 
-        // ترتيب: المباريات الجارية حالياً أولاً، ثم القادمة، ثم المنتهية
         matches.sortedBy {
             when (it.statusState) {
                 "in" -> 0
@@ -210,6 +208,33 @@ object ServersEngine {
                 else -> 2
             }
         }
+    }
+
+    suspend fun fetchLiveMatchesForSports(
+        host: String,
+        user: String,
+        pass: String,
+        sportsGroups: List<GroupedSportsChannel>
+    ): Map<String, String> = withContext(Dispatchers.IO) {
+        val result = mutableMapOf<String, String>()
+        val base = host.trimEnd('/')
+        for (grp in sportsGroups.take(25)) {
+            val streamId = grp.variants.firstOrNull()?.item?.id ?: continue
+            try {
+                val root = JSONObject(fetchJson("$base/player_api.php?username=$user&password=$pass&action=get_short_epg&stream_id=$streamId&limit=1"))
+                val listings = root.optJSONArray("epg_listings") ?: continue
+                if (listings.length() > 0) {
+                    val rawTitle = listings.getJSONObject(0).optString("title", "")
+                    val decoded = try {
+                        String(Base64.decode(rawTitle, Base64.DEFAULT), Charsets.UTF_8).trim()
+                    } catch (_: Exception) { rawTitle.trim() }
+                    if (decoded.isNotBlank()) {
+                        result[grp.cleanName] = decoded
+                    }
+                }
+            } catch (_: Exception) {}
+        }
+        result
     }
 
     private fun translateLeagueName(raw: String, slug: String, lang: String): String {
@@ -626,7 +651,6 @@ object ServersEngine {
         return result.sortedWith { a, b -> naturalCompare(a.cleanName, b.cleanName) }
     }
 
-    // تصنيف القنوات الرياضية العربية والعالمية الكبرى بشكل نظيف دون قنوات عشوائية
     fun groupSportsChannels(allChannels: List<MediaItemModel>): List<GroupedSportsChannel> {
         val excludeKeywords = listOf(
             "movie", "series", "drama", "action", "cinema", "entertainment", "kids", "cartoon", "news", "doc", "music", "box office", "star ",
