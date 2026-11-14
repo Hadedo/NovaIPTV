@@ -21,7 +21,6 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.annotation.OptIn
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -155,7 +154,8 @@ fun getStrings(lang: String): AppStrings = when (lang) {
     else -> AppStrings("الرئيسية", "مباشر", "الرياضة", "السينما", "الإعدادات", "واصل المشاهدة", "شاهدته مؤخراً", "مجلداتي", "المنصات", "ابحث في القنوات والأفلام...", "الكل", "أفلام", "مسلسلات", "تعدد الشاشات (4)", "وضع الأطفال", "الإعدادات", "إضافة اشتراك", "تحديث القوائم", "المواسم والحلقات", "اختر جودة البث")
 }
 
-@OptIn(markerClass = [UnstableApi::class, ExperimentalFoundationApi::class])
+@androidx.annotation.OptIn(UnstableApi::class)
+@kotlin.OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun NovaIptvUltimateApp(isInPipMode: Boolean) {
     val context = LocalContext.current
