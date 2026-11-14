@@ -1,4 +1,3 @@
--repackageclasses 'o'
 -allowaccessmodification
 
 -keep class com.hadedo.novaiptv.** { *; }
