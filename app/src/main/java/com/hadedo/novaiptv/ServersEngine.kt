@@ -1,5 +1,6 @@
 package com.hadedo.novaiptv
 
+import android.net.Uri
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -14,7 +15,13 @@ data class MediaItemModel(
     val url: String,
     val category: String,
     val logo: String = "",
-    val type: String = "live" // live, movie, series
+    val type: String = "live"
+)
+
+data class XtreamCredentials(
+    val host: String,
+    val user: String,
+    val pass: String
 )
 
 object ServersEngine {
@@ -22,23 +29,59 @@ object ServersEngine {
         .followRedirects(true)
         .build()
 
-    // 1. محرك جلب قنوات وأفلام ومسلسلات Xtream Codes
+    // استخراج السيرفر واليوزر والباسورد تلقائياً من أي رابط Xtream M3U
+    fun parseXtreamFromUrl(fullUrl: String): XtreamCredentials? {
+        return try {
+            val uri = Uri.parse(fullUrl.trim())
+            val user = uri.getQueryParameter("username")
+            val pass = uri.getQueryParameter("password")
+            if (!user.isNullOrEmpty() && !pass.isNullOrEmpty() && uri.host != null) {
+                val port = if (uri.port != -1) ":${uri.port}" else ""
+                val host = "${uri.scheme ?: "http"}://${uri.host}$port"
+                XtreamCredentials(host, user, pass)
+            } else null
+        } catch (e: Exception) {
+            null
+        }
+    }
+
     suspend fun loadXtream(
         host: String,
         user: String,
         pass: String,
-        type: String // live, vod, series
+        type: String
     ): List<MediaItemModel> = withContext(Dispatchers.IO) {
         val list = mutableListOf<MediaItemModel>()
         try {
             val cleanHost = host.trim().removeSuffix("/")
-            val action = when (type) {
+            val catAction = when (type) {
+                "vod" -> "get_vod_categories"
+                "series" -> "get_series_categories"
+                else -> "get_live_categories"
+            }
+            val streamAction = when (type) {
                 "vod" -> "get_vod_streams"
                 "series" -> "get_series"
                 else -> "get_live_streams"
             }
-            val apiUrl = "$cleanHost/player_api.php?username=$user&password=$pass&action=$action"
-            val req = Request.Builder().url(apiUrl).header("User-Agent", "NovaIPTV/2.0").build()
+
+            // 1. جلب أسماء الباقات الحقيقية أولاً
+            val catMap = mutableMapOf<String, String>()
+            try {
+                val catUrl = "$cleanHost/player_api.php?username=$user&password=$pass&action=$catAction"
+                val catBody = client.newCall(Request.Builder().url(catUrl).build()).execute().body?.string()
+                if (!catBody.isNullOrEmpty()) {
+                    val catArr = JSONArray(catBody)
+                    for (i in 0 until catArr.length()) {
+                        val c = catArr.getJSONObject(i)
+                        catMap[c.optString("category_id")] = c.optString("category_name", "عام")
+                    }
+                }
+            } catch (_: Exception) {}
+
+            // 2. جلب القنوات أو الأفلام أو المسلسلات
+            val apiUrl = "$cleanHost/player_api.php?username=$user&password=$pass&action=$streamAction"
+            val req = Request.Builder().url(apiUrl).header("User-Agent", "NovaIPTV/3.0").build()
             val body = client.newCall(req).execute().body?.string() ?: return@withContext emptyList()
 
             val jsonArray = JSONArray(body)
@@ -46,7 +89,8 @@ object ServersEngine {
                 val obj = jsonArray.getJSONObject(i)
                 val streamId = obj.optString("stream_id", obj.optString("series_id", ""))
                 val name = obj.optString("name", "بدون اسم")
-                val cat = obj.optString("category_name", "باقة عامة")
+                val catId = obj.optString("category_id", "")
+                val catName = catMap[catId] ?: obj.optString("category_name", "باقة عامة")
                 val icon = obj.optString("stream_icon", obj.optString("cover", ""))
                 val ext = obj.optString("container_extension", "mp4")
 
@@ -56,7 +100,7 @@ object ServersEngine {
                     else -> "$cleanHost/live/$user/$pass/$streamId.ts"
                 }
 
-                list.add(MediaItemModel(streamId, name, streamUrl, cat, icon, type))
+                list.add(MediaItemModel(streamId, name, streamUrl, catName, icon, type))
             }
         } catch (e: Exception) {
             e.printStackTrace()
@@ -64,7 +108,6 @@ object ServersEngine {
         list
     }
 
-    // 2. محرك الاتصال بسيرفرات Stalker Portal / MAC
     suspend fun loadStalker(portalUrl: String, macAddress: String): List<MediaItemModel> = withContext(Dispatchers.IO) {
         val list = mutableListOf<MediaItemModel>()
         try {
@@ -72,7 +115,6 @@ object ServersEngine {
             val encodedMac = URLEncoder.encode(macAddress.trim(), "UTF-8")
             val cookie = "mac=$encodedMac; stb_lang=en; timezone=Asia/Baghdad"
 
-            // خطوة المصافحة (Handshake) للحصول على Token
             val handshakeUrl = "$baseUrl/portal.php?type=stb&action=handshake&token=&JsHttpRequest=1-xml"
             val hsReq = Request.Builder()
                 .url(handshakeUrl)
@@ -83,7 +125,6 @@ object ServersEngine {
             val hsBody = client.newCall(hsReq).execute().body?.string() ?: return@withContext emptyList()
             val token = JSONObject(hsBody).getJSONObject("js").getString("token")
 
-            // جلب جميع القنوات من البورتال
             val channelsUrl = "$baseUrl/portal.php?type=itv&action=get_all_channels&JsHttpRequest=1-xml"
             val chReq = Request.Builder()
                 .url(channelsUrl)
