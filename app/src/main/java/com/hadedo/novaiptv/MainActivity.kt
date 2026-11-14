@@ -11,10 +11,14 @@ import android.util.Rational
 import android.view.View
 import android.view.WindowInsets
 import android.view.WindowInsetsController
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.annotation.OptIn
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -59,6 +63,9 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // منع انطفاء الشاشة نهائياً أثناء تشغيل التطبيق والمشاهدة
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+
         setContent {
             MaterialTheme(
                 colorScheme = darkColorScheme(
@@ -103,6 +110,7 @@ fun NovaIptvUltraApp(isInPipMode: Boolean) {
     var selectedTab by remember { mutableIntStateOf(0) }
     var serverMode by remember { mutableIntStateOf(0) }
     var isFullScreen by remember { mutableStateOf(false) }
+    var showOverlayControls by remember { mutableStateOf(true) }
     var resizeModeIndex by remember { mutableIntStateOf(0) }
     val resizeModes = listOf(
         Pair(AspectRatioFrameLayout.RESIZE_MODE_FIT, "طبيعي"),
@@ -196,7 +204,6 @@ fun NovaIptvUltraApp(isInPipMode: Boolean) {
         }
     }
 
-    // في وضع النافذة العائمة (PiP) أو ملء الشاشة، اعرض الفيديو فقط بدون أي قوائم!
     if (isInPipMode || isFullScreen) {
         Box(
             modifier = Modifier
@@ -209,6 +216,9 @@ fun NovaIptvUltraApp(isInPipMode: Boolean) {
                         player = exoPlayer
                         useController = !isInPipMode
                         resizeMode = resizeModes[resizeModeIndex].first
+                        setControllerVisibilityListener(PlayerView.ControllerVisibilityListener { visibility ->
+                            showOverlayControls = (visibility == View.VISIBLE)
+                        })
                     }
                 },
                 update = { view ->
@@ -218,10 +228,14 @@ fun NovaIptvUltraApp(isInPipMode: Boolean) {
                 modifier = Modifier.fillMaxSize()
             )
 
-            if (!isInPipMode) {
+            AnimatedVisibility(
+                visible = !isInPipMode && showOverlayControls,
+                enter = fadeIn(),
+                exit = fadeOut(),
+                modifier = Modifier.align(Alignment.TopEnd)
+            ) {
                 Row(
                     modifier = Modifier
-                        .align(Alignment.TopEnd)
                         .padding(14.dp)
                         .background(Color(0xCC0F172A), RoundedCornerShape(24.dp))
                         .border(1.dp, Color(0x4438BDF8), RoundedCornerShape(24.dp))
@@ -326,7 +340,6 @@ fun NovaIptvUltraApp(isInPipMode: Boolean) {
                 .padding(padding)
                 .background(Color(0xFF060913))
         ) {
-            // شاشة المشغل العلوية بتصميم أنيق
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -339,6 +352,9 @@ fun NovaIptvUltraApp(isInPipMode: Boolean) {
                             player = exoPlayer
                             useController = true
                             resizeMode = resizeModes[resizeModeIndex].first
+                            setControllerVisibilityListener(PlayerView.ControllerVisibilityListener { visibility ->
+                                showOverlayControls = (visibility == View.VISIBLE)
+                            })
                         }
                     },
                     update = { view ->
@@ -347,45 +363,50 @@ fun NovaIptvUltraApp(isInPipMode: Boolean) {
                     modifier = Modifier.fillMaxSize()
                 )
 
-                // شريط أزرار التحكم الزجاجي أعلى الفيديو
-                Row(
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(10.dp)
-                        .background(Color(0xBB0F172A), RoundedCornerShape(20.dp))
-                        .border(1.dp, Color(0x4438BDF8), RoundedCornerShape(20.dp))
-                        .padding(horizontal = 12.dp, vertical = 6.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                // شريط أزرار التحكم يختفي ويظهر تلقائياً مع لمس الشاشة
+                AnimatedVisibility(
+                    visible = showOverlayControls,
+                    enter = fadeIn(),
+                    exit = fadeOut(),
+                    modifier = Modifier.align(Alignment.TopEnd)
                 ) {
-                    Text(
-                        text = "أبعاد: ${resizeModes[resizeModeIndex].second}",
-                        color = Color(0xFF38BDF8),
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.clickable {
-                            resizeModeIndex = (resizeModeIndex + 1) % resizeModes.size
-                        }
-                    )
-                    Text(
-                        text = "نافذة عائمة",
-                        color = Color.White,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.clickable { enterPip() }
-                    )
-                    Text(
-                        text = "ملء الشاشة",
-                        color = Color(0xFF4ADE80),
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.clickable { isFullScreen = true }
-                    )
+                    Row(
+                        modifier = Modifier
+                            .padding(10.dp)
+                            .background(Color(0xBB0F172A), RoundedCornerShape(20.dp))
+                            .border(1.dp, Color(0x4438BDF8), RoundedCornerShape(20.dp))
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "أبعاد: ${resizeModes[resizeModeIndex].second}",
+                            color = Color(0xFF38BDF8),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.clickable {
+                                resizeModeIndex = (resizeModeIndex + 1) % resizeModes.size
+                            }
+                        )
+                        Text(
+                            text = "نافذة عائمة",
+                            color = Color.White,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.clickable { enterPip() }
+                        )
+                        Text(
+                            text = "ملء الشاشة",
+                            color = Color(0xFF4ADE80),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.clickable { isFullScreen = true }
+                        )
+                    }
                 }
             }
 
             if (selectedTab == 0) {
-                // لوحة السيرفرات والاشتراكات العصرية
                 Column(modifier = Modifier.padding(14.dp)) {
                     Card(
                         colors = CardDefaults.cardColors(containerColor = Color(0xFF0F172A)),
@@ -581,7 +602,6 @@ fun NovaIptvUltraApp(isInPipMode: Boolean) {
                     }
                 }
             } else {
-                // شريط الباقات الأفقي
                 LazyRow(
                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -595,7 +615,6 @@ fun NovaIptvUltraApp(isInPipMode: Boolean) {
                     }
                 }
 
-                // شريط البحث العصري
                 OutlinedTextField(
                     value = searchQuery,
                     onValueChange = { searchQuery = it },
@@ -615,7 +634,6 @@ fun NovaIptvUltraApp(isInPipMode: Boolean) {
                         CircularProgressIndicator()
                     }
                 } else if (selectedTab == 2 || selectedTab == 3) {
-                    // عرض الأفلام والمسلسلات على شكل شبكة بوسترات سينمائية (Grid)
                     LazyVerticalGrid(
                         columns = GridCells.Fixed(3),
                         contentPadding = PaddingValues(8.dp),
@@ -658,7 +676,6 @@ fun NovaIptvUltraApp(isInPipMode: Boolean) {
                         }
                     }
                 } else {
-                    // عرض القنوات المباشرة مع شعار كل قناة (Logo)
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(8.dp),
