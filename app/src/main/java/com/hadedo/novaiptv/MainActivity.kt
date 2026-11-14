@@ -34,6 +34,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
@@ -1209,15 +1210,24 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                                 }
                             }
 
-                            // 2: مركز الرياضة الاحترافي (جدول المباريات الحية + القنوات العربية والعالمية بالجودات)
+                            // 2: مركز الرياضة الاحترافي (تمرير عمودي موحّد بدون حجب + ربط ذكي بالمباريات)
                             2 -> {
                                 var todayMatches by remember { mutableStateOf<List<LiveMatchInfo>>(emptyList()) }
                                 var isLoadingMatches by remember { mutableStateOf(false) }
+                                var selectedMatchForChannels by remember { mutableStateOf<LiveMatchInfo?>(null) }
+                                var liveEpgMap by remember { mutableStateOf>(emptyMap()) }
 
                                 LaunchedEffect(appLang) {
                                     isLoadingMatches = true
                                     todayMatches = ServersEngine.fetchTodayMatches(appLang)
                                     isLoadingMatches = false
+                                }
+
+                                LaunchedEffect(groupedSports, activeServer) {
+                                    val srv = activeServer
+                                    if (srv != null && srv.type == "xtream" && groupedSports.isNotEmpty() && liveEpgMap.isEmpty()) {
+                                        liveEpgMap = ServersEngine.fetchLiveMatchesForSports(srv.host, srv.user, srv.pass, groupedSports)
+                                    }
                                 }
 
                                 val displaySports = remember(groupedSports, sportsSubFilter, searchQuery) {
@@ -1231,166 +1241,232 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                                     }
                                 }
 
-                                Column(modifier = Modifier.fillMaxSize().padding(horizontal = 10.dp)) {
-                                    LazyRow(
-                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                        modifier = Modifier.padding(vertical = 6.dp)
-                                    ) {
-                                        item {
-                                            FilterChip(
-                                                selected = sportsSubFilter == 0,
-                                                onClick = { sportsSubFilter = 0 },
-                                                label = { Text("المباريات والقنوات (${groupedSports.size})", fontSize = 11.sp, fontWeight = FontWeight.Bold) }
+                                LazyVerticalGrid(
+                                    columns = GridCells.Fixed(2),
+                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                                    modifier = Modifier.fillMaxSize()
+                                ) {
+                                    item(span = { GridItemSpan(2) }) {
+                                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                                item {
+                                                    FilterChip(
+                                                        selected = sportsSubFilter == 0,
+                                                        onClick = { sportsSubFilter = 0 },
+                                                        label = { Text("الكل (${groupedSports.size})", fontSize = 11.sp, fontWeight = FontWeight.Bold) }
+                                                    )
+                                                }
+                                                item {
+                                                    FilterChip(
+                                                        selected = sportsSubFilter == 1,
+                                                        onClick = { sportsSubFilter = 1 },
+                                                        label = { Text("الرياضة العربية (beIN / SSC)", fontSize = 11.sp, fontWeight = FontWeight.Bold) }
+                                                    )
+                                                }
+                                                item {
+                                                    FilterChip(
+                                                        selected = sportsSubFilter == 2,
+                                                        onClick = { sportsSubFilter = 2 },
+                                                        label = { Text("الرياضة العالمية (Sky / DAZN)", fontSize = 11.sp, fontWeight = FontWeight.Bold) }
+                                                    )
+                                                }
+                                            }
+
+                                            OutlinedTextField(
+                                                value = searchQuery,
+                                                onValueChange = { searchQuery = it },
+                                                placeholder = { Text("ابحث عن مباراة أو قناة (ريال، برشلونة، beIN 2)...", fontSize = 12.sp) },
+                                                leadingIcon = { Icon(Icons.Default.SportsSoccer, null, tint = accentColor) },
+                                                trailingIcon = {
+                                                    if (searchQuery.isNotEmpty()) {
+                                                        IconButton(onClick = { searchQuery = "" }) {
+                                                            Icon(Icons.Default.Close, null, tint = Color.Gray)
+                                                        }
+                                                    }
+                                                },
+                                                singleLine = true,
+                                                shape = RoundedCornerShape(14.dp),
+                                                modifier = Modifier.fillMaxWidth()
                                             )
-                                        }
-                                        item {
-                                            FilterChip(
-                                                selected = sportsSubFilter == 1,
-                                                onClick = { sportsSubFilter = 1 },
-                                                label = { Text("الرياضة العربية (beIN / SSC)", fontSize = 11.sp, fontWeight = FontWeight.Bold) }
-                                            )
-                                        }
-                                        item {
-                                            FilterChip(
-                                                selected = sportsSubFilter == 2,
-                                                onClick = { sportsSubFilter = 2 },
-                                                label = { Text("الرياضة العالمية (Sky / DAZN)", fontSize = 11.sp, fontWeight = FontWeight.Bold) }
-                                            )
+
+                                            if (todayMatches.isNotEmpty() && searchQuery.isBlank()) {
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Text("مباريات اليوم (${todayMatches.size})", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                                    Text("اضغط لاختيار القناة الناقلة", color = greenText, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                                }
+
+                                                LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                                    items(todayMatches) { match ->
+                                                        val isLiveNow = match.statusState == "in"
+                                                        Card(
+                                                            colors = CardDefaults.cardColors(containerColor = cardColor),
+                                                            border = BorderStroke(1.dp, if (isLiveNow) greenText else accentColor.copy(alpha = 0.4f)),
+                                                            shape = RoundedCornerShape(16.dp),
+                                                            modifier = Modifier.width(235.dp).clickable {
+                                                                val epgHit = groupedSports.firstOrNull { grp ->
+                                                                    val prog = liveEpgMap[grp.cleanName]?.lowercase() ?: ""
+                                                                    prog.isNotBlank() && (
+                                                                        prog.contains(match.homeTeam.lowercase()) ||
+                                                                        prog.contains(match.awayTeam.lowercase())
+                                                                    )
+                                                                }
+                                                                if (epgHit != null) {
+                                                                    selectedQualityGroup = epgHit
+                                                                } else {
+                                                                    selectedMatchForChannels = match
+                                                                }
+                                                            }
+                                                        ) {
+                                                            Column(modifier = Modifier.padding(10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                                                Row(
+                                                                    modifier = Modifier.fillMaxWidth(),
+                                                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                                                    verticalAlignment = Alignment.CenterVertically
+                                                                ) {
+                                                                    Text(match.leagueName, color = accentColor, fontSize = 10.sp, fontWeight = FontWeight.Bold, maxLines = 1, modifier = Modifier.weight(1f))
+                                                                    Box(
+                                                                        modifier = Modifier
+                                                                            .background(if (isLiveNow) Color(0x33EF4444) else greenBadge, RoundedCornerShape(8.dp))
+                                                                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                                                                    ) {
+                                                                        Text(match.statusText, color = if (isLiveNow) Color(0xFFF87171) else greenText, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                                                                    }
+                                                                }
+
+                                                                Spacer(modifier = Modifier.height(6.dp))
+
+                                                                Row(
+                                                                    modifier = Modifier.fillMaxWidth(),
+                                                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                                                    verticalAlignment = Alignment.CenterVertically
+                                                                ) {
+                                                                    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.weight(1f)) {
+                                                                        AsyncImage(model = match.homeLogo, contentDescription = match.homeTeam, modifier = Modifier.size(28.dp))
+                                                                        Spacer(modifier = Modifier.height(3.dp))
+                                                                        Text(match.homeTeam, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                                                    }
+
+                                                                    Text(
+                                                                        if (match.statusState == "pre") "VS" else "${match.homeScore} - ${match.awayScore}",
+                                                                        color = Color.White,
+                                                                        fontWeight = FontWeight.ExtraBold,
+                                                                        fontSize = 14.sp,
+                                                                        modifier = Modifier.padding(horizontal = 6.dp)
+                                                                    )
+
+                                                                    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.weight(1f)) {
+                                                                        AsyncImage(model = match.awayLogo, contentDescription = match.awayTeam, modifier = Modifier.size(28.dp))
+                                                                        Spacer(modifier = Modifier.height(3.dp))
+                                                                        Text(match.awayTeam, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                                                    }
+                                                                }
+
+                                                                Spacer(modifier = Modifier.height(4.dp))
+                                                                Text("📺 ${match.suggestedBroadcaster}", color = Color.LightGray, fontSize = 10.sp)
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            } else if (isLoadingMatches) {
+                                                LinearProgressIndicator(color = accentColor, modifier = Modifier.fillMaxWidth())
+                                            }
+
+                                            Text("القنوات الرياضية (${displaySports.size})", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                                         }
                                     }
 
-                                    OutlinedTextField(
-                                        value = searchQuery,
-                                        onValueChange = { searchQuery = it },
-                                        placeholder = { Text("ابحث عن مباراة أو قناة (ريال، برشلونة، beIN 2)...", fontSize = 12.sp) },
-                                        leadingIcon = { Icon(Icons.Default.SportsSoccer, null, tint = accentColor) },
-                                        trailingIcon = {
-                                            if (searchQuery.isNotEmpty()) {
-                                                IconButton(onClick = { searchQuery = "" }) {
-                                                    Icon(Icons.Default.Close, null, tint = Color.Gray)
+                                    items(displaySports) { grp ->
+                                        val nowProg = liveEpgMap[grp.cleanName] ?: ""
+                                        Card(
+                                            colors = CardDefaults.cardColors(containerColor = cardColor),
+                                            border = BorderStroke(1.dp, accentColor.copy(alpha = 0.35f)),
+                                            shape = RoundedCornerShape(16.dp),
+                                            modifier = Modifier.fillMaxWidth().clickable {
+                                                if (grp.variants.size == 1) startPlayback(grp.variants[0].item)
+                                                else selectedQualityGroup = grp
+                                            }
+                                        ) {
+                                            Column(modifier = Modifier.padding(10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                                AsyncImage(model = grp.logo, contentDescription = grp.cleanName, contentScale = ContentScale.Fit, modifier = Modifier.height(44.dp).fillMaxWidth())
+                                                Spacer(modifier = Modifier.height(5.dp))
+                                                Text(grp.cleanName, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                                if (nowProg.isNotBlank()) {
+                                                    Spacer(modifier = Modifier.height(2.dp))
+                                                    Text(nowProg, color = Color.LightGray, fontSize = 9.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                                }
+                                                Spacer(modifier = Modifier.height(5.dp))
+                                                Box(modifier = Modifier.background(greenBadge, RoundedCornerShape(20.dp)).padding(horizontal = 10.dp, vertical = 3.dp)) {
+                                                    Text("${grp.variants.size} جودات متاحة", color = greenText, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                selectedMatchForChannels?.let { m ->
+                                    val suggestedList = remember(m, groupedSports) {
+                                        val keywords = m.suggestedBroadcaster.split("/").map { it.trim().lowercase() }.filter { it.isNotBlank() }
+                                        val matched = groupedSports.filter { grp ->
+                                            val n = grp.cleanName.lowercase()
+                                            keywords.any { kw -> n.contains(kw) } && !n.contains("haber") && !n.contains("news")
+                                        }
+                                        matched.ifEmpty { groupedSports }.take(20)
+                                    }
+
+                                    AlertDialog(
+                                        onDismissRequest = { selectedMatchForChannels = null },
+                                        containerColor = cardColor,
+                                        title = {
+                                            Column {
+                                                Text("${m.homeTeam} × ${m.awayTeam}", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                                                Text("${m.leagueName} • اختر القناة الناقلة:", color = accentColor, fontSize = 11.sp)
+                                            }
+                                        },
+                                        text = {
+                                            Column(
+                                                modifier = Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState()),
+                                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                                            ) {
+                                                suggestedList.forEach { grp ->
+                                                    Card(
+                                                        colors = CardDefaults.cardColors(containerColor = bgColor),
+                                                        border = BorderStroke(1.dp, accentColor.copy(alpha = 0.35f)),
+                                                        modifier = Modifier.fillMaxWidth().clickable {
+                                                            selectedMatchForChannels = null
+                                                            if (grp.variants.size == 1) startPlayback(grp.variants[0].item)
+                                                            else selectedQualityGroup = grp
+                                                        }
+                                                    ) {
+                                                        Row(
+                                                            modifier = Modifier.padding(10.dp),
+                                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                                            verticalAlignment = Alignment.CenterVertically
+                                                        ) {
+                                                            Column(modifier = Modifier.weight(1f)) {
+                                                                Text(grp.cleanName, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                                                val epgNow = liveEpgMap[grp.cleanName]
+                                                                if (!epgNow.isNullOrBlank()) {
+                                                                    Text(epgNow, color = greenText, fontSize = 10.sp, maxLines = 1)
+                                                                }
+                                                            }
+                                                            Text("${grp.variants.size} جودات", color = accentColor, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                                        }
+                                                    }
                                                 }
                                             }
                                         },
-                                        singleLine = true,
-                                        shape = RoundedCornerShape(14.dp),
-                                        modifier = Modifier.fillMaxWidth()
+                                        confirmButton = {
+                                            TextButton(onClick = { selectedMatchForChannels = null }) {
+                                                Text("إغلاق", color = Color.Gray)
+                                            }
+                                        }
                                     )
-
-                                    Spacer(modifier = Modifier.height(8.dp))
-
-                                    if (todayMatches.isNotEmpty() && searchQuery.isBlank()) {
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
-                                            horizontalArrangement = Arrangement.SpaceBetween,
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Text("مباريات اليوم المباشرة (${todayMatches.size})", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                                            Text("اضغط للمشاهدة", color = greenText, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                                        }
-
-                                        LazyRow(
-                                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                            modifier = Modifier.padding(bottom = 10.dp)
-                                        ) {
-                                            items(todayMatches) { match ->
-                                                val isLiveNow = match.statusState == "in"
-                                                Card(
-                                                    colors = CardDefaults.cardColors(containerColor = cardColor),
-                                                    border = BorderStroke(1.dp, if (isLiveNow) greenText else accentColor.copy(alpha = 0.4f)),
-                                                    shape = RoundedCornerShape(16.dp),
-                                                    modifier = Modifier.width(245.dp).clickable {
-                                                        val hint = match.suggestedBroadcaster.substringBefore("/").trim().lowercase()
-                                                        val matchedGroup = groupedSports.firstOrNull { it.cleanName.lowercase().contains(hint) }
-                                                            ?: groupedSports.firstOrNull()
-                                                        if (matchedGroup != null) {
-                                                            selectedQualityGroup = matchedGroup
-                                                        } else {
-                                                            Toast.makeText(context, "القناة الناقلة المقترحة: ${match.suggestedBroadcaster}", Toast.LENGTH_SHORT).show()
-                                                        }
-                                                    }
-                                                ) {
-                                                    Column(modifier = Modifier.padding(10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                                                        Row(
-                                                            modifier = Modifier.fillMaxWidth(),
-                                                            horizontalArrangement = Arrangement.SpaceBetween,
-                                                            verticalAlignment = Alignment.CenterVertically
-                                                        ) {
-                                                            Text(match.leagueName, color = accentColor, fontSize = 10.sp, fontWeight = FontWeight.Bold, maxLines = 1, modifier = Modifier.weight(1f))
-                                                            Box(
-                                                                modifier = Modifier
-                                                                    .background(if (isLiveNow) Color(0x33EF4444) else greenBadge, RoundedCornerShape(8.dp))
-                                                                    .padding(horizontal = 6.dp, vertical = 2.dp)
-                                                            ) {
-                                                                Text(match.statusText, color = if (isLiveNow) Color(0xFFF87171) else greenText, fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                                                            }
-                                                        }
-
-                                                        Spacer(modifier = Modifier.height(8.dp))
-
-                                                        Row(
-                                                            modifier = Modifier.fillMaxWidth(),
-                                                            horizontalArrangement = Arrangement.SpaceBetween,
-                                                            verticalAlignment = Alignment.CenterVertically
-                                                        ) {
-                                                            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.weight(1f)) {
-                                                                AsyncImage(model = match.homeLogo, contentDescription = match.homeTeam, modifier = Modifier.size(30.dp))
-                                                                Spacer(modifier = Modifier.height(4.dp))
-                                                                Text(match.homeTeam, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                                            }
-
-                                                            Text(
-                                                                if (match.statusState == "pre") "VS" else "${match.homeScore} - ${match.awayScore}",
-                                                                color = Color.White,
-                                                                fontWeight = FontWeight.ExtraBold,
-                                                                fontSize = 15.sp,
-                                                                modifier = Modifier.padding(horizontal = 8.dp)
-                                                            )
-
-                                                            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.weight(1f)) {
-                                                                AsyncImage(model = match.awayLogo, contentDescription = match.awayTeam, modifier = Modifier.size(30.dp))
-                                                                Spacer(modifier = Modifier.height(4.dp))
-                                                                Text(match.awayTeam, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                                            }
-                                                        }
-
-                                                        Spacer(modifier = Modifier.height(6.dp))
-                                                        Text("📺 الناقل: ${match.suggestedBroadcaster}", color = Color.LightGray, fontSize = 10.sp)
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    } else if (isLoadingMatches) {
-                                        LinearProgressIndicator(color = accentColor, modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp))
-                                    }
-
-                                    LazyVerticalGrid(
-                                        columns = GridCells.Fixed(2),
-                                        contentPadding = PaddingValues(bottom = 12.dp),
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                                    ) {
-                                        items(displaySports) { grp ->
-                                            Card(
-                                                colors = CardDefaults.cardColors(containerColor = cardColor),
-                                                border = BorderStroke(1.dp, accentColor.copy(alpha = 0.35f)),
-                                                shape = RoundedCornerShape(16.dp),
-                                                modifier = Modifier.fillMaxWidth().clickable {
-                                                    if (grp.variants.size == 1) startPlayback(grp.variants[0].item)
-                                                    else selectedQualityGroup = grp
-                                                }
-                                            ) {
-                                                Column(modifier = Modifier.padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                                                    AsyncImage(model = grp.logo, contentDescription = grp.cleanName, contentScale = ContentScale.Fit, modifier = Modifier.height(48.dp).fillMaxWidth())
-                                                    Spacer(modifier = Modifier.height(6.dp))
-                                                    Text(grp.cleanName, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                                    Spacer(modifier = Modifier.height(6.dp))
-                                                    Box(modifier = Modifier.background(greenBadge, RoundedCornerShape(20.dp)).padding(horizontal = 10.dp, vertical = 3.dp)) {
-                                                        Text("${grp.variants.size} جودات متاحة", color = greenText, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
                                 }
                             }
 
@@ -1604,7 +1680,7 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                 }
             }
 
-            // نافذة اختيار جودة القناة (تظهر عند الضغط على أي قناة متعددة الجودات في مباشر أو الرياضة)
+            // نافذة اختيار جودة القناة
             selectedQualityGroup?.let { grp ->
                 AlertDialog(
                     onDismissRequest = { selectedQualityGroup = null },
