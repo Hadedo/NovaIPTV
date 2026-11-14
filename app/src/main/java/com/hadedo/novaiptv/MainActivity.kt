@@ -6,7 +6,6 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.content.res.Configuration
-import android.media.AudioManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -1168,7 +1167,6 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                                     verticalArrangement = Arrangement.spacedBy(10.dp),
                                     modifier = Modifier.fillMaxSize()
                                 ) {
-                                    // شريط الفلترة والبحث
                                     item {
                                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                             LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -1219,7 +1217,6 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                                         }
                                     }
 
-                                    // شريط القنوات الرياضية السريع (beIN Sports / SSC بالجودات)
                                     if (displaySports.isNotEmpty()) {
                                         item {
                                             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -1251,7 +1248,6 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                                         }
                                     }
 
-                                    // المباريات مجمعة حسب البطولة (اضغط لفتح الملعب والتشكيلة والإحصائيات)
                                     if (isLoadingMatches) {
                                         item { LinearProgressIndicator(color = accentColor, modifier = Modifier.fillMaxWidth()) }
                                     } else {
@@ -1281,14 +1277,12 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                                                             horizontalArrangement = Arrangement.SpaceBetween,
                                                             verticalAlignment = Alignment.CenterVertically
                                                         ) {
-                                                            // الفريق الضيف
                                                             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
                                                                 AsyncImage(model = match.awayLogo, contentDescription = match.awayTeam, modifier = Modifier.size(26.dp))
                                                                 Spacer(modifier = Modifier.width(8.dp))
                                                                 Text(match.awayTeam, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                                             }
 
-                                                            // النتيجة أو التوقيت
                                                             Box(
                                                                 modifier = Modifier
                                                                     .padding(horizontal = 8.dp)
@@ -1303,7 +1297,6 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                                                                 )
                                                             }
 
-                                                            // الفريق المضيف
                                                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.End, modifier = Modifier.weight(1f)) {
                                                                 Text(match.homeTeam, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                                                 Spacer(modifier = Modifier.width(8.dp))
@@ -1337,7 +1330,6 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                                     }
                                 }
 
-                                // نافذة تفاصيل المباراة التفاعلية (الملعب والتشكيلة + الإحصائيات + الأحداث + البث المباشر)
                                 selectedMatchSheet?.let { m ->
                                     val matchingChannels = remember(m, groupedSports) {
                                         val keywords = m.suggestedBroadcaster.split("/").map { it.trim().lowercase() }.filter { it.isNotBlank() }
@@ -1419,44 +1411,44 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                                     activeServerId = activeServerId,
                                     activeServer = activeServer,
                                     appLang = appLang,
-                                    onAppLangChange = { appLang = it; prefs.edit().putString("app_lang", it).apply() },
+                                    onAppLangChange = { langVal: String -> appLang = langVal; prefs.edit().putString("app_lang", langVal).apply() },
                                     accentIdx = accentIdx,
                                     accentOptions = accentOptions,
-                                    onAccentChange = { accentIdx = it; prefs.edit().putInt("accent_idx", it).apply() },
+                                    onAccentChange = { idxVal: Int -> accentIdx = idxVal; prefs.edit().putInt("accent_idx", idxVal).apply() },
                                     bgIdx = bgIdx,
                                     bgOptions = bgOptions,
-                                    onBgChange = { bgIdx = it; prefs.edit().putInt("bg_idx", it).apply() },
+                                    onBgChange = { bgVal: Int -> bgIdx = bgVal; prefs.edit().putInt("bg_idx", bgVal).apply() },
                                     startupTab = startupTab,
-                                    onStartupTabChange = { startupTab = it; prefs.edit().putInt("startup_tab", it).apply() },
+                                    onStartupTabChange = { tabVal: Int -> startupTab = tabVal; prefs.edit().putInt("startup_tab", tabVal).apply() },
                                     decoderMode = decoderMode,
-                                    onDecoderChange = { decoderMode = it; prefs.edit().putString("decoder_mode", it).apply() },
+                                    onDecoderChange = { decVal: String -> decoderMode = decVal; prefs.edit().putString("decoder_mode", decVal).apply() },
                                     bufferProfile = bufferProfile,
-                                    onBufferChange = { bufferProfile = it; prefs.edit().putString("buffer_profile", it).apply() },
+                                    onBufferChange = { bufVal: String -> bufferProfile = bufVal; prefs.edit().putString("buffer_profile", bufVal).apply() },
                                     streamFmt = streamFmt,
-                                    onStreamFmtChange = { streamFmt = it; prefs.edit().putString("stream_fmt", it).apply() },
+                                    onStreamFmtChange = { fmtVal: String -> streamFmt = fmtVal; prefs.edit().putString("stream_fmt", fmtVal).apply() },
                                     sameHost = sameHost,
-                                    onSameHostChange = { sameHost = it; prefs.edit().putBoolean("same_host", it).apply() },
+                                    onSameHostChange = { hostBool: Boolean -> sameHost = hostBool; prefs.edit().putBoolean("same_host", hostBool).apply() },
                                     userAgent = userAgent,
-                                    onUserAgentChange = { userAgent = it; prefs.edit().putString("user_agent", it).apply() },
+                                    onUserAgentChange = { uaVal: String -> userAgent = uaVal; prefs.edit().putString("user_agent", uaVal).apply() },
                                     gesturesEnabled = gesturesEnabled,
-                                    onGesturesChange = { gesturesEnabled = it; prefs.edit().putBoolean("gestures_enabled", it).apply() },
+                                    onGesturesChange = { gestBool: Boolean -> gesturesEnabled = gestBool; prefs.edit().putBoolean("gestures_enabled", gestBool).apply() },
                                     autoplayNextEp = autoplayNextEp,
-                                    onAutoplayChange = { autoplayNextEp = it; prefs.edit().putBoolean("autoplay_next_ep", it).apply() },
+                                    onAutoplayChange = { autoBool: Boolean -> autoplayNextEp = autoBool; prefs.edit().putBoolean("autoplay_next_ep", autoBool).apply() },
                                     subFontSize = subFontSize,
-                                    onSubFontSizeChange = { subFontSize = it; prefs.edit().putFloat("sub_font_size", it).apply() },
+                                    onSubFontSizeChange = { sizeVal: Float -> subFontSize = sizeVal; prefs.edit().putFloat("sub_font_size", sizeVal).apply() },
                                     subColorYellow = subColorYellow,
-                                    onSubColorYellowChange = { subColorYellow = it; prefs.edit().putBoolean("sub_yellow", it).apply() },
+                                    onSubColorYellowChange = { yelBool: Boolean -> subColorYellow = yelBool; prefs.edit().putBoolean("sub_yellow", yelBool).apply() },
                                     sleepMinutesLeft = sleepMinutesLeft,
-                                    onSleepMinutesChange = { sleepMinutesLeft = it },
+                                    onSleepMinutesChange = { minVal: Int -> sleepMinutesLeft = minVal },
                                     parentalPin = parentalPin,
-                                    onParentalPinChange = { parentalPin = it },
+                                    onParentalPinChange = { pinVal: String -> parentalPin = pinVal },
                                     accentColor = accentColor,
                                     cardColor = cardColor,
-                                    onSelectServer = { syncServerData(it, false); selectedTab = 1 },
+                                    onSelectServer = { srvItem: SavedServer -> syncServerData(srvItem, false); selectedTab = 1 },
                                     onAddServerClick = { editingServer = null; showAddServerDialog = true },
-                                    onEditServerClick = { editingServer = it; showAddServerDialog = true },
-                                    onDeleteServerClick = { srv ->
-                                        val upd = servers.filter { it.id != srv.id }
+                                    onEditServerClick = { srvItem: SavedServer -> editingServer = srvItem; showAddServerDialog = true },
+                                    onDeleteServerClick = { srvItem: SavedServer ->
+                                        val upd = servers.filter { s -> s.id != srvItem.id }
                                         servers = upd; saveServersList(prefs, upd)
                                     },
                                     onOpenCategoriesManager = { showCategoriesManager = true },
