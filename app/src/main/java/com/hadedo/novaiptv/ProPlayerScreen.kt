@@ -590,3 +590,12 @@ fun ProCinemaPlayerOverlay(
         )
     }
 }
+
+private fun formatDurationMs(ms: Long): String {
+    if (ms <= 0L) return "00:00"
+    val totalSec = ms / 1000L
+    val h = totalSec / 3600L
+    val m = (totalSec % 3600L) / 60L
+    val s = totalSec % 60L
+    return if (h > 0) String.format("%d:%02d:%02d", h, m, s) else String.format("%02d:%02d", m, s)
+}
