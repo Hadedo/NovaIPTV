@@ -1212,10 +1212,10 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
 
                             // 2: مركز الرياضة الاحترافي (تمرير عمودي موحّد بدون حجب + ربط ذكي بالمباريات)
                             2 -> {
-                                var todayMatches by remember { mutableStateOf<List<LiveMatchInfo>>(emptyList()) }
+                                var todayMatches by remember { mutableStateOf(listOf<LiveMatchInfo>()) }
                                 var isLoadingMatches by remember { mutableStateOf(false) }
                                 var selectedMatchForChannels by remember { mutableStateOf<LiveMatchInfo?>(null) }
-                                var liveEpgMap by remember { mutableStateOf>(emptyMap()) }
+                                var liveEpgMap by remember { mutableStateOf(mapOf("" to "")) }
 
                                 LaunchedEffect(appLang) {
                                     isLoadingMatches = true
@@ -1225,7 +1225,7 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
 
                                 LaunchedEffect(groupedSports, activeServer) {
                                     val srv = activeServer
-                                    if (srv != null && srv.type == "xtream" && groupedSports.isNotEmpty() && liveEpgMap.isEmpty()) {
+                                    if (srv != null && srv.type == "xtream" && groupedSports.isNotEmpty() && liveEpgMap.size <= 1) {
                                         liveEpgMap = ServersEngine.fetchLiveMatchesForSports(srv.host, srv.user, srv.pass, groupedSports)
                                     }
                                 }
