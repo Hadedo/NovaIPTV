@@ -15,6 +15,15 @@ android {
         versionName = "1.0"
     }
 
+    signingConfigs {
+        create("release") {
+            storeFile = file("nova_release.jks")
+            storePassword = System.getenv("KEYSTORE_PASS") ?: "NovaIptv2026Pro"
+            keyAlias = "nova_key"
+            keyPassword = System.getenv("KEYSTORE_PASS") ?: "NovaIptv2026Pro"
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true
@@ -23,15 +32,10 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("release")
         }
         debug {
-            isMinifyEnabled = true
-            isShrinkResources = true
-            proguardFiles(
-                getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro"
-            )
+            isMinifyEnabled = false
         }
     }
 
