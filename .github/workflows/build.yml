@@ -32,7 +32,7 @@ jobs:
             keytool -genkeypair -v -keystore app/nova_release.jks -keyalg RSA -keysize 2048 -validity 10000 -alias nova_key -storepass NovaIptv2026Pro -keypass NovaIptv2026Pro -dname "CN=NovaIPTV, OU=Dev, O=Hadedo, L=Baghdad, C=IQ"
             git config user.name "github-actions[bot]"
             git config user.email "github-actions[bot]@users.noreply.github.com"
-            git add app/nova_release.jks
+            git add -f app/nova_release.jks
             git commit -m "Save permanent release keystore"
             git push
           fi
