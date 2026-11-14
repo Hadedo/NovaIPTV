@@ -6,18 +6,24 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.content.res.Configuration
+import android.graphics.Color as AndroidColor
 import android.media.AudioManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.speech.RecognizerIntent
 import android.util.Rational
+import android.util.TypedValue
 import android.view.View
 import android.view.WindowInsets
 import android.view.WindowInsetsController
 import android.view.WindowManager
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.OptIn
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -31,7 +37,10 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -42,30 +51,35 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.VideoSize
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.exoplayer.DefaultLoadControl
+import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.AspectRatioFrameLayout
+import androidx.media3.ui.CaptionStyleCompat
 import androidx.media3.ui.PlayerView
 import coil.compose.AsyncImage
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
-
-private val NeonPurple = Color(0xFF7C6DFA)
-private val DeepBlack = Color(0xFF0A0A0E)
-private val CardDark = Color(0xFF14141C)
-private val GreenBadge = Color(0xFF1E3A2F)
-private val GreenText = Color(0xFF4ADE80)
 
 class MainActivity : ComponentActivity() {
     var isInPipState by mutableStateOf(false)
@@ -74,9 +88,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         setContent {
-            MaterialTheme(colorScheme = darkColorScheme(primary = NeonPurple, background = DeepBlack, surface = CardDark)) {
-                NovaIptvNeonApp(isInPipMode = isInPipState)
-            }
+            NovaIptvUltimateApp(isInPipMode = isInPipState)
         }
     }
 
@@ -99,7 +111,18 @@ fun loadSavedServers(prefs: android.content.SharedPreferences): List<SavedServer
     val list = mutableListOf<SavedServer>()
     for (i in 0 until arr.length()) {
         val o = arr.getJSONObject(i)
-        list.add(SavedServer(o.getString("id"), o.getString("title"), o.getString("type"), o.getString("host"), o.optString("user"), o.optString("pass"), o.optString("country", "🌐"), o.optLong("ping", 0)))
+        list.add(
+            SavedServer(
+                o.getString("id"),
+                o.getString("title"),
+                o.getString("type"),
+                o.getString("host"),
+                o.optString("user"),
+                o.optString("pass"),
+                o.optString("country", "🌐"),
+                o.optLong("ping", 0)
+            )
+        )
     }
     return list
 }
@@ -108,92 +131,328 @@ fun saveServersList(prefs: android.content.SharedPreferences, list: List<SavedSe
     val arr = JSONArray()
     list.forEach { s ->
         arr.put(JSONObject().apply {
-            put("id", s.id); put("title", s.title); put("type", s.type); put("host", s.host); put("user", s.user); put("pass", s.pass); put("country", s.countryCode); put("ping", s.pingMs)
+            put("id", s.id); put("title", s.title); put("type", s.type)
+            put("host", s.host); put("user", s.user); put("pass", s.pass)
+            put("country", s.countryCode); put("ping", s.pingMs)
         })
     }
     prefs.edit().putString("saved_servers_json", arr.toString()).apply()
 }
 
+// قاموس اللغات الفوري (عربي، إنجليزي، فرنسي، تركي، كردي)
+data class AppStrings(
+    val home: String, val live: String, val sports: String, val cinema: String, val hub: String,
+    val continueWatching: String, val recentChannels: String, val myFolders: String, val platforms: String,
+    val searchHint: String, val all: String, val movies: String, val series: String,
+    val multiScreen: String, val kidsMode: String, val settings: String, val addConnection: String,
+    val refreshLists: String, val seasons: String, val chooseQuality: String
+)
+
+fun getStrings(lang: String): AppStrings = when (lang) {
+    "en" -> AppStrings("Home", "Live TV", "Sports", "Cinema", "More", "Continue Watching", "Recently Watched", "My Folders", "Platforms", "Search channels, movies...", "All", "Movies", "Series", "Multi-Screen (4)", "Kids Mode", "Settings", "Add Connection", "Sync Now", "Seasons & Episodes", "Select Quality")
+    "fr" -> AppStrings("Accueil", "Direct", "Sports", "Cinéma", "Plus", "Reprendre", "Chaînes récentes", "Mes Dossiers", "Plateformes", "Rechercher...", "Tout", "Films", "Séries", "Multi-Écran (4)", "Mode Enfants", "Paramètres", "Ajouter", "Actualiser", "Saisons & Épisodes", "Choisir la qualité")
+    "tr" -> AppStrings("Ana Sayfa", "Canlı TV", "Spor", "Sinema", "Diğer", "İzlemeye Devam Et", "Son İzlenenler", "Klasörlerim", "Platformlar", "Ara...", "Tümü", "Filmler", "Diziler", "Çoklu Ekran (4)", "Çocuk Modu", "Ayarlar", "Bağlantı Ekle", "Yenile", "Sezonlar ve Bölümler", "Kalite Seçin")
+    "ku" -> AppStrings("سەرەکی", "ڕاستەوخۆ", "وەرزش", "سینەما", "زیاتر", "بەردەوامبە لە بینین", "دوایین کەناڵەکان", "فۆڵدەرەکانم", "پلاتفۆرمەکان", "گەڕان...", "هەموو", "فیلمەکان", "زنجیرەکان", "فرە شاشە (4)", "دۆخی منداڵان", "ڕێکخستنەکان", "زیادکردنی هەژمار", "نوێکردنەوە", "وەرز و ئەڵقەکان", "کوالێتی هەڵبژێرە")
+    else -> AppStrings("الرئيسية", "مباشر", "الرياضة", "السينما", "المزيد", "واصل المشاهدة", "شاهدته مؤخراً", "مجلداتي", "المنصات", "ابحث في القنوات والأفلام...", "الكل", "أفلام", "مسلسلات", "تعدد الشاشات (4)", "وضع الأطفال", "الإعدادات", "إضافة اشتراك", "تحديث القوائم", "المواسم والحلقات", "اختر جودة البث")
+}
+
 @OptIn(UnstableApi::class)
 @Composable
-fun NovaIptvNeonApp(isInPipMode: Boolean) {
+fun NovaIptvUltimateApp(isInPipMode: Boolean) {
     val context = LocalContext.current
     val activity = context as? Activity
     val scope = rememberCoroutineScope()
+    val clipboard = LocalClipboardManager.current
     val prefs = remember { context.getSharedPreferences("nova_neon_prefs", Context.MODE_PRIVATE) }
     val audioManager = remember { context.getSystemService(Context.AUDIO_SERVICE) as AudioManager }
 
-    var selectedTab by remember { mutableIntStateOf(0) }
-    var showAddDialog by remember { mutableStateOf(false) }
-    var showSettingsSheet by remember { mutableStateOf(false) }
-    var editingServer by remember { mutableStateOf<SavedServer?>(null) }
+    // إعدادات اللغة والسمات والألوان
+    var appLang by remember { mutableStateOf(prefs.getString("app_lang", "ar") ?: "ar") }
+    val str = remember(appLang) { getStrings(appLang) }
+    val layoutDir = if (appLang == "ar" || appLang == "ku") LayoutDirection.Rtl else LayoutDirection.Ltr
 
-    var servers by remember { mutableStateOf<List<SavedServer>>(loadSavedServers(prefs)) }
+    var accentIdx by remember { mutableIntStateOf(prefs.getInt("accent_idx", 0)) }
+    val accentOptions = listOf(
+        Pair("بنفسجي نيون", Color(0xFF7C6DFA)),
+        Pair("أزرق كهربائي", Color(0xFF3B82F6)),
+        Pair("زمردي", Color(0xFF10B981)),
+        Pair("عنبري ذهبي", Color(0xFFF59E0B)),
+        Pair("أحمر سينمائي", Color(0xFFEF4444)),
+        Pair("أرجواني", Color(0xFFEC4899))
+    )
+    val accentColor = accentOptions.getOrElse(accentIdx) { accentOptions[0] }.second
+
+    var bgIdx by remember { mutableIntStateOf(prefs.getInt("bg_idx", 0)) }
+    val bgOptions = listOf(
+        Triple("AMOLED أسود", Color(0xFF000000), Color(0xFF0D0D12)),
+        Triple("أسود عميق", Color(0xFF0A0A0E), Color(0xFF14141C)),
+        Triple("أزرق ليلي", Color(0xFF090D16), Color(0xFF111827))
+    )
+    val bgColor = bgOptions.getOrElse(bgIdx) { bgOptions[0] }.second
+    val cardColor = bgOptions.getOrElse(bgIdx) { bgOptions[0] }.third
+    val greenText = Color(0xFF4ADE80)
+    val greenBadge = Color(0xFF1E3A2F)
+
+    // إعدادات الأداء والمشغل المتقدمة
+    var startupTab by remember { mutableIntStateOf(prefs.getInt("startup_tab", 0)) }
+    var selectedTab by remember { mutableIntStateOf(startupTab) }
+    var turboMode by remember { mutableStateOf(prefs.getBoolean("turbo_mode", false)) }
+    var gesturesEnabled by remember { mutableStateOf(prefs.getBoolean("gestures_enabled", true)) }
+    var autoplayNextEp by remember { mutableStateOf(prefs.getBoolean("autoplay_next_ep", true)) }
+    var decoderMode by remember { mutableStateOf(prefs.getString("decoder_mode", "auto") ?: "auto") } // auto, hw, sw
+    var bufferProfile by remember { mutableStateOf(prefs.getString("buffer_profile", "balanced") ?: "balanced") } // fast, balanced, antifreeze
+    var streamFmt by remember { mutableStateOf(prefs.getString("stream_fmt", "ts") ?: "ts") }
+    var sameHost by remember { mutableStateOf(prefs.getBoolean("same_host", false)) }
+    var userAgent by remember { mutableStateOf(prefs.getString("user_agent", "IPTVSmartersPro") ?: "IPTVSmartersPro") }
+    var subFontSize by remember { mutableFloatStateOf(prefs.getFloat("sub_font_size", 18f)) }
+    var subColorYellow by remember { mutableStateOf(prefs.getBoolean("sub_yellow", false)) }
+
+    ServersEngine.currentUserAgent = userAgent
+    ServersEngine.streamFormat = streamFmt
+    ServersEngine.sameHostProxy = sameHost
+
+    // وضع الأطفال والرقابة الأبوية وإخفاء الباقات
+    var kidsMode by remember { mutableStateOf(false) }
+    var parentalPin by remember { mutableStateOf(prefs.getString("parental_pin", "0000") ?: "0000") }
+    var showPinDialog by remember { mutableStateOf(false) }
+    var pinActionCallback by remember { mutableStateOf<() -> Unit>({}) }
+    var hiddenCategories by remember { mutableStateOf(prefs.getStringSet("hidden_cats", emptySet()) ?: emptySet()) }
+
+    // السيرفرات والبيانات المخزنة محلياً (Zero-Wait Cache)
+    var servers by remember { mutableStateOf(loadSavedServers(prefs)) }
     var activeServerId by remember { mutableStateOf(prefs.getString("active_server_id", "") ?: "") }
     val activeServer = servers.find { it.id == activeServerId }
-
-    var gesturesEnabled by remember { mutableStateOf(prefs.getBoolean("gestures_enabled", true)) }
-    var expiryAlertEnabled by remember { mutableStateOf(prefs.getBoolean("expiry_alert", true)) }
-    var userAgent by remember { mutableStateOf(prefs.getString("user_agent", "IPTVSmartersPro") ?: "IPTVSmartersPro") }
-    ServersEngine.currentUserAgent = userAgent
-
-    var isFullScreen by remember { mutableStateOf(false) }
-    var showOverlay by remember { mutableStateOf(true) }
-    var resizeIdx by remember { mutableIntStateOf(0) }
-    val resizeModes = listOf(Pair(AspectRatioFrameLayout.RESIZE_MODE_FIT, "طبيعي"), Pair(AspectRatioFrameLayout.RESIZE_MODE_FILL, "ملء"), Pair(AspectRatioFrameLayout.RESIZE_MODE_ZOOM, "تكبير"))
-
     var accountInfo by remember { mutableStateOf<AccountInfo?>(null) }
-    var mediaList by remember { mutableStateOf<List<MediaItemModel>>(emptyList()) }
-    var favoriteIds by remember { mutableStateOf(prefs.getStringSet("fav_ids", emptySet()) ?: emptySet()) }
-    var selectedCategory by remember { mutableStateOf("الكل") }
-    var searchQuery by remember { mutableStateOf("") }
-    var currentMedia by remember { mutableStateOf<MediaItemModel?>(null) }
-    var videoResolution by remember { mutableStateOf("") }
-    var gestureIndicator by remember { mutableStateOf("") }
+
+    var liveList by remember { mutableStateOf<List<MediaItemModel>>(emptyList()) }
+    var vodList by remember { mutableStateOf<List<MediaItemModel>>(emptyList()) }
+    var seriesList by remember { mutableStateOf<List<MediaItemModel>>(emptyList()) }
     var isLoading by remember { mutableStateOf(false) }
 
-    val exoPlayer = remember {
-        ExoPlayer.Builder(context).build().apply {
-            playWhenReady = true
-            addListener(object : Player.Listener {
-                override fun onVideoSizeChanged(videoSize: VideoSize) {
-                    if (videoSize.width > 0) {
-                        val tag = when { videoSize.height >= 2160 -> "4K HDR"; videoSize.height >= 1080 -> "1080p FHD"; videoSize.height >= 720 -> "720p HD"; else -> "${videoSize.height}p" }
-                        videoResolution = "$tag • LIVE"
-                    }
-                }
-            })
+    var favoriteIds by remember { mutableStateOf(prefs.getStringSet("fav_ids", emptySet()) ?: emptySet()) }
+    var watchHistory by remember { mutableStateOf(AppStorage.getWatchHistory(context)) }
+    var recentChannels by remember { mutableStateOf(AppStorage.getRecentChannels(context)) }
+    var customFolders by remember { mutableStateOf(AppStorage.getCustomFolders(context)) }
+
+    // حالات المشغل والشاشات
+    var currentMedia by remember { mutableStateOf<MediaItemModel?>(null) }
+    var currentEpg by remember { mutableStateOf<EpgProgram?>(null) }
+    var videoResolution by remember { mutableStateOf("") }
+    var isFullScreen by remember { mutableStateOf(false) }
+    var isScreenLocked by remember { mutableStateOf(false) }
+    var showOverlay by remember { mutableStateOf(true) }
+    var gestureIndicator by remember { mutableStateOf("") }
+    var sleepMinutesLeft by remember { mutableIntStateOf(0) }
+    var resizeIdx by remember { mutableIntStateOf(0) }
+    val resizeModes = listOf(
+        Pair(AspectRatioFrameLayout.RESIZE_MODE_FIT, "طبيعي"),
+        Pair(AspectRatioFrameLayout.RESIZE_MODE_FILL, "ملء"),
+        Pair(AspectRatioFrameLayout.RESIZE_MODE_ZOOM, "تكبير")
+    )
+
+    // نوافذ تفاعلية (الجودات الرياضية، مواسم المسلسلات، تعدد الشاشات، الإعدادات)
+    var selectedSportsGroup by remember { mutableStateOf<GroupedSportsChannel?>(null) }
+    var selectedSeriesItem by remember { mutableStateOf<MediaItemModel?>(null) }
+    var loadedSeriesDetails by remember { mutableStateOf<SeriesDetails?>(null) }
+    var activeSeasonNum by remember { mutableIntStateOf(1) }
+    var activeEpisodesQueue by remember { mutableStateOf<List<EpisodeModel>>(emptyList()) }
+    var currentEpisodeIdx by remember { mutableIntStateOf(-1) }
+    var nextEpisodeCountdown by remember { mutableIntStateOf(0) }
+
+    var isMultiScreenMode by remember { mutableStateOf(false) }
+    var multiChannels by remember { mutableStateOf<List<MediaItemModel?>>(listOf(null, null, null, null)) }
+    var activeAudioSlot by remember { mutableIntStateOf(0) }
+    var pickingForSlot by remember { mutableIntStateOf(-1) }
+
+    var showAccountMenu by remember { mutableStateOf(false) }
+    var showAddServerDialog by remember { mutableStateOf(false) }
+    var editingServer by remember { mutableStateOf<SavedServer?>(null) }
+    var showSettingsModal by remember { mutableStateOf(false) }
+    var showCreateFolderDialog by remember { mutableStateOf(false) }
+    var folderTargetItem by remember { mutableStateOf<MediaItemModel?>(null) }
+    var showCategoriesManager by remember { mutableStateOf(false) }
+    var showBackupDialog by remember { mutableStateOf(false) }
+
+    // فلاتر التصفح
+    var cinemaSubTab by remember { mutableIntStateOf(0) } // 0 = Movies, 1 = Series
+    var selectedLangFilter by remember { mutableStateOf("الكل") }
+    var selectedPlatformFilter by remember { mutableStateOf("") }
+    var selectedLiveCategory by remember { mutableStateOf("الكل") }
+    var searchQuery by remember { mutableStateOf("") }
+
+    // البحث الصوتي
+    val voiceLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { res ->
+        if (res.resultCode == Activity.RESULT_OK) {
+            val spoken = res.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()
+            if (!spoken.isNullOrBlank()) searchQuery = spoken
         }
     }
-    DisposableEffect(Unit) { onDispose { exoPlayer.release() } }
 
-    fun connectToServer(srv: SavedServer, contentType: String = "live", switchTab: Boolean = true) {
+    // بناء محرك ExoPlayer مع Buffer Profile + Decoder Mode + User-Agent + Auto-Reconnect
+    val exoPlayer = remember(decoderMode, bufferProfile, userAgent) {
+        val renderersFactory = DefaultRenderersFactory(context).apply {
+            setExtensionRendererMode(
+                when (decoderMode) {
+                    "sw" -> DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER
+                    "hw" -> DefaultRenderersFactory.EXTENSION_RENDERER_MODE_OFF
+                    else -> DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON
+                }
+            )
+        }
+        val (minBuf, maxBuf, playbackBuf) = when (bufferProfile) {
+            "fast" -> Triple(1500, 5000, 800)
+            "antifreeze" -> Triple(15000, 45000, 5000)
+            else -> Triple(5000, 15000, 2000)
+        }
+        val loadControl = DefaultLoadControl.Builder()
+            .setBufferDurationsMs(minBuf, maxBuf, playbackBuf, playbackBuf)
+            .build()
+        val dataSourceFactory = DefaultHttpDataSource.Factory()
+            .setUserAgent(userAgent)
+            .setAllowCrossProtocolRedirects(true)
+
+        ExoPlayer.Builder(context, renderersFactory)
+            .setLoadControl(loadControl)
+            .setMediaSourceFactory(DefaultMediaSourceFactory(dataSourceFactory))
+            .build().apply {
+                playWhenReady = true
+            }
+    }
+
+    // مستمع أحداث المشغل (الدقة، إعادة الاتصال التلقائي، نهاية الحلقة)
+    DisposableEffect(exoPlayer) {
+        val listener = object : Player.Listener {
+            override fun onVideoSizeChanged(videoSize: VideoSize) {
+                if (videoSize.width > 0) {
+                    val tag = when {
+                        videoSize.height >= 2160 -> "4K UHD"
+                        videoSize.height >= 1080 -> "1080p FHD"
+                        videoSize.height >= 720 -> "720p HD"
+                        else -> "${videoSize.height}p"
+                    }
+                    videoResolution = "$tag • LIVE"
+                }
+            }
+
+            override fun onPlayerError(error: PlaybackException) {
+                // إعادة الاتصال التلقائي الذكي عند التقطيع
+                videoResolution = "إعادة ربط البث..."
+                exoPlayer.prepare()
+                exoPlayer.play()
+            }
+
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                if (playbackState == Player.STATE_ENDED && autoplayNextEp && currentEpisodeIdx >= 0 && currentEpisodeIdx + 1 < activeEpisodesQueue.size) {
+                    nextEpisodeCountdown = 5
+                }
+            }
+        }
+        exoPlayer.addListener(listener)
+        onDispose {
+            exoPlayer.removeListener(listener)
+            exoPlayer.release()
+        }
+    }
+
+    // حفظ موضع المشاهدة تلقائياً كل 5 ثوانٍ + مؤقت النوم + عداد الحلقة التالية
+    LaunchedEffect(currentMedia, sleepMinutesLeft, nextEpisodeCountdown) {
+        while (true) {
+            delay(1000L)
+            val m = currentMedia
+            if (m != null && m.type != "live" && exoPlayer.isPlaying && exoPlayer.duration > 0) {
+                AppStorage.saveWatchProgress(
+                    context,
+                    WatchProgress(m.id, m.name, m.logo, m.url, m.type, exoPlayer.currentPosition, exoPlayer.duration, m.category)
+                )
+                watchHistory = AppStorage.getWatchHistory(context)
+            }
+            if (nextEpisodeCountdown > 0) {
+                nextEpisodeCountdown -= 1
+                if (nextEpisodeCountdown == 0 && currentEpisodeIdx + 1 < activeEpisodesQueue.size) {
+                    val nextEp = activeEpisodesQueue[currentEpisodeIdx + 1]
+                    currentEpisodeIdx += 1
+                    val nextModel = MediaItemModel(nextEp.id, nextEp.title, nextEp.url, selectedSeriesItem?.name ?: "مسلسل", selectedSeriesItem?.logo ?: "", "series")
+                    currentMedia = nextModel
+                    exoPlayer.setMediaItem(MediaItem.fromUri(ServersEngine.resolveStreamUrl(nextModel.url, activeServer?.host ?: "")))
+                    exoPlayer.prepare()
+                    exoPlayer.play()
+                }
+            }
+        }
+    }
+
+    LaunchedEffect(sleepMinutesLeft) {
+        if (sleepMinutesLeft > 0) {
+            delay(60_000L)
+            sleepMinutesLeft -= 1
+            if (sleepMinutesLeft == 0) {
+                exoPlayer.pause()
+                Toast.makeText(context, "تم إيقاف البث بواسطة مؤقت النوم", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    // تحميل السيرفر مع التخزين المحلي الذكي (0 ثانية انتظار + تحديث كل 24 ساعة)
+    fun syncServerData(srv: SavedServer, forceRefresh: Boolean = false) {
         activeServerId = srv.id
         prefs.edit().putString("active_server_id", srv.id).apply()
-        scope.launch {
-            isLoading = true
-            val (country, ping) = ServersEngine.detectServerCountryAndPing(srv.host)
-            val updatedList = servers.map { if (it.id == srv.id) it.copy(countryCode = country, pingMs = ping) else it }
-            servers = updatedList
-            saveServersList(prefs, updatedList)
 
-            if (srv.type == "xtream") {
+        scope.launch {
+            val cachedLive = if (!forceRefresh) AppStorage.loadMediaCache(context, srv.id, "live") else null
+            val cachedVod = if (!forceRefresh) AppStorage.loadMediaCache(context, srv.id, "vod") else null
+            val cachedSeries = if (!forceRefresh) AppStorage.loadMediaCache(context, srv.id, "series") else null
+
+            if (cachedLive != null) liveList = cachedLive
+            if (cachedVod != null) vodList = cachedVod
+            if (cachedSeries != null) seriesList = cachedSeries
+
+            if (cachedLive == null || cachedVod == null || cachedSeries == null || forceRefresh) {
+                isLoading = cachedLive == null
+                val (country, ping) = ServersEngine.detectServerCountryAndPing(srv.host)
+                val updatedServers = servers.map { if (it.id == srv.id) it.copy(countryCode = country, pingMs = ping) else it }
+                servers = updatedServers
+                saveServersList(prefs, updatedServers)
+
+                if (srv.type == "xtream") {
+                    accountInfo = ServersEngine.getAccountInfo(srv.host, srv.user, srv.pass)
+                    val freshLive = ServersEngine.loadXtream(srv.host, srv.user, srv.pass, "live")
+                    if (freshLive.isNotEmpty()) {
+                        liveList = freshLive
+                        AppStorage.saveMediaCache(context, srv.id, "live", freshLive)
+                    }
+                    isLoading = false
+
+                    val freshVod = ServersEngine.loadXtream(srv.host, srv.user, srv.pass, "vod")
+                    if (freshVod.isNotEmpty()) {
+                        vodList = freshVod
+                        AppStorage.saveMediaCache(context, srv.id, "vod", freshVod)
+                    }
+                    val freshSeries = ServersEngine.loadXtream(srv.host, srv.user, srv.pass, "series")
+                    if (freshSeries.isNotEmpty()) {
+                        seriesList = freshSeries
+                        AppStorage.saveMediaCache(context, srv.id, "series", freshSeries)
+                    }
+                } else if (srv.type == "stalker") {
+                    val freshStalker = ServersEngine.loadStalker(srv.host, srv.user)
+                    liveList = freshStalker
+                    AppStorage.saveMediaCache(context, srv.id, "live", freshStalker)
+                    isLoading = false
+                } else {
+                    val freshM3u = M3uParser.loadFromUrl(srv.host).mapIndexed { idx, ch ->
+                        MediaItemModel("$idx", ServersEngine.cleanMediaName(ch.name), ch.url, ch.group)
+                    }
+                    liveList = freshM3u
+                    AppStorage.saveMediaCache(context, srv.id, "live", freshM3u)
+                    isLoading = false
+                }
+            } else if (srv.type == "xtream") {
                 accountInfo = ServersEngine.getAccountInfo(srv.host, srv.user, srv.pass)
-                mediaList = ServersEngine.loadXtream(srv.host, srv.user, srv.pass, contentType)
-            } else if (srv.type == "stalker") {
-                accountInfo = null
-                mediaList = ServersEngine.loadStalker(srv.host, srv.user)
-            } else {
-                accountInfo = null
-                mediaList = M3uParser.loadFromUrl(srv.host).mapIndexed { idx, ch -> MediaItemModel("$idx", ch.name, ch.url, ch.group) }
             }
-            isLoading = false
-            if (switchTab && mediaList.isNotEmpty()) selectedTab = 1
         }
     }
 
     LaunchedEffect(Unit) {
-        activeServer?.let { connectToServer(it, "live", false) }
+        activeServer?.let { syncServerData(it, false) }
     }
 
     LaunchedEffect(isFullScreen) {
@@ -201,17 +460,86 @@ fun NovaIptvNeonApp(isInPipMode: Boolean) {
             if (isFullScreen) {
                 act.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                    act.window.insetsController?.let { it.hide(WindowInsets.Type.statusBars() or WindowInsets.Type.navigationBars()); it.systemBarsBehavior = WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE }
-                } else @Suppress("DEPRECATION") { act.window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_FULLSCREEN or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY }
+                    act.window.insetsController?.let {
+                        it.hide(WindowInsets.Type.statusBars() or WindowInsets.Type.navigationBars())
+                        it.systemBarsBehavior = WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                    }
+                } else @Suppress("DEPRECATION") {
+                    act.window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_FULLSCREEN or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                }
             } else {
                 act.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) act.window.insetsController?.show(WindowInsets.Type.statusBars() or WindowInsets.Type.navigationBars())
-                else @Suppress("DEPRECATION") { act.window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_VISIBLE }
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    act.window.insetsController?.show(WindowInsets.Type.statusBars() or WindowInsets.Type.navigationBars())
+                } else @Suppress("DEPRECATION") {
+                    act.window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_VISIBLE
+                }
             }
         }
     }
 
-    BackHandler(enabled = isFullScreen) { isFullScreen = false }
+    BackHandler(enabled = isFullScreen || isMultiScreenMode) {
+        if (isFullScreen) isFullScreen = false
+        else if (isMultiScreenMode) isMultiScreenMode = false
+    }
+
+    // تشغيل أي قناة أو فيلم أو حلقة
+    fun startPlayback(item: MediaItemModel, resumeFromSaved: Boolean = true) {
+        if (pickingForSlot in 0..3) {
+            val updatedSlots = multiChannels.toMutableList()
+            updatedSlots[pickingForSlot] = item
+            multiChannels = updatedSlots
+            pickingForSlot = -1
+            isMultiScreenMode = true
+            return
+        }
+
+        if (item.type == "series" && item.url.startsWith("series://")) {
+            selectedSeriesItem = item
+            loadedSeriesDetails = null
+            scope.launch {
+                val details = ServersEngine.getSeriesDetails(item.url)
+                loadedSeriesDetails = details
+                activeSeasonNum = details?.seasons?.keys?.firstOrNull() ?: 1
+            }
+            return
+        }
+
+        currentMedia = item
+        currentEpg = null
+        videoResolution = "جاري الاتصال..."
+        val resolvedUrl = ServersEngine.resolveStreamUrl(item.url, activeServer?.host ?: "")
+        exoPlayer.setMediaItem(MediaItem.fromUri(resolvedUrl))
+        exoPlayer.prepare()
+        if (resumeFromSaved && item.type != "live") {
+            val savedPos = AppStorage.getSavedPositionForUrl(context, item.url)
+            if (savedPos > 5000L) exoPlayer.seekTo(savedPos)
+        }
+        exoPlayer.play()
+
+        if (item.type == "live") {
+            AppStorage.addRecentChannel(context, item)
+            recentChannels = AppStorage.getRecentChannels(context)
+            activeServer?.let { srv ->
+                if (srv.type == "xtream") {
+                    scope.launch {
+                        currentEpg = ServersEngine.getShortEpg(srv.host, srv.user, srv.pass, item.id)
+                    }
+                }
+            }
+        }
+    }
+
+    fun openExternalPlayer(url: String) {
+        try {
+            val resolved = ServersEngine.resolveStreamUrl(url, activeServer?.host ?: "")
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(Uri.parse(resolved), "video/*")
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(Intent.createChooser(intent, "اختر المشغل الخارجي"))
+        } catch (_: Exception) {}
+    }
 
     fun toggleFavorite(id: String) {
         val updated = if (favoriteIds.contains(id)) favoriteIds - id else favoriteIds + id
@@ -219,330 +547,1099 @@ fun NovaIptvNeonApp(isInPipMode: Boolean) {
         prefs.edit().putStringSet("fav_ids", updated).apply()
     }
 
-    fun playStream(item: MediaItemModel) {
-        currentMedia = item
-        videoResolution = "جاري الاتصال..."
-        exoPlayer.setMediaItem(MediaItem.fromUri(item.url))
-        exoPlayer.prepare()
-        exoPlayer.play()
-    }
-
-    fun openExternalPlayer(url: String) {
-        try {
-            val intent = Intent(Intent.ACTION_VIEW).apply { setDataAndType(Uri.parse(url), "video/*"); addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
-            context.startActivity(intent)
-        } catch (_: Exception) {}
-    }
-
-    fun enterPip() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            activity?.enterPictureInPictureMode(PictureInPictureParams.Builder().setAspectRatio(Rational(16, 9)).build())
+    // قوائم مفلترة (مع احترام وضع الأطفال والباقات المخفية)
+    val safeLiveList = remember(liveList, kidsMode, hiddenCategories) {
+        liveList.filter { item ->
+            val notHidden = !hiddenCategories.contains(item.category)
+            if (kidsMode) {
+                val t = "${item.category} ${item.name}".lowercase()
+                notHidden && (t.contains("kids") || t.contains("cartoon") || t.contains("anime") || t.contains("spacetoon") || t.contains("mbc3") || t.contains("أطفال") || t.contains("كرتون") || t.contains("سبيستون"))
+            } else notHidden
         }
     }
 
-    val categories = remember(mediaList) { listOf("الكل") + mediaList.map { it.category }.distinct() }
-    val filteredList = remember(mediaList, selectedCategory, searchQuery, selectedTab, favoriteIds) {
-        mediaList.filter { item ->
-            val matchFav = if (selectedTab == 4) favoriteIds.contains(item.id) else true
-            val matchCat = if (selectedTab == 4) true else (selectedCategory == "الكل" || item.category == selectedCategory)
-            matchFav && matchCat && (searchQuery.isBlank() || item.name.contains(searchQuery, ignoreCase = true))
+    val safeVodList = remember(vodList, kidsMode, hiddenCategories) {
+        vodList.filter { item ->
+            val notHidden = !hiddenCategories.contains(item.category)
+            if (kidsMode) notHidden && ServersEngine.detectContentLanguage(item) == "أنمي وكرتون" else notHidden
         }
     }
 
-    @Composable
-    fun PlayerViewport(modifier: Modifier) {
-        Box(
-            modifier = modifier.background(Color.Black).pointerInput(gesturesEnabled) {
-                if (gesturesEnabled) {
-                    detectVerticalDragGestures(
-                        onDragEnd = { gestureIndicator = "" },
-                        onVerticalDrag = { change, dragAmount ->
-                            if (change.position.x > size.width / 2f) {
-                                val maxV = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
-                                val curV = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
-                                val newV = (curV + (if (dragAmount < -12) 1 else if (dragAmount > 12) -1 else 0)).coerceIn(0, maxV)
-                                audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, newV, 0)
-                                gestureIndicator = "الصوت: ${(newV * 100) / maxV}%"
-                            } else {
-                                activity?.window?.let { win ->
-                                    val lp = win.attributes
-                                    val curB = if (lp.screenBrightness < 0) 0.5f else lp.screenBrightness
-                                    val newB = (curB - dragAmount / 600f).coerceIn(0.05f, 1f)
-                                    lp.screenBrightness = newB; win.attributes = lp
-                                    gestureIndicator = "السطوع: ${(newB * 100).toInt()}%"
+    val safeSeriesList = remember(seriesList, kidsMode, hiddenCategories) {
+        seriesList.filter { item ->
+            val notHidden = !hiddenCategories.contains(item.category)
+            if (kidsMode) notHidden && ServersEngine.detectContentLanguage(item) == "أنمي وكرتون" else notHidden
+        }
+    }
+
+    val groupedSports = remember(safeLiveList) { ServersEngine.groupSportsChannels(safeLiveList) }
+
+    CompositionLocalProvider(LocalLayoutDirection provides layoutDir) {
+        MaterialTheme(colorScheme = darkColorScheme(primary = accentColor, background = bgColor, surface = cardColor)) {
+
+            // وضع تعدد الشاشات (Multi-Screen up to 4 Channels)
+            if (isMultiScreenMode) {
+                Column(modifier = Modifier.fillMaxSize().background(Color.Black)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().background(cardColor).padding(horizontal = 12.dp, vertical = 6.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(str.multiScreen, color = accentColor, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("إغلاق الكل", color = Color(0xFFF87171), fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { isMultiScreenMode = false })
+                        }
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        for (row in 0..1) {
+                            Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                                for (col in 0..1) {
+                                    val slotIdx = row * 2 + col
+                                    val slotMedia = multiChannels[slotIdx]
+                                    val isAudioActive = activeAudioSlot == slotIdx
+                                    Box(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .fillMaxHeight()
+                                            .border(2.dp, if (isAudioActive) accentColor else Color(0xFF22222E))
+                                            .clickable { activeAudioSlot = slotIdx }
+                                    ) {
+                                        if (slotMedia != null) {
+                                            val slotPlayer = remember(slotMedia.url) {
+                                                ExoPlayer.Builder(context).build().apply {
+                                                    setMediaItem(MediaItem.fromUri(ServersEngine.resolveStreamUrl(slotMedia.url, activeServer?.host ?: "")))
+                                                    prepare()
+                                                    playWhenReady = true
+                                                }
+                                            }
+                                            LaunchedEffect(isAudioActive) {
+                                                slotPlayer.volume = if (isAudioActive) 1f else 0f
+                                            }
+                                            DisposableEffect(slotMedia.url) {
+                                                onDispose { slotPlayer.release() }
+                                            }
+                                            AndroidView(
+                                                factory = { ctx -> PlayerView(ctx).apply { player = slotPlayer; useController = false } },
+                                                modifier = Modifier.fillMaxSize()
+                                            )
+                                            Row(
+                                                modifier = Modifier.align(Alignment.TopStart).fillMaxWidth().background(Color(0x99000000)).padding(6.dp),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Text(slotMedia.name, color = Color.White, fontSize = 11.sp, maxLines = 1, modifier = Modifier.weight(1f))
+                                                Icon(
+                                                    if (isAudioActive) Icons.Default.VolumeUp else Icons.Default.VolumeOff,
+                                                    null,
+                                                    tint = if (isAudioActive) greenText else Color.Gray,
+                                                    modifier = Modifier.size(16.dp)
+                                                )
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Icon(
+                                                    Icons.Default.Close,
+                                                    null,
+                                                    tint = Color.White,
+                                                    modifier = Modifier.size(16.dp).clickable {
+                                                        val upd = multiChannels.toMutableList()
+                                                        upd[slotIdx] = null
+                                                        multiChannels = upd
+                                                    }
+                                                )
+                                            }
+                                        } else {
+                                            Column(
+                                                modifier = Modifier.fillMaxSize().clickable {
+                                                    pickingForSlot = slotIdx
+                                                    isMultiScreenMode = false
+                                                    selectedTab = 1
+                                                    Toast.makeText(context, "اختر قناة للشاشة رقم ${slotIdx + 1}", Toast.LENGTH_SHORT).show()
+                                                },
+                                                horizontalAlignment = Alignment.CenterHorizontally,
+                                                verticalArrangement = Arrangement.Center
+                                            ) {
+                                                Icon(Icons.Default.AddCircleOutline, null, tint = accentColor, modifier = Modifier.size(32.dp))
+                                                Spacer(modifier = Modifier.height(4.dp))
+                                                Text("إضافة قناة ${slotIdx + 1}", color = Color.Gray, fontSize = 12.sp)
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
-                    )
-                }
-            }
-        ) {
-            AndroidView(
-                factory = { ctx -> PlayerView(ctx).apply { player = exoPlayer; useController = !isInPipMode; resizeMode = resizeModes[resizeIdx].first; setControllerVisibilityListener(PlayerView.ControllerVisibilityListener { v -> showOverlay = (v == View.VISIBLE) }) } },
-                update = { view -> view.useController = !isInPipMode; view.resizeMode = resizeModes[resizeIdx].first },
-                modifier = Modifier.fillMaxSize()
-            )
-            if (gestureIndicator.isNotEmpty() && !isInPipMode) {
-                Box(modifier = Modifier.align(Alignment.Center).background(Color(0xCC14141C), RoundedCornerShape(12.dp)).padding(horizontal = 16.dp, vertical = 8.dp)) {
-                    Text(gestureIndicator, color = NeonPurple, fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                }
-            }
-            if (!isInPipMode && showOverlay) {
-                if (videoResolution.isNotEmpty()) {
-                    Box(modifier = Modifier.align(Alignment.TopStart).padding(10.dp).background(Color(0xBB14141C), RoundedCornerShape(12.dp)).padding(horizontal = 10.dp, vertical = 4.dp)) {
-                        Text(videoResolution, color = GreenText, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                     }
                 }
-                Row(
-                    modifier = Modifier.align(Alignment.TopEnd).padding(10.dp).background(Color(0xCC14141C), RoundedCornerShape(20.dp)).border(1.dp, NeonPurple.copy(alpha = 0.4f), RoundedCornerShape(20.dp)).padding(horizontal = 12.dp, vertical = 6.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically
+                return@MaterialTheme
+            }
+
+            // مكون مشغل الفيديو الاحترافي
+            @Composable
+            fun ProPlayerViewport(modifier: Modifier) {
+                Box(
+                    modifier = modifier.background(Color.Black).pointerInput(gesturesEnabled, isScreenLocked) {
+                        if (gesturesEnabled && !isScreenLocked) {
+                            detectVerticalDragGestures(
+                                onDragEnd = { gestureIndicator = "" },
+                                onVerticalDrag = { change, dragAmount ->
+                                    if (change.position.x > size.width / 2f) {
+                                        val maxV = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+                                        val curV = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
+                                        val newV = (curV + (if (dragAmount < -12) 1 else if (dragAmount > 12) -1 else 0)).coerceIn(0, maxV)
+                                        audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, newV, 0)
+                                        gestureIndicator = "الصوت: ${(newV * 100) / maxV}%"
+                                    } else {
+                                        activity?.window?.let { win ->
+                                            val lp = win.attributes
+                                            val curB = if (lp.screenBrightness < 0) 0.5f else lp.screenBrightness
+                                            val newB = (curB - dragAmount / 600f).coerceIn(0.05f, 1f)
+                                            lp.screenBrightness = newB; win.attributes = lp
+                                            gestureIndicator = "السطوع: ${(newB * 100).toInt()}%"
+                                        }
+                                    }
+                                }
+                            )
+                        }
+                    }
                 ) {
-                    currentMedia?.let { m -> Text("خارجي", color = Color(0xFFFBBF24), fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { openExternalPlayer(m.url) }) }
-                    Text(resizeModes[resizeIdx].second, color = NeonPurple, fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { resizeIdx = (resizeIdx + 1) % resizeModes.size })
-                    Text("عائمة", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { enterPip() })
-                    Text(if (isFullScreen) "تصغير" else "تكبير", color = GreenText, fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { isFullScreen = !isFullScreen })
-                }
-            }
-        }
-    }
+                    AndroidView(
+                        factory = { ctx ->
+                            PlayerView(ctx).apply {
+                                player = exoPlayer
+                                useController = !isInPipMode && !isScreenLocked
+                                resizeMode = resizeModes[resizeIdx].first
+                                setControllerVisibilityListener(PlayerView.ControllerVisibilityListener { v -> showOverlay = (v == View.VISIBLE) })
+                            }
+                        },
+                        update = { view ->
+                            view.useController = !isInPipMode && !isScreenLocked
+                            view.resizeMode = resizeModes[resizeIdx].first
+                            view.subtitleView?.apply {
+                                setFixedTextSize(TypedValue.COMPLEX_UNIT_SP, subFontSize)
+                                setStyle(
+                                    CaptionStyleCompat(
+                                        if (subColorYellow) AndroidColor.YELLOW else AndroidColor.WHITE,
+                                        AndroidColor.argb(150, 0, 0, 0),
+                                        AndroidColor.TRANSPARENT,
+                                        CaptionStyleCompat.EDGE_TYPE_OUTLINE,
+                                        AndroidColor.BLACK,
+                                        null
+                                    )
+                                )
+                            }
+                        },
+                        modifier = Modifier.fillMaxSize()
+                    )
 
-    if (isInPipMode || isFullScreen) {
-        PlayerViewport(Modifier.fillMaxSize())
-        return
-    }
-
-    Scaffold(
-        bottomBar = {
-            NavigationBar(containerColor = Color(0xFF0E0E14)) {
-                NavigationBarItem(selected = selectedTab == 0, onClick = { selectedTab = 0 }, icon = { Icon(Icons.Default.Home, null) }, label = { Text("الرئيسية", fontSize = 11.sp) })
-                NavigationBarItem(selected = selectedTab == 1, onClick = { selectedTab = 1; selectedCategory = "الكل"; activeServer?.let { connectToServer(it, "live", false) } }, icon = { Icon(Icons.Default.Tv, null) }, label = { Text("البث المباشر", fontSize = 11.sp) })
-                NavigationBarItem(selected = selectedTab == 2, onClick = { selectedTab = 2; selectedCategory = "الكل"; activeServer?.let { connectToServer(it, "vod", false) } }, icon = { Icon(Icons.Default.Movie, null) }, label = { Text("أفلام", fontSize = 11.sp) })
-                NavigationBarItem(selected = selectedTab == 3, onClick = { selectedTab = 3; selectedCategory = "الكل"; activeServer?.let { connectToServer(it, "series", false) } }, icon = { Icon(Icons.Default.VideoLibrary, null) }, label = { Text("مسلسلات", fontSize = 11.sp) })
-                NavigationBarItem(selected = selectedTab == 4, onClick = { selectedTab = 4 }, icon = { Icon(Icons.Default.FavoriteBorder, null) }, label = { Text("المفضلة", fontSize = 11.sp) })
-            }
-        }
-    ) { padding ->
-        Column(modifier = Modifier.fillMaxSize().padding(padding).background(DeepBlack)) {
-            if (currentMedia != null || selectedTab != 0) {
-                PlayerViewport(Modifier.fillMaxWidth().height(215.dp))
-            }
-
-            if (selectedTab == 0) {
-                Column(modifier = Modifier.fillMaxSize().padding(14.dp)) {
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = { showSettingsSheet = true }) { Icon(Icons.Default.Settings, null, tint = Color.White) }
-                        Text("الاتصالات", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                    if (gestureIndicator.isNotEmpty() && !isInPipMode) {
+                        Box(modifier = Modifier.align(Alignment.Center).background(Color(0xCC14141C), RoundedCornerShape(12.dp)).padding(horizontal = 16.dp, vertical = 8.dp)) {
+                            Text(gestureIndicator, color = accentColor, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                        }
                     }
 
-                    if (accountInfo != null && expiryAlertEnabled) {
-                        Card(colors = CardDefaults.cardColors(containerColor = CardDark), border = BorderStroke(1.dp, NeonPurple.copy(alpha = 0.4f)), shape = RoundedCornerShape(14.dp), modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
-                            Row(modifier = Modifier.padding(12.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                                Text("انتهاء الاشتراك: ${accountInfo?.expDate}", color = Color(0xFFCBD5E1), fontSize = 12.sp)
-                                Text("الأجهزة: ${accountInfo?.activeCons}/${accountInfo?.maxCons}", color = GreenText, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    if (nextEpisodeCountdown > 0 && !isInPipMode) {
+                        Box(modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp).background(cardColor, RoundedCornerShape(14.dp)).border(1.dp, accentColor, RoundedCornerShape(14.dp)).padding(12.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Text("الحلقة التالية خلال $nextEpisodeCountdown ث...", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                Text("إلغاء", color = Color(0xFFF87171), fontSize = 12.sp, modifier = Modifier.clickable { nextEpisodeCountdown = 0 })
                             }
                         }
                     }
 
-                    Button(
-                        onClick = { editingServer = null; showAddDialog = true },
-                        colors = ButtonDefaults.buttonColors(containerColor = NeonPurple),
-                        shape = RoundedCornerShape(14.dp),
-                        modifier = Modifier.fillMaxWidth().height(50.dp).padding(vertical = 4.dp)
-                    ) {
-                        Icon(Icons.Default.AddCircleOutline, null, tint = Color.White)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("إضافة اتصال", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                    }
-
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxSize()) {
-                        items(servers) { srv ->
-                            val isActive = srv.id == activeServerId
-                            var menuExpanded by remember { mutableStateOf(false) }
-                            Card(
-                                colors = CardDefaults.cardColors(containerColor = CardDark),
-                                border = BorderStroke(1.dp, if (isActive) NeonPurple else Color(0x1FFFFFFF)),
-                                shape = RoundedCornerShape(16.dp),
-                                modifier = Modifier.fillMaxWidth().clickable { connectToServer(srv, "live", true) }
+                    if (!isInPipMode) {
+                        if (isScreenLocked) {
+                            IconButton(
+                                onClick = { isScreenLocked = false },
+                                modifier = Modifier.align(Alignment.TopStart).padding(12.dp).background(Color(0xCC14141C), CircleShape)
                             ) {
-                                Row(modifier = Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    Box {
-                                        IconButton(onClick = { menuExpanded = true }) { Icon(Icons.Default.MoreVert, null, tint = Color.LightGray) }
-                                        DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
-                                            DropdownMenuItem(text = { Text("تشخيص الشبكة / فحص الدولة") }, onClick = { menuExpanded = false; connectToServer(srv, "live", false) })
-                                            DropdownMenuItem(text = { Text("تعديل") }, onClick = { menuExpanded = false; editingServer = srv; showAddDialog = true })
-                                            DropdownMenuItem(text = { Text("حذف", color = Color(0xFFF87171)) }, onClick = {
-                                                menuExpanded = false
-                                                val updated = servers.filter { it.id != srv.id }
-                                                servers = updated; saveServersList(prefs, updated)
-                                            })
-                                        }
+                                Icon(Icons.Default.Lock, null, tint = accentColor)
+                            }
+                        } else if (showOverlay) {
+                            Column(modifier = Modifier.align(Alignment.TopStart).padding(10.dp)) {
+                                if (videoResolution.isNotEmpty()) {
+                                    Box(modifier = Modifier.background(Color(0xBB14141C), RoundedCornerShape(12.dp)).padding(horizontal = 10.dp, vertical = 4.dp)) {
+                                        Text(videoResolution, color = greenText, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                                     }
-
-                                    if (isActive) {
-                                        Box(modifier = Modifier.background(GreenBadge, RoundedCornerShape(20.dp)).padding(horizontal = 10.dp, vertical = 4.dp)) {
-                                            Text("نشط", color = GreenText, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                                        }
-                                    }
-
-                                    Spacer(modifier = Modifier.weight(1f))
-
-                                    Column(horizontalAlignment = Alignment.End) {
-                                        Text(srv.title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                                        Text(if (srv.type == "xtream") "Xtream Codes" else if (srv.type == "stalker") "Stalker Portal" else "M3U Playlist", color = Color.Gray, fontSize = 12.sp)
-                                        Spacer(modifier = Modifier.height(6.dp))
-                                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                            Box(modifier = Modifier.background(Color(0xFF22222E), RoundedCornerShape(20.dp)).padding(horizontal = 10.dp, vertical = 4.dp)) {
-                                                Text(srv.countryCode, color = Color.White, fontSize = 11.sp)
-                                            }
-                                            Box(modifier = Modifier.background(GreenBadge, RoundedCornerShape(20.dp)).padding(horizontal = 10.dp, vertical = 4.dp)) {
-                                                Text(if (srv.pingMs > 0) "⚡ وصول مباشر (${srv.pingMs}ms)" else "⚡ وصول مباشر", color = GreenText, fontSize = 11.sp)
-                                            }
-                                        }
-                                    }
-
-                                    Spacer(modifier = Modifier.width(12.dp))
-                                    Box(modifier = Modifier.size(44.dp).clip(RoundedCornerShape(12.dp)).background(NeonPurple.copy(alpha = 0.2f)), contentAlignment = Alignment.Center) {
-                                        Icon(Icons.Default.Storage, null, tint = NeonPurple)
+                                }
+                                currentEpg?.let { epg ->
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Box(modifier = Modifier.background(Color(0xCC14141C), RoundedCornerShape(10.dp)).padding(horizontal = 10.dp, vertical = 4.dp)) {
+                                        Text("الآن: ${epg.nowTitle}", color = Color.White, fontSize = 10.sp, maxLines = 1)
                                     }
                                 }
                             }
-                        }
-                    }
-                }
-            } else {
-                if (selectedTab != 4) {
-                    LazyRow(contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        items(categories) { cat ->
-                            FilterChip(selected = selectedCategory == cat, onClick = { selectedCategory = cat }, label = { Text(cat, fontSize = 12.sp) })
-                        }
-                    }
-                }
-                OutlinedTextField(value = searchQuery, onValueChange = { searchQuery = it }, placeholder = { Text("ابحث في ${filteredList.size} عنصر...", fontSize = 13.sp) }, leadingIcon = { Icon(Icons.Default.Search, null) }, singleLine = true, shape = RoundedCornerShape(14.dp), modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp))
-                Spacer(modifier = Modifier.height(6.dp))
 
-                if (isLoading) {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = NeonPurple) }
-                } else {
-                    LazyVerticalGrid(
-                        columns = GridCells.Fixed(3),
-                        contentPadding = PaddingValues(8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.fillMaxSize()
+                            Row(
+                                modifier = Modifier
+                                    .align(Alignment.TopEnd)
+                                    .padding(10.dp)
+                                    .background(Color(0xCC14141C), RoundedCornerShape(20.dp))
+                                    .border(1.dp, accentColor.copy(alpha = 0.4f), RoundedCornerShape(20.dp))
+                                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(Icons.Default.LockOpen, null, tint = Color.White, modifier = Modifier.size(16.dp).clickable { isScreenLocked = true })
+                                currentMedia?.let { m ->
+                                    Text("خارجي", color = Color(0xFFFBBF24), fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { openExternalPlayer(m.url) })
+                                }
+                                Text(resizeModes[resizeIdx].second, color = accentColor, fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { resizeIdx = (resizeIdx + 1) % resizeModes.size })
+                                Text("عائمة", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clickable {
+                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                        activity?.enterPictureInPictureMode(PictureInPictureParams.Builder().setAspectRatio(Rational(16, 9)).build())
+                                    }
+                                })
+                                Text(if (isFullScreen) "تصغير" else "تكبير", color = greenText, fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { isFullScreen = !isFullScreen })
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (isInPipMode || isFullScreen) {
+                ProPlayerViewport(Modifier.fillMaxSize())
+                return@MaterialTheme
+            }
+
+            Scaffold(
+                bottomBar = {
+                    NavigationBar(containerColor = cardColor) {
+                        NavigationBarItem(selected = selectedTab == 0, onClick = { selectedTab = 0 }, icon = { Icon(Icons.Default.Home, null) }, label = { Text(str.home, fontSize = 10.sp) })
+                        NavigationBarItem(selected = selectedTab == 1, onClick = { selectedTab = 1 }, icon = { Icon(Icons.Default.Tv, null) }, label = { Text(str.live, fontSize = 10.sp) })
+                        NavigationBarItem(selected = selectedTab == 2, onClick = { selectedTab = 2 }, icon = { Icon(Icons.Default.SportsSoccer, null) }, label = { Text(str.sports, fontSize = 10.sp) })
+                        NavigationBarItem(selected = selectedTab == 3, onClick = { selectedTab = 3 }, icon = { Icon(Icons.Default.Movie, null) }, label = { Text(str.cinema, fontSize = 10.sp) })
+                        NavigationBarItem(selected = selectedTab == 4, onClick = { selectedTab = 4 }, icon = { Icon(Icons.Default.DashboardCustomize, null) }, label = { Text(str.hub, fontSize = 10.sp) })
+                    }
+                }
+            ) { padding ->
+                Column(modifier = Modifier.fillMaxSize().padding(padding).background(bgColor)) {
+
+                    // الشريط العلوي الذكي (مبدل الحسابات الفوري + وضع الأطفال + التحديث + الإعدادات)
+                    Row(
+                        modifier = Modifier.fillMaxWidth().background(cardColor).padding(horizontal = 12.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        items(filteredList) { item ->
-                            val isPlaying = currentMedia?.url == item.url
-                            val isFav = favoriteIds.contains(item.id)
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
+                        Box {
+                            Row(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(14.dp))
-                                    .background(if (isPlaying) NeonPurple.copy(alpha = 0.25f) else CardDark)
-                                    .border(1.dp, if (isPlaying) NeonPurple else Color(0x18FFFFFF), RoundedCornerShape(14.dp))
-                                    .clickable { playStream(item) }
-                                    .padding(8.dp)
+                                    .background(bgColor)
+                                    .border(1.dp, accentColor.copy(alpha = 0.4f), RoundedCornerShape(14.dp))
+                                    .clickable { showAccountMenu = true }
+                                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
-                                Box(modifier = Modifier.fillMaxWidth().height(if (selectedTab == 1) 75.dp else 135.dp)) {
-                                    AsyncImage(
-                                        model = item.logo,
-                                        contentDescription = item.name,
-                                        contentScale = if (selectedTab == 1) ContentScale.Fit else ContentScale.Crop,
-                                        modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(10.dp))
-                                    )
-                                    Icon(
-                                        imageVector = if (isFav) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                                        contentDescription = null,
-                                        tint = if (isFav) NeonPurple else Color.Gray,
-                                        modifier = Modifier.align(Alignment.TopEnd).size(20.dp).clickable { toggleFavorite(item.id) }
+                                Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(if (activeServer != null) greenText else Color.Red))
+                                Text(activeServer?.title ?: "اختر اشتراكاً", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                Icon(Icons.Default.KeyboardArrowDown, null, tint = accentColor, modifier = Modifier.size(18.dp))
+                            }
+
+                            DropdownMenu(expanded = showAccountMenu, onDismissRequest = { showAccountMenu = false }) {
+                                servers.forEach { srv ->
+                                    DropdownMenuItem(
+                                        text = {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Text(srv.title, fontWeight = if (srv.id == activeServerId) FontWeight.Bold else FontWeight.Normal)
+                                                Spacer(modifier = Modifier.width(8.dp))
+                                                Text(srv.countryCode, fontSize = 11.sp)
+                                            }
+                                        },
+                                        onClick = {
+                                            showAccountMenu = false
+                                            syncServerData(srv, false)
+                                        }
                                     )
                                 }
-                                Spacer(modifier = Modifier.height(6.dp))
-                                Text(item.name, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
+                                HorizontalDivider()
+                                DropdownMenuItem(
+                                    text = { Text("+ ${str.addConnection}", color = accentColor, fontWeight = FontWeight.Bold) },
+                                    onClick = { showAccountMenu = false; editingServer = null; showAddServerDialog = true }
+                                )
+                            }
+                        }
+
+                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                            if (pickingForSlot in 0..3) {
+                                Box(modifier = Modifier.background(accentColor, RoundedCornerShape(10.dp)).padding(horizontal = 8.dp, vertical = 4.dp)) {
+                                    Text("اختر لشاشة ${pickingForSlot + 1}", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                            IconButton(onClick = {
+                                if (kidsMode) {
+                                    pinActionCallback = { kidsMode = false }
+                                    showPinDialog = true
+                                } else {
+                                    kidsMode = true
+                                    Toast.makeText(context, "تم تفعيل وضع الأطفال الآمن", Toast.LENGTH_SHORT).show()
+                                }
+                            }) {
+                                Icon(Icons.Default.ChildCare, null, tint = if (kidsMode) greenText else Color.Gray)
+                            }
+                            IconButton(onClick = { activeServer?.let { syncServerData(it, true) } }) {
+                                Icon(Icons.Default.Refresh, null, tint = accentColor)
+                            }
+                            IconButton(onClick = { showSettingsModal = true }) {
+                                Icon(Icons.Default.Settings, null, tint = Color.White)
+                            }
+                        }
+                    }
+
+                    // المشغل المصغر أعلى الشاشة عند تشغيل أي بث
+                    if (currentMedia != null) {
+                        ProPlayerViewport(Modifier.fillMaxWidth().height(210.dp))
+                    }
+
+                    if (isLoading) {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(color = accentColor)
+                        }
+                    } else {
+                        when (selectedTab) {
+                            // 0: الشاشة الرئيسية الحصرية
+                            0 -> {
+                                Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                                    // بطاقة حالة الاشتراك
+                                    if (accountInfo != null && activeServer != null) {
+                                        Card(colors = CardDefaults.cardColors(containerColor = cardColor), border = BorderStroke(1.dp, accentColor.copy(alpha = 0.35f)), shape = RoundedCornerShape(16.dp)) {
+                                            Row(modifier = Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                                Column {
+                                                    Text("${activeServer.countryCode} • ⚡ ${activeServer.pingMs}ms", color = greenText, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                                    Text("ينتهي في: ${accountInfo?.expDate}", color = Color.LightGray, fontSize = 12.sp)
+                                                }
+                                                Text("المتصلين: ${accountInfo?.activeCons}/${accountInfo?.maxCons}", color = accentColor, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                            }
+                                        }
+                                    } else if (servers.isEmpty()) {
+                                        Button(onClick = { editingServer = null; showAddServerDialog = true }, colors = ButtonDefaults.buttonColors(containerColor = accentColor), modifier = Modifier.fillMaxWidth().height(52.dp), shape = RoundedCornerShape(14.dp)) {
+                                            Icon(Icons.Default.AddCircleOutline, null)
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Text(str.addConnection, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                                        }
+                                    }
+
+                                    // شريط المنصات السريعة (Platforms Bar)
+                                    Text(str.platforms, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        val platforms = listOf("Netflix", "Shahid", "Prime Video", "Disney+", "HBO", "Apple TV")
+                                        items(platforms) { plat ->
+                                            Box(
+                                                modifier = Modifier
+                                                    .clip(RoundedCornerShape(14.dp))
+                                                    .background(cardColor)
+                                                    .border(1.dp, accentColor.copy(alpha = 0.4f), RoundedCornerShape(14.dp))
+                                                    .clickable {
+                                                        selectedPlatformFilter = plat
+                                                        selectedTab = 3
+                                                    }
+                                                    .padding(horizontal = 16.dp, vertical = 10.dp)
+                                            ) {
+                                                Text(plat, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                            }
+                                        }
+                                    }
+
+                                    // واصل المشاهدة (Continue Watching)
+                                    if (watchHistory.isNotEmpty()) {
+                                        Text(str.continueWatching, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                                        LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                            items(watchHistory) { prog ->
+                                                val ratio = (prog.positionMs.toFloat() / prog.durationMs.coerceAtLeast(1L).toFloat()).coerceIn(0.05f, 1f)
+                                                Column(
+                                                    modifier = Modifier
+                                                        .width(135.dp)
+                                                        .clip(RoundedCornerShape(14.dp))
+                                                        .background(cardColor)
+                                                        .clickable {
+                                                            startPlayback(MediaItemModel(prog.id, prog.title, prog.url, prog.subtitleInfo, prog.logo, prog.type), true)
+                                                        }
+                                                        .padding(8.dp)
+                                                ) {
+                                                    Box(modifier = Modifier.fillMaxWidth().height(150.dp)) {
+                                                        AsyncImage(model = prog.logo, contentDescription = prog.title, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(10.dp)))
+                                                        Icon(
+                                                            Icons.Default.Close,
+                                                            null,
+                                                            tint = Color.White,
+                                                            modifier = Modifier.align(Alignment.TopEnd).padding(4.dp).size(18.dp).background(Color(0xAA000000), CircleShape).clickable {
+                                                                AppStorage.removeWatchProgress(context, prog.id)
+                                                                watchHistory = AppStorage.getWatchHistory(context)
+                                                            }
+                                                        )
+                                                    }
+                                                    Spacer(modifier = Modifier.height(6.dp))
+                                                    LinearProgressIndicator(progress = { ratio }, color = accentColor, trackColor = Color.DarkGray, modifier = Modifier.fillMaxWidth().height(4.dp).clip(CircleShape))
+                                                    Spacer(modifier = Modifier.height(4.dp))
+                                                    Text(prog.title, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    // القنوات المشاهدة مؤخراً (Recently Watched Channels)
+                                    if (recentChannels.isNotEmpty()) {
+                                        Text(str.recentChannels, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                                        LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                            items(recentChannels) { rCh ->
+                                                Column(
+                                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                                    modifier = Modifier
+                                                        .width(95.dp)
+                                                        .clip(RoundedCornerShape(14.dp))
+                                                        .background(cardColor)
+                                                        .clickable { startPlayback(rCh) }
+                                                        .padding(8.dp)
+                                                ) {
+                                                    Box(modifier = Modifier.fillMaxWidth().height(55.dp)) {
+                                                        AsyncImage(model = rCh.logo, contentDescription = rCh.name, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize())
+                                                        Icon(
+                                                            Icons.Default.Close,
+                                                            null,
+                                                            tint = Color.Gray,
+                                                            modifier = Modifier.align(Alignment.TopEnd).size(15.dp).clickable {
+                                                                AppStorage.removeRecentChannel(context, rCh.url)
+                                                                recentChannels = AppStorage.getRecentChannels(context)
+                                                            }
+                                                        )
+                                                    }
+                                                    Spacer(modifier = Modifier.height(4.dp))
+                                                    Text(rCh.name, color = Color.White, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    // مجلداتي الشخصية المخصصة (Custom Folders)
+                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                        Text(str.myFolders, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                                        Text("+ مجلد جديد", color = accentColor, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { showCreateFolderDialog = true })
+                                    }
+                                    LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                        items(customFolders) { folder ->
+                                            Card(colors = CardDefaults.cardColors(containerColor = cardColor), border = BorderStroke(1.dp, accentColor.copy(alpha = 0.4f)), shape = RoundedCornerShape(14.dp)) {
+                                                Row(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                    Icon(Icons.Default.FolderSpecial, null, tint = accentColor)
+                                                    Column {
+                                                        Text(folder.name, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                                        Text("${folder.itemIds.size} عنصر", color = Color.Gray, fontSize = 10.sp)
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            // 1: البث المباشر (Live TV)
+                            1 -> {
+                                val cats = remember(safeLiveList) { listOf(str.all, "المفضلة") + safeLiveList.map { it.category }.distinct() }
+                                val filteredLive = remember(safeLiveList, selectedLiveCategory, searchQuery, favoriteIds) {
+                                    safeLiveList.filter { item ->
+                                        val matchCat = when (selectedLiveCategory) {
+                                            str.all -> true
+                                            "المفضلة" -> favoriteIds.contains(item.id)
+                                            else -> item.category == selectedLiveCategory
+                                        }
+                                        matchCat && (searchQuery.isBlank() || item.name.contains(searchQuery, ignoreCase = true))
+                                    }
+                                }
+
+                                Column(modifier = Modifier.fillMaxSize()) {
+                                    LazyRow(contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        items(cats) { c ->
+                                            FilterChip(selected = selectedLiveCategory == c, onClick = { selectedLiveCategory = c }, label = { Text(c, fontSize = 11.sp) })
+                                        }
+                                    }
+                                    Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                        OutlinedTextField(
+                                            value = searchQuery,
+                                            onValueChange = { searchQuery = it },
+                                            placeholder = { Text(str.searchHint, fontSize = 12.sp) },
+                                            leadingIcon = { Icon(Icons.Default.Search, null) },
+                                            trailingIcon = {
+                                                IconButton(onClick = {
+                                                    try {
+                                                        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                                                            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                                                            putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ar-IQ")
+                                                        }
+                                                        voiceLauncher.launch(intent)
+                                                    } catch (_: Exception) {}
+                                                }) { Icon(Icons.Default.Mic, null, tint = accentColor) }
+                                            },
+                                            singleLine = true,
+                                            shape = RoundedCornerShape(14.dp),
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                    LazyVerticalGrid(columns = GridCells.Fixed(3), contentPadding = PaddingValues(8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        items(filteredLive) { item ->
+                                            val isFav = favoriteIds.contains(item.id)
+                                            Column(
+                                                horizontalAlignment = Alignment.CenterHorizontally,
+                                                modifier = Modifier
+                                                    .clip(RoundedCornerShape(14.dp))
+                                                    .background(cardColor)
+                                                    .border(1.dp, if (currentMedia?.url == item.url) accentColor else Color(0x18FFFFFF), RoundedCornerShape(14.dp))
+                                                    .clickable { startPlayback(item) }
+                                                    .padding(8.dp)
+                                            ) {
+                                                Box(modifier = Modifier.fillMaxWidth().height(65.dp)) {
+                                                    AsyncImage(model = item.logo, contentDescription = item.name, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize())
+                                                    Icon(
+                                                        if (isFav) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                                                        null,
+                                                        tint = if (isFav) accentColor else Color.Gray,
+                                                        modifier = Modifier.align(Alignment.TopEnd).size(18.dp).clickable { toggleFavorite(item.id) }
+                                                    )
+                                                    Icon(
+                                                        Icons.Default.CreateNewFolder,
+                                                        null,
+                                                        tint = Color.Gray,
+                                                        modifier = Modifier.align(Alignment.TopStart).size(16.dp).clickable { folderTargetItem = item }
+                                                    )
+                                                }
+                                                Spacer(modifier = Modifier.height(4.dp))
+                                                Text(item.name, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            // 2: مركز كرة القدم والرياضة وتجميع الجودات (Sports Hub)
+                            2 -> {
+                                val filteredSports = remember(groupedSports, searchQuery) {
+                                    groupedSports.filter { searchQuery.isBlank() || it.cleanName.contains(searchQuery, ignoreCase = true) }
+                                }
+                                Column(modifier = Modifier.fillMaxSize().padding(8.dp)) {
+                                    OutlinedTextField(
+                                        value = searchQuery,
+                                        onValueChange = { searchQuery = it },
+                                        placeholder = { Text("ابحث عن قناة رياضية (beIN, SSC, الكأس)...", fontSize = 12.sp) },
+                                        leadingIcon = { Icon(Icons.Default.SportsSoccer, null, tint = accentColor) },
+                                        singleLine = true,
+                                        shape = RoundedCornerShape(14.dp),
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    LazyVerticalGrid(columns = GridCells.Fixed(2), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        items(filteredSports) { grp ->
+                                            Card(
+                                                colors = CardDefaults.cardColors(containerColor = cardColor),
+                                                border = BorderStroke(1.dp, accentColor.copy(alpha = 0.35f)),
+                                                shape = RoundedCornerShape(16.dp),
+                                                modifier = Modifier.fillMaxWidth().clickable {
+                                                    if (grp.variants.size == 1) startPlayback(grp.variants[0].item)
+                                                    else selectedSportsGroup = grp
+                                                }
+                                            ) {
+                                                Column(modifier = Modifier.padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                                    AsyncImage(model = grp.logo, contentDescription = grp.cleanName, contentScale = ContentScale.Fit, modifier = Modifier.height(55.dp).fillMaxWidth())
+                                                    Spacer(modifier = Modifier.height(6.dp))
+                                                    Text(grp.cleanName, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                                    Spacer(modifier = Modifier.height(4.dp))
+                                                    Box(modifier = Modifier.background(greenBadge, RoundedCornerShape(20.dp)).padding(horizontal = 10.dp, vertical = 3.dp)) {
+                                                        Text("${grp.variants.size} جودات متاحة", color = greenText, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            // 3: السينما المنظمة (الأفلام والمسلسلات بالفرز اللغوي والمنصات)
+                            3 -> {
+                                val baseCinema = if (cinemaSubTab == 0) safeVodList else safeSeriesList
+                                val langFilters = listOf("الكل", "عربي", "أجنبي مترجم", "كوري وآسيوي", "أنمي وكرتون")
+                                val filteredCinema = remember(baseCinema, selectedLangFilter, selectedPlatformFilter, searchQuery) {
+                                    baseCinema.filter { item ->
+                                        val matchLang = selectedLangFilter == "الكل" || ServersEngine.detectContentLanguage(item) == selectedLangFilter
+                                        val matchPlat = selectedPlatformFilter.isBlank() || "${item.category} ${item.name}".contains(selectedPlatformFilter, ignoreCase = true)
+                                        matchLang && matchPlat && (searchQuery.isBlank() || item.name.contains(searchQuery, ignoreCase = true))
+                                    }
+                                }
+
+                                Column(modifier = Modifier.fillMaxSize()) {
+                                    Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        FilterChip(selected = cinemaSubTab == 0, onClick = { cinemaSubTab = 0 }, label = { Text("${str.movies} (${safeVodList.size})", fontWeight = FontWeight.Bold) })
+                                        FilterChip(selected = cinemaSubTab == 1, onClick = { cinemaSubTab = 1 }, label = { Text("${str.series} (${safeSeriesList.size})", fontWeight = FontWeight.Bold) })
+                                        if (selectedPlatformFilter.isNotBlank()) {
+                                            FilterChip(selected = true, onClick = { selectedPlatformFilter = "" }, label = { Text("$selectedPlatformFilter ×") })
+                                        }
+                                    }
+                                    LazyRow(contentPadding = PaddingValues(horizontal = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        items(langFilters) { lf ->
+                                            FilterChip(selected = selectedLangFilter == lf, onClick = { selectedLangFilter = lf }, label = { Text(lf, fontSize = 11.sp) })
+                                        }
+                                    }
+                                    OutlinedTextField(
+                                        value = searchQuery,
+                                        onValueChange = { searchQuery = it },
+                                        placeholder = { Text(str.searchHint, fontSize = 12.sp) },
+                                        leadingIcon = { Icon(Icons.Default.Search, null) },
+                                        singleLine = true,
+                                        shape = RoundedCornerShape(14.dp),
+                                        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)
+                                    )
+                                    LazyVerticalGrid(columns = GridCells.Fixed(3), contentPadding = PaddingValues(8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        items(filteredCinema) { item ->
+                                            Column(
+                                                horizontalAlignment = Alignment.CenterHorizontally,
+                                                modifier = Modifier
+                                                    .clip(RoundedCornerShape(14.dp))
+                                                    .background(cardColor)
+                                                    .clickable { startPlayback(item) }
+                                                    .padding(6.dp)
+                                            ) {
+                                                AsyncImage(model = item.logo, contentDescription = item.name, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxWidth().height(145.dp).clip(RoundedCornerShape(10.dp)))
+                                                Spacer(modifier = Modifier.height(5.dp))
+                                                Text(item.name, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            // 4: مركز الأدوات والاشتراكات (Hub)
+                            4 -> {
+                                Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    Button(onClick = { isMultiScreenMode = true }, colors = ButtonDefaults.buttonColors(containerColor = accentColor), modifier = Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(14.dp)) {
+                                        Icon(Icons.Default.GridView, null)
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(str.multiScreen, fontWeight = FontWeight.Bold)
+                                    }
+
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        OutlinedButton(onClick = { showCategoriesManager = true }, modifier = Modifier.weight(1f)) {
+                                            Text("إخفاء الباقات", fontSize = 12.sp)
+                                        }
+                                        OutlinedButton(onClick = { showBackupDialog = true }, modifier = Modifier.weight(1f)) {
+                                            Text("نسخ احتياطي", fontSize = 12.sp)
+                                        }
+                                    }
+
+                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                        Text("الاشتراكات المحفوظة (${servers.size})", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                                        Text("+ ${str.addConnection}", color = accentColor, fontWeight = FontWeight.Bold, fontSize = 13.sp, modifier = Modifier.clickable { editingServer = null; showAddServerDialog = true })
+                                    }
+
+                                    servers.forEach { srv ->
+                                        val isAct = srv.id == activeServerId
+                                        Card(
+                                            colors = CardDefaults.cardColors(containerColor = cardColor),
+                                            border = BorderStroke(1.dp, if (isAct) accentColor else Color(0x1FFFFFFF)),
+                                            shape = RoundedCornerShape(16.dp),
+                                            modifier = Modifier.fillMaxWidth().clickable { syncServerData(srv, false); selectedTab = 0 }
+                                        ) {
+                                            Row(modifier = Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                                                Column(modifier = Modifier.weight(1f)) {
+                                                    Text(srv.title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                                                    Text("${srv.countryCode} • ${srv.type.uppercase()} • ${srv.pingMs}ms", color = greenText, fontSize = 11.sp)
+                                                }
+                                                IconButton(onClick = { editingServer = srv; showAddServerDialog = true }) {
+                                                    Icon(Icons.Default.Edit, null, tint = Color.LightGray)
+                                                }
+                                                IconButton(onClick = {
+                                                    val upd = servers.filter { it.id != srv.id }
+                                                    servers = upd; saveServersList(prefs, upd)
+                                                }) {
+                                                    Icon(Icons.Default.Delete, null, tint = Color(0xFFF87171))
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
                 }
             }
+
+            // نافذة اختيار جودة القناة الرياضية (4K / FHD / HD / SD / Backup)
+            selectedSportsGroup?.let { grp ->
+                AlertDialog(
+                    onDismissRequest = { selectedSportsGroup = null },
+                    containerColor = cardColor,
+                    title = { Text("${str.chooseQuality}: ${grp.cleanName}", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp) },
+                    text = {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            grp.variants.forEach { variant ->
+                                Card(
+                                    colors = CardDefaults.cardColors(containerColor = bgColor),
+                                    border = BorderStroke(1.dp, accentColor.copy(alpha = 0.4f)),
+                                    modifier = Modifier.fillMaxWidth().clickable {
+                                        selectedSportsGroup = null
+                                        startPlayback(variant.item)
+                                    }
+                                ) {
+                                    Row(modifier = Modifier.padding(12.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(variant.qualityTag, color = accentColor, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                            Text(variant.rawName, color = Color.Gray, fontSize = 11.sp, maxLines = 1)
+                                        }
+                                        Icon(Icons.Default.PlayArrow, null, tint = greenText)
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    confirmButton = { TextButton(onClick = { selectedSportsGroup = null }) { Text("إغلاق", color = Color.Gray) } }
+                )
+            }
+
+            // نافذة المواسم والحلقات الكاملة للمسلسلات
+            selectedSeriesItem?.let { sItem ->
+                AlertDialog(
+                    onDismissRequest = { selectedSeriesItem = null },
+                    containerColor = cardColor,
+                    title = { Text(sItem.name, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp) },
+                    text = {
+                        val det = loadedSeriesDetails
+                        if (det == null) {
+                            Box(modifier = Modifier.fillMaxWidth().height(120.dp), contentAlignment = Alignment.Center) {
+                                CircularProgressIndicator(color = accentColor)
+                            }
+                        } else {
+                            Column(modifier = Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text("⭐ ${det.rating} • ${det.plot}", color = Color.LightGray, fontSize = 11.sp, maxLines = 3)
+                                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    items(det.seasons.keys.toList()) { sNum ->
+                                        FilterChip(selected = activeSeasonNum == sNum, onClick = { activeSeasonNum = sNum }, label = { Text("الموسم $sNum") })
+                                    }
+                                }
+                                val episodes = det.seasons[activeSeasonNum] ?: emptyList()
+                                episodes.forEachIndexed { idx, ep ->
+                                    Card(
+                                        colors = CardDefaults.cardColors(containerColor = bgColor),
+                                        modifier = Modifier.fillMaxWidth().clickable {
+                                            activeEpisodesQueue = episodes
+                                            currentEpisodeIdx = idx
+                                            selectedSeriesItem = null
+                                            startPlayback(MediaItemModel(ep.id, "${det.title} - م$activeSeasonNum ح${ep.episodeNum}", ep.url, det.title, det.cover, "series"))
+                                        }
+                                    ) {
+                                        Row(modifier = Modifier.padding(10.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                            Text("الحلقة ${ep.episodeNum}: ${ep.title}", color = Color.White, fontSize = 12.sp, modifier = Modifier.weight(1f))
+                                            Icon(Icons.Default.PlayCircleOutline, null, tint = accentColor)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    confirmButton = { TextButton(onClick = { selectedSeriesItem = null }) { Text("إغلاق", color = Color.Gray) } }
+                )
+            }
+
+            // نافذة الإعدادات الشاملة (اللغة، السمة، فك الترميز، Buffer، User-Agent، مؤقت النوم، فحص السرعة)
+            if (showSettingsModal) {
+                var speedResult by remember { mutableStateOf("") }
+                var customUaInput by remember { mutableStateOf(userAgent) }
+
+                AlertDialog(
+                    onDismissRequest = { showSettingsModal = false },
+                    containerColor = cardColor,
+                    title = { Text(str.settings, color = Color.White, fontWeight = FontWeight.Bold) },
+                    text = {
+                        Column(modifier = Modifier.heightIn(max = 460.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            // 1. اللغة
+                            Text("لغة التطبيق (Language):", color = accentColor, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                val langs = listOf("ar" to "العربية", "en" to "English", "fr" to "Français", "tr" to "Türkçe", "ku" to "کوردی")
+                                items(langs) { (code, label) ->
+                                    FilterChip(selected = appLang == code, onClick = {
+                                        appLang = code; prefs.edit().putString("app_lang", code).apply()
+                                    }, label = { Text(label, fontSize = 11.sp) })
+                                }
+                            }
+
+                            // 2. السمة والألوان (AMOLED)
+                            Text("لون التمييز والخلفية:", color = accentColor, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                items(accentOptions.indices.toList()) { idx ->
+                                    FilterChip(selected = accentIdx == idx, onClick = {
+                                        accentIdx = idx; prefs.edit().putInt("accent_idx", idx).apply()
+                                    }, label = { Text(accentOptions[idx].first, fontSize = 10.sp) })
+                                }
+                            }
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                bgOptions.indices.forEach { idx ->
+                                    FilterChip(selected = bgIdx == idx, onClick = {
+                                        bgIdx = idx; prefs.edit().putInt("bg_idx", idx).apply()
+                                    }, label = { Text(bgOptions[idx].first, fontSize = 10.sp) })
+                                }
+                            }
+
+                            // 3. نوع فك الترميز (Decoder)
+                            Text("نوع فك الترميز (Decoder):", color = accentColor, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                listOf("auto" to "تلقائي", "hw" to "Hardware (4K)", "sw" to "Software").forEach { (k, lbl) ->
+                                    FilterChip(selected = decoderMode == k, onClick = {
+                                        decoderMode = k; prefs.edit().putString("decoder_mode", k).apply()
+                                    }, label = { Text(lbl, fontSize = 10.sp) })
+                                }
+                            }
+
+                            // 4. ملف التخزين المؤقت (Buffer Profile)
+                            Text("ملف التخزين المؤقت (منع التقطيع):", color = accentColor, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                listOf("fast" to "سريع", "balanced" to "متوازن", "antifreeze" to "مضاد للتقطيع").forEach { (k, lbl) ->
+                                    FilterChip(selected = bufferProfile == k, onClick = {
+                                        bufferProfile = k; prefs.edit().putString("buffer_profile", k).apply()
+                                    }, label = { Text(lbl, fontSize = 10.sp) })
+                                }
+                            }
+
+                            // 5. صيغة البث وتوحيد السيرفر
+                            Text("صيغة البث وتوحيد الهوست:", color = accentColor, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                FilterChip(selected = streamFmt == "ts", onClick = { streamFmt = "ts"; prefs.edit().putString("stream_fmt", "ts").apply() }, label = { Text("MPEG-TS") })
+                                FilterChip(selected = streamFmt == "m3u8", onClick = { streamFmt = "m3u8"; prefs.edit().putString("stream_fmt", "m3u8").apply() }, label = { Text("HLS / M3U8") })
+                            }
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                Text("توحيد رابط البث (Same Host Proxy)", color = Color.White, fontSize = 12.sp)
+                                Switch(checked = sameHost, onCheckedChange = { sameHost = it; prefs.edit().putBoolean("same_host", it).apply() })
+                            }
+
+                            // 6. قائمة User-Agent الكاملة + مخصص
+                            Text("User-Agent (هوية المشغل):", color = accentColor, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                val agents = listOf("IPTVSmartersPro", "TiviMate/4.7.0", "VLC/3.0.18", "VU IPTV Player", "Mozilla/5.0")
+                                items(agents) { ua ->
+                                    FilterChip(selected = userAgent == ua, onClick = {
+                                        userAgent = ua; customUaInput = ua; prefs.edit().putString("user_agent", ua).apply()
+                                    }, label = { Text(ua, fontSize = 10.sp) })
+                                }
+                            }
+                            OutlinedTextField(
+                                value = customUaInput,
+                                onValueChange = { customUaInput = it; userAgent = it; prefs.edit().putString("user_agent", it).apply() },
+                                label = { Text("User-Agent مخصص", fontSize = 11.sp) },
+                                singleLine = true
+                            )
+
+                            // 7. شاشة البداية + مؤقت النوم + الترجمة
+                            Text("شاشة البداية:", color = accentColor, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                listOf(0 to "الرئيسية", 1 to "مباشر", 2 to "الرياضة", 3 to "السينما").forEach { (tIdx, lbl) ->
+                                    FilterChip(selected = startupTab == tIdx, onClick = {
+                                        startupTab = tIdx; prefs.edit().putInt("startup_tab", tIdx).apply()
+                                    }, label = { Text(lbl, fontSize = 10.sp) })
+                                }
+                            }
+
+                            Text("مؤقت النوم (Sleep Timer): ${if (sleepMinutesLeft > 0) "$sleepMinutesLeft د" else "متوقف"}", color = accentColor, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                listOf(0 to "إيقاف", 15 to "15د", 30 to "30د", 60 to "60د").forEach { (mins, lbl) ->
+                                    FilterChip(selected = sleepMinutesLeft == mins, onClick = { sleepMinutesLeft = mins }, label = { Text(lbl, fontSize = 10.sp) })
+                                }
+                            }
+
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                Text("وضع الأداء الفائق (Turbo Mode)", color = Color.White, fontSize = 12.sp)
+                                Switch(checked = turboMode, onCheckedChange = { turboMode = it; prefs.edit().putBoolean("turbo_mode", it).apply() })
+                            }
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                Text("تشغيل الحلقة التالية تلقائياً", color = Color.White, fontSize = 12.sp)
+                                Switch(checked = autoplayNextEp, onCheckedChange = { autoplayNextEp = it; prefs.edit().putBoolean("autoplay_next_ep", it).apply() })
+                            }
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                Text("لون الترجمة أصفر سينمائي", color = Color.White, fontSize = 12.sp)
+                                Switch(checked = subColorYellow, onCheckedChange = { subColorYellow = it; prefs.edit().putBoolean("sub_yellow", it).apply() })
+                            }
+
+                            // 8. فحص سرعة السيرفر ومسح الكاش
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Button(onClick = {
+                                    activeServer?.let { srv ->
+                                        scope.launch { speedResult = ServersEngine.runSpeedTest(srv.host) }
+                                    }
+                                }, modifier = Modifier.weight(1f)) { Text("فحص السيرفر", fontSize = 11.sp) }
+
+                                OutlinedButton(onClick = {
+                                    AppStorage.clearAllMediaCache(context)
+                                    Toast.makeText(context, "تم تنظيف الذاكرة المؤقتة", Toast.LENGTH_SHORT).show()
+                                }, modifier = Modifier.weight(1f)) { Text("مسح الكاش (${AppStorage.getCacheSizeMb(context)})", fontSize = 10.sp) }
+                            }
+                            if (speedResult.isNotBlank()) {
+                                Text(speedResult, color = greenText, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    },
+                    confirmButton = { Button(onClick = { showSettingsModal = false }) { Text("حفظ وإغلاق") } }
+                )
+            }
+
+            // نافذة إضافة / تعديل اشتراك
+            if (showAddServerDialog) {
+                var titleIn by remember { mutableStateOf(editingServer?.title ?: "") }
+                var typeIn by remember { mutableStateOf(editingServer?.type ?: "xtream") }
+                var hostIn by remember { mutableStateOf(editingServer?.host ?: "") }
+                var userIn by remember { mutableStateOf(editingServer?.user ?: "") }
+                var passIn by remember { mutableStateOf(editingServer?.pass ?: "") }
+
+                AlertDialog(
+                    onDismissRequest = { showAddServerDialog = false },
+                    containerColor = cardColor,
+                    title = { Text(if (editingServer == null) str.addConnection else "تعديل الاشتراك", color = Color.White, fontWeight = FontWeight.Bold) },
+                    text = {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                listOf("xtream" to "Xtream", "stalker" to "Stalker", "m3u" to "M3U").forEach { (k, lbl) ->
+                                    FilterChip(selected = typeIn == k, onClick = { typeIn = k }, label = { Text(lbl, fontSize = 11.sp) })
+                                }
+                            }
+                            OutlinedTextField(value = titleIn, onValueChange = { titleIn = it }, label = { Text("اسم الاشتراك") }, singleLine = true)
+                            OutlinedTextField(value = hostIn, onValueChange = { hostIn = it }, label = { Text("رابط السيرفر أو M3U") }, singleLine = true)
+                            if (typeIn != "m3u") {
+                                OutlinedTextField(value = userIn, onValueChange = { userIn = it }, label = { Text(if (typeIn == "stalker") "MAC Address" else "اسم المستخدم") }, singleLine = true)
+                            }
+                            if (typeIn == "xtream") {
+                                OutlinedTextField(value = passIn, onValueChange = { passIn = it }, label = { Text("كلمة المرور") }, singleLine = true)
+                            }
+                        }
+                    },
+                    confirmButton = {
+                        Button(onClick = {
+                            val extracted = if (typeIn == "m3u") ServersEngine.parseXtreamFromUrl(hostIn) else null
+                            val fType = if (extracted != null) "xtream" else typeIn
+                            val fHost = extracted?.first ?: hostIn.trim()
+                            val fUser = extracted?.second ?: userIn.trim()
+                            val fPass = extracted?.third ?: passIn.trim()
+                            val fTitle = titleIn.ifBlank { Uri.parse(fHost).host ?: "اشتراك جديد" }
+
+                            val newSrv = SavedServer(editingServer?.id ?: System.currentTimeMillis().toString(), fTitle, fType, fHost, fUser, fPass)
+                            val upd = if (editingServer == null) servers + newSrv else servers.map { if (it.id == newSrv.id) newSrv else it }
+                            servers = upd; saveServersList(prefs, upd)
+                            showAddServerDialog = false
+                            syncServerData(newSrv, true)
+                        }) { Text("حفظ وتحديث") }
+                    },
+                    dismissButton = { TextButton(onClick = { showAddServerDialog = false }) { Text("إلغاء", color = Color.Gray) } }
+                )
+            }
+
+            // نافذة إنشاء مجلد شخصي
+            if (showCreateFolderDialog) {
+                var folderName by remember { mutableStateOf("") }
+                AlertDialog(
+                    onDismissRequest = { showCreateFolderDialog = false },
+                    containerColor = cardColor,
+                    title = { Text("إنشاء مجلد شخصي جديد", color = Color.White) },
+                    text = { OutlinedTextField(value = folderName, onValueChange = { folderName = it }, label = { Text("اسم المجلد (مثلاً: مبارياتي)") }, singleLine = true) },
+                    confirmButton = {
+                        Button(onClick = {
+                            if (folderName.isNotBlank()) {
+                                val upd = customFolders + CustomFolder(System.currentTimeMillis().toString(), folderName.trim(), emptyList())
+                                customFolders = upd; AppStorage.saveCustomFolders(context, upd)
+                            }
+                            showCreateFolderDialog = false
+                        }) { Text("إنشاء") }
+                    }
+                )
+            }
+
+            // نافذة إضافة قناة إلى مجلد
+            folderTargetItem?.let { target ->
+                AlertDialog(
+                    onDismissRequest = { folderTargetItem = null },
+                    containerColor = cardColor,
+                    title = { Text("إضافة إلى مجلد: ${target.name}", color = Color.White, fontSize = 14.sp) },
+                    text = {
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            if (customFolders.isEmpty()) Text("أنشئ مجلداً من الرئيسية أولاً.", color = Color.Gray)
+                            customFolders.forEach { f ->
+                                Text("📁 ${f.name}", color = accentColor, fontWeight = FontWeight.Bold, modifier = Modifier.fillMaxWidth().clickable {
+                                    val upd = customFolders.map { if (it.id == f.id) it.copy(itemIds = (it.itemIds + target.id).distinct()) else it }
+                                    customFolders = upd; AppStorage.saveCustomFolders(context, upd)
+                                    folderTargetItem = null
+                                    Toast.makeText(context, "تمت الإضافة إلى ${f.name}", Toast.LENGTH_SHORT).show()
+                                }.padding(8.dp))
+                            }
+                        }
+                    },
+                    confirmButton = { TextButton(onClick = { folderTargetItem = null }) { Text("إغلاق") } }
+                )
+            }
+
+            // نافذة إخفاء الباقات غير المرغوبة
+            if (showCategoriesManager) {
+                val allCats = remember(liveList, vodList) { (liveList.map { it.category } + vodList.map { it.category }).distinct() }
+                AlertDialog(
+                    onDismissRequest = { showCategoriesManager = false },
+                    containerColor = cardColor,
+                    title = { Text("إخفاء / إظهار الباقات", color = Color.White) },
+                    text = {
+                        Column(modifier = Modifier.heightIn(max = 380.dp).verticalScroll(rememberScrollState())) {
+                            allCats.forEach { c ->
+                                val isHid = hiddenCategories.contains(c)
+                                Row(modifier = Modifier.fillMaxWidth().clickable {
+                                    val upd = if (isHid) hiddenCategories - c else hiddenCategories + c
+                                    hiddenCategories = upd; prefs.edit().putStringSet("hidden_cats", upd).apply()
+                                }.padding(vertical = 6.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                                    Text(c, color = if (isHid) Color.Gray else Color.White, fontSize = 12.sp, modifier = Modifier.weight(1f))
+                                    Text(if (isHid) "مخفية" else "ظاهرة", color = if (isHid) Color.Red else greenText, fontSize = 11.sp)
+                                }
+                            }
+                        }
+                    },
+                    confirmButton = { Button(onClick = { showCategoriesManager = false }) { Text("تم") } }
+                )
+            }
+
+            // نافذة النسخ الاحتياطي السريع (Backup & Restore)
+            if (showBackupDialog) {
+                var codeIn by remember { mutableStateOf("") }
+                AlertDialog(
+                    onDismissRequest = { showBackupDialog = false },
+                    containerColor = cardColor,
+                    title = { Text("النسخ الاحتياطي والاستعادة", color = Color.White) },
+                    text = {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(onClick = {
+                                val exported = AppStorage.exportBackupCode(context)
+                                clipboard.setText(AnnotatedString(exported))
+                                Toast.makeText(context, "تم نسخ كود النسخة الاحتياطية للحافظة!", Toast.LENGTH_LONG).show()
+                            }, modifier = Modifier.fillMaxWidth()) { Text("نسخ كود النسخة الاحتياطية") }
+                            OutlinedTextField(value = codeIn, onValueChange = { codeIn = it }, label = { Text("الصق كود الاستعادة هنا") })
+                        }
+                    },
+                    confirmButton = {
+                        Button(onClick = {
+                            if (AppStorage.importBackupCode(context, codeIn)) {
+                                servers = loadSavedServers(prefs)
+                                customFolders = AppStorage.getCustomFolders(context)
+                                Toast.makeText(context, "تمت الاستعادة بنجاح!", Toast.LENGTH_SHORT).show()
+                                showBackupDialog = false
+                            }
+                        }) { Text("استعادة") }
+                    }
+                )
+            }
+
+            // نافذة الرمز السري للخروج من وضع الأطفال (PIN)
+            if (showPinDialog) {
+                var pinInput by remember { mutableStateOf("") }
+                AlertDialog(
+                    onDismissRequest = { showPinDialog = false },
+                    containerColor = cardColor,
+                    title = { Text("أدخل الرمز السري (الافتراضي 0000)", color = Color.White, fontSize = 14.sp) },
+                    text = { OutlinedTextField(value = pinInput, onValueChange = { pinInput = it }, label = { Text("PIN") }, singleLine = true) },
+                    confirmButton = {
+                        Button(onClick = {
+                            if (pinInput == parentalPin || pinInput == "0000") {
+                                showPinDialog = false
+                                pinActionCallback()
+                            } else {
+                                Toast.makeText(context, "الرمز غير صحيح", Toast.LENGTH_SHORT).show()
+                            }
+                        }) { Text("تأكيد") }
+                    }
+                )
+            }
         }
     }
-
-    if (showAddDialog) {
-        var titleInput by remember { mutableStateOf(editingServer?.title ?: "") }
-        var typeInput by remember { mutableStateOf(editingServer?.type ?: "xtream") }
-        var hostInput by remember { mutableStateOf(editingServer?.host ?: "") }
-        var userInput by remember { mutableStateOf(editingServer?.user ?: "") }
-        var passInput by remember { mutableStateOf(editingServer?.pass ?: "") }
-
-        AlertDialog(
-            onDismissRequest = { showAddDialog = false },
-            containerColor = CardDark,
-            title = { Text(if (editingServer == null) "إضافة اتصال جديد" else "تعديل الاتصال", color = Color.White, fontWeight = FontWeight.Bold) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        listOf("xtream" to "Xtream", "stalker" to "Stalker", "m3u" to "رابط").forEach { (k, label) ->
-                            FilterChip(selected = typeInput == k, onClick = { typeInput = k }, label = { Text(label, fontSize = 11.sp) })
-                        }
-                    }
-                    OutlinedTextField(value = titleInput, onValueChange = { titleInput = it }, label = { Text("اسم الاشتراك (مثلاً: ماارفيل)") }, singleLine = true)
-                    OutlinedTextField(value = hostInput, onValueChange = { hostInput = it }, label = { Text(if (typeInput == "stalker") "رابط البورتال" else "رابط السيرفر أو M3U") }, singleLine = true)
-                    if (typeInput != "m3u") {
-                        OutlinedTextField(value = userInput, onValueChange = { userInput = it }, label = { Text(if (typeInput == "stalker") "عنوان الماك (MAC)" else "اسم المستخدم") }, singleLine = true)
-                    }
-                    if (typeInput == "xtream") {
-                        OutlinedTextField(value = passInput, onValueChange = { passInput = it }, label = { Text("كلمة المرور") }, singleLine = true)
-                    }
-                }
-            },
-            confirmButton = {
-                Button(colors = ButtonDefaults.buttonColors(containerColor = NeonPurple), onClick = {
-                    val extracted = if (typeInput == "m3u") ServersEngine.parseXtreamFromUrl(hostInput) else null
-                    val finalType = if (extracted != null) "xtream" else typeInput
-                    val finalHost = extracted?.first ?: hostInput.trim()
-                    val finalUser = extracted?.second ?: userInput.trim()
-                    val finalPass = extracted?.third ?: passInput.trim()
-                    val finalTitle = titleInput.ifBlank { Uri.parse(finalHost).host ?: "سيرفر جديد" }
-
-                    val newSrv = SavedServer(editingServer?.id ?: System.currentTimeMillis().toString(), finalTitle, finalType, finalHost, finalUser, finalPass)
-                    val updated = if (editingServer == null) servers + newSrv else servers.map { if (it.id == newSrv.id) newSrv else it }
-                    servers = updated; saveServersList(prefs, updated)
-                    showAddDialog = false
-                    connectToServer(newSrv, "live", true)
-                }) { Text("حفظ واتصال", color = Color.White) }
-            },
-            dismissButton = { TextButton(onClick = { showAddDialog = false }) { Text("إلغاء", color = Color.Gray) } }
-        )
-    }
-
-    if (showSettingsSheet) {
-        AlertDialog(
-            onDismissRequest = { showSettingsSheet = false },
-            containerColor = CardDark,
-            title = { Text("الإعدادات المتقدمة", color = Color.White, fontWeight = FontWeight.Bold) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                        Text("التحكم بالإيماءات (الصوت/السطوع)", color = Color.White, fontSize = 13.sp)
-                        Switch(checked = gesturesEnabled, onCheckedChange = { gesturesEnabled = it; prefs.edit().putBoolean("gestures_enabled", it).apply() })
-                    }
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                        Text("تنبيه انتهاء الاشتراك", color = Color.White, fontSize = 13.sp)
-                        Switch(checked = expiryAlertEnabled, onCheckedChange = { expiryAlertEnabled = it; prefs.edit().putBoolean("expiry_alert", it).apply() })
-                    }
-                    Text("User-Agent (تبديل الهوية):", color = NeonPurple, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        listOf("IPTVSmartersPro", "VLC/3.0", "TiviMate").forEach { ua ->
-                            FilterChip(selected = userAgent == ua, onClick = {
-                                userAgent = ua; ServersEngine.currentUserAgent = ua; prefs.edit().putString("user_agent", ua).apply()
-                            }, label = { Text(ua, fontSize = 10.sp) })
-                        }
-                    }
-                }
-            },
-            confirmButton = { Button(colors = ButtonDefaults.buttonColors(containerColor = NeonPurple), onClick = { showSettingsSheet = false }) { Text("تم", color = Color.White) } }
-        )
-    }
 }
-// END
+// END_MAIN
