@@ -10,11 +10,15 @@ import java.net.HttpURLConnection
 import java.net.InetAddress
 import java.net.URL
 import java.net.URLEncoder
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.TimeZone
 
 data class SavedServer(
     val id: String,
     val title: String,
-    val type: String, // "xtream", "stalker", "m3u"
+    val type: String,
     val host: String,
     val user: String = "",
     val pass: String = "",
@@ -35,7 +39,7 @@ data class MediaItemModel(
     val url: String,
     val category: String,
     val logo: String = "",
-    val type: String = "live" // "live", "vod", "series"
+    val type: String = "live"
 )
 
 data class EpisodeModel(
@@ -56,7 +60,7 @@ data class SeriesDetails(
 )
 
 data class QualityVariant(
-    val qualityTag: String, // "4K UHD", "1080p FHD", "720p HD", "SD / LOW", "بث قياسي"
+    val qualityTag: String,
     val priority: Int,
     val rawName: String,
     val item: MediaItemModel
@@ -67,7 +71,22 @@ data class GroupedSportsChannel(
     val category: String,
     val logo: String,
     val variants: List<QualityVariant>,
-    val isLiveEvent: Boolean = false
+    val regionTag: String = "global" // "arab", "global"
+)
+
+data class LiveMatchInfo(
+    val id: String,
+    val leagueName: String,
+    val leagueSlug: String,
+    val homeTeam: String,
+    val homeLogo: String,
+    val homeScore: String,
+    val awayTeam: String,
+    val awayLogo: String,
+    val awayScore: String,
+    val statusState: String, // "in", "pre", "post"
+    val statusText: String,
+    val suggestedBroadcaster: String
 )
 
 data class EpgProgram(
@@ -77,8 +96,14 @@ data class EpgProgram(
 
 object ServersEngine {
     var currentUserAgent: String = "IPTVSmartersPro"
-    var streamFormat: String = "ts" // "ts" or "m3u8"
+    var streamFormat: String = "ts"
     var sameHostProxy: Boolean = false
+
+    private val QUALITY_REGEX = Regex("\\b(4K|UHD|FHD|1080P|720P|HD|SD|LOW|MINI|HEVC|H265|RAW|VIP|BACKUP|VEGA|MULTI|SOURCE|S1|S2)\\b", RegexOption.IGNORE_CASE)
+    private val SYMBOLS_REGEX = Regex("[\\[\\]\\(\\)\\|\\-_:#*]+")
+    private val SPACES_REGEX = Regex("\\s+")
+    private val PREFIX_CLEAN_REGEX = Regex("^(AR|EN|FR|TR|KU|VIP|4K|FHD|HD|SD)\\s*[:|\\-]\\s*", RegexOption.IGNORE_CASE)
+    private val NATURAL_SPLIT_REGEX = Regex("(\\d+|\\D+)")
 
     private fun fetchJson(urlStr: String, headers: Map<String, String> = emptyMap()): String {
         val conn = (URL(urlStr).openConnection() as HttpURLConnection).apply {
@@ -91,7 +116,141 @@ object ServersEngine {
         return conn.inputStream.bufferedReader().use { it.readText() }
     }
 
-    // فحص دولة السيرفر وسرعة الاستجابة (Ping)
+    // جلب مباريات اليوم الحية من ESPN لجميع البطولات العالمية والعربية
+    suspend fun fetchTodayMatches(lang: String = "ar"): List<LiveMatchInfo> = withContext(Dispatchers.IO) {
+        val matches = ArrayList<LiveMatchInfo>()
+        try {
+            val raw = fetchJson(
+                "https://site.api.espn.com/apis/site/v2/sports/soccer/all/scoreboard",
+                mapOf("User-Agent" to "Mozilla/5.0")
+            )
+            val root = JSONObject(raw)
+            val events = root.optJSONArray("events") ?: return@withContext emptyList()
+
+            val isoParser = SimpleDateFormat("yyyy-MM-dd'T'HH:mm'Z'", Locale.US).apply {
+                timeZone = TimeZone.getTimeZone("UTC")
+            }
+            val localTimeFmt = SimpleDateFormat("hh:mm a", Locale.ENGLISH)
+
+            for (i in 0 until events.length()) {
+                val ev = events.getJSONObject(i)
+                val id = ev.optString("id")
+                val season = ev.optJSONObject("season")
+                val leagueSlug = season?.optString("slug", "") ?: ""
+                val rawLeague = ev.optJSONArray("leagues")?.optJSONObject(0)?.optString("name", "")
+                    ?: leagueSlug.uppercase()
+
+                val leagueTitle = translateLeagueName(rawLeague, leagueSlug, lang)
+                val broadcaster = detectBroadcasterHint(leagueSlug, rawLeague, lang)
+
+                val comp = ev.optJSONArray("competitions")?.optJSONObject(0) ?: continue
+                val competitors = comp.optJSONArray("competitors") ?: continue
+                if (competitors.length() < 2) continue
+
+                var homeName = ""; var homeLogo = ""; var homeScore = "0"
+                var awayName = ""; var awayLogo = ""; var awayScore = "0"
+
+                for (c in 0 until competitors.length()) {
+                    val teamObj = competitors.getJSONObject(c)
+                    val info = teamObj.optJSONObject("team")
+                    val tName = info?.optString("shortDisplayName", info.optString("displayName", "")) ?: ""
+                    val tLogo = info?.optString("logo", "") ?: ""
+                    val tScore = teamObj.optString("score", "0")
+                    if (teamObj.optString("homeAway") == "home") {
+                        homeName = tName; homeLogo = tLogo; homeScore = tScore
+                    } else {
+                        awayName = tName; awayLogo = tLogo; awayScore = tScore
+                    }
+                }
+
+                val statusObj = comp.optJSONObject("status")
+                val typeObj = statusObj?.optJSONObject("type")
+                val state = typeObj?.optString("state", "pre") ?: "pre"
+                val clock = statusObj?.optString("displayClock", "") ?: ""
+
+                val statusText = when (state) {
+                    "in" -> if (lang == "ar") "🔴 مباشر $clock" else "🔴 LIVE $clock"
+                    "post" -> if (lang == "ar") "انتهت" else "FT"
+                    else -> {
+                        val rawDate = ev.optString("date", "")
+                        val formattedTime = try {
+                            val d = isoParser.parse(rawDate)
+                            if (d != null) localTimeFmt.format(d) else typeObj?.optString("shortDetail", "") ?: ""
+                        } catch (_: Exception) {
+                            typeObj?.optString("shortDetail", "") ?: ""
+                        }
+                        if (lang == "ar") "الساعة $formattedTime" else formattedTime
+                    }
+                }
+
+                matches.add(
+                    LiveMatchInfo(
+                        id = id,
+                        leagueName = leagueTitle,
+                        leagueSlug = leagueSlug,
+                        homeTeam = homeName,
+                        homeLogo = homeLogo,
+                        homeScore = homeScore,
+                        awayTeam = awayName,
+                        awayLogo = awayLogo,
+                        awayScore = awayScore,
+                        statusState = state,
+                        statusText = statusText,
+                        suggestedBroadcaster = broadcaster
+                    )
+                )
+            }
+        } catch (_: Exception) {}
+
+        // ترتيب: المباريات الجارية حالياً أولاً، ثم القادمة، ثم المنتهية
+        matches.sortedBy {
+            when (it.statusState) {
+                "in" -> 0
+                "pre" -> 1
+                else -> 2
+            }
+        }
+    }
+
+    private fun translateLeagueName(raw: String, slug: String, lang: String): String {
+        if (lang != "ar") return raw.ifBlank { slug.uppercase() }
+        val s = "${raw.lowercase()} ${slug.lowercase()}"
+        return when {
+            s.contains("uefa.champions") || s.contains("champions league") -> "دوري أبطال أوروبا"
+            s.contains("uefa.europa") || s.contains("europa league") -> "الدوري الأوروبي"
+            s.contains("eng.1") || s.contains("premier league") -> "الدوري الإنجليزي الممتاز"
+            s.contains("esp.1") || s.contains("laliga") -> "الدوري الإسباني"
+            s.contains("ita.1") || s.contains("serie a") -> "الدوري الإيطالي"
+            s.contains("ger.1") || s.contains("bundesliga") -> "الدوري الألماني"
+            s.contains("fra.1") || s.contains("ligue 1") -> "الدوري الفرنسي"
+            s.contains("ksa.1") || s.contains("saudi") -> "دوري روشن السعودي"
+            s.contains("afc.champions") -> "دوري أبطال آسيا"
+            s.contains("fifa.world") || s.contains("world cup") -> "تصفيات كأس العالم"
+            s.contains("uefa.nations") -> "دوري الأمم الأوروبية"
+            else -> raw.ifBlank { slug.uppercase() }
+        }
+    }
+
+    private fun detectBroadcasterHint(slug: String, raw: String, lang: String): String {
+        val s = "${slug.lowercase()} ${raw.lowercase()}"
+        return if (lang == "ar") {
+            when {
+                s.contains("ksa") || s.contains("saudi") -> "SSC Sports"
+                s.contains("ita.") || s.contains("serie a") -> "AD Sports / StarzPlay"
+                s.contains("esp.") || s.contains("eng.") || s.contains("uefa") || s.contains("fra.") || s.contains("ger.") || s.contains("afc") -> "beIN Sports"
+                else -> "beIN / SSC / الكأس"
+            }
+        } else {
+            when {
+                s.contains("eng.") -> "Sky Sports / TNT"
+                s.contains("esp.") -> "Movistar / ESPN"
+                s.contains("ita.") -> "DAZN / TNT"
+                s.contains("uefa") -> "TNT / Canal+ / beIN"
+                else -> "Sports Live"
+            }
+        }
+    }
+
     suspend fun detectServerCountryAndPing(hostUrl: String): Pair<String, Long> = withContext(Dispatchers.IO) {
         try {
             val cleanHost = Uri.parse(if (hostUrl.startsWith("http")) hostUrl else "http://$hostUrl").host ?: return@withContext Pair("🌐 غير معروف", 0L)
@@ -114,7 +273,6 @@ object ServersEngine {
         }
     }
 
-    // اختبار سرعة التحميل الحقيقية من السيرفر (Speed Test)
     suspend fun runSpeedTest(hostUrl: String): String = withContext(Dispatchers.IO) {
         try {
             val base = if (hostUrl.startsWith("http")) hostUrl.trimEnd('/') else "http://${hostUrl.trimEnd('/')}"
@@ -141,7 +299,6 @@ object ServersEngine {
         }
     }
 
-    // استخراج بيانات Xtream تلقائياً من رابط M3U
     fun parseXtreamFromUrl(rawUrl: String): Triple<String, String, String>? {
         return try {
             val uri = Uri.parse(rawUrl.trim())
@@ -156,7 +313,6 @@ object ServersEngine {
         }
     }
 
-    // إعادة توجيه رابط البث عبر السيرفر الأساسي وتطبيق صيغة TS/M3U8
     fun resolveStreamUrl(rawUrl: String, activeHost: String): String {
         var finalUrl = rawUrl
         if (sameHostProxy && activeHost.isNotBlank()) {
@@ -180,14 +336,13 @@ object ServersEngine {
         return finalUrl
     }
 
-    // جلب معلومات الاشتراك
     suspend fun getAccountInfo(host: String, user: String, pass: String): AccountInfo? = withContext(Dispatchers.IO) {
         try {
             val base = host.trimEnd('/')
             val infoObj = JSONObject(fetchJson("$base/player_api.php?username=$user&password=$pass")).getJSONObject("user_info")
             val expTimestamp = infoObj.optString("exp_date", "0").toLongOrNull() ?: 0L
             val expFormatted = if (expTimestamp > 0) {
-                java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.ENGLISH).format(java.util.Date(expTimestamp * 1000))
+                SimpleDateFormat("yyyy-MM-dd", Locale.ENGLISH).format(Date(expTimestamp * 1000))
             } else "غير محدود"
             AccountInfo(
                 status = infoObj.optString("status", "Active"),
@@ -200,29 +355,39 @@ object ServersEngine {
         }
     }
 
-    // التحقق من القنوات الفاصلة الوهمية مثل ##### BEIN #####
     fun isSeparatorChannel(name: String): Boolean {
         val cleaned = name.trim()
-        if (cleaned.isBlank()) return true
-        if (cleaned.startsWith("###") || cleaned.startsWith("---") || cleaned.startsWith("===") || cleaned.startsWith("***")) return true
-        val lettersAndDigits = cleaned.count { it.isLetterOrDigit() }
-        return lettersAndDigits < 2
+        if (cleaned.length < 2) return true
+        val c0 = cleaned[0]
+        if (c0 == '#' || c0 == '-' || c0 == '=' || c0 == '*') {
+            if (cleaned.startsWith("###") || cleaned.startsWith("---") || cleaned.startsWith("===") || cleaned.startsWith("***")) return true
+        }
+        var count = 0
+        for (ch in cleaned) {
+            if (ch.isLetterOrDigit()) {
+                count++
+                if (count >= 2) return false
+            }
+        }
+        return true
     }
 
-    // اكتشاف وسم الجودة تلقائياً وإضافته لاسم الباقة إذا كان السيرفر يخفيه
     fun enrichCategoryQualities(items: List<MediaItemModel>): List<MediaItemModel> {
         val byCat = items.groupBy { it.category }
-        val catLabelMap = mutableMapOf<String, String>()
+        val catLabelMap = HashMap<String, String>(byCat.size)
 
         for ((catName, chList) in byCat) {
             val upperCat = catName.uppercase()
-            val hasExplicitTag = listOf("4K", "UHD", "FHD", "1080", "HD", "720", "SD", "LOW", "MINI", "HEVC", "RAW").any { upperCat.contains(it) }
+            val hasExplicitTag = upperCat.contains("4K") || upperCat.contains("UHD") || upperCat.contains("FHD") ||
+                upperCat.contains("1080") || upperCat.contains("HD") || upperCat.contains("720") ||
+                upperCat.contains("SD") || upperCat.contains("LOW") || upperCat.contains("MINI") || upperCat.contains("HEVC")
             if (hasExplicitTag || chList.isEmpty()) {
                 catLabelMap[catName] = catName
             } else {
                 var c4k = 0; var cFhd = 0; var cHd = 0; var cSd = 0
-                for (ch in chList.take(25)) {
-                    val u = ch.name.uppercase()
+                val sampleSize = minOf(20, chList.size)
+                for (i in 0 until sampleSize) {
+                    val u = chList[i].name.uppercase()
                     when {
                         u.contains("4K") || u.contains("UHD") || u.contains("2160") -> c4k++
                         u.contains("FHD") || u.contains("1080") || u.contains("RAW") || u.contains("HEVC") -> cFhd++
@@ -243,9 +408,8 @@ object ServersEngine {
         return items.map { it.copy(category = catLabelMap[it.category] ?: it.category) }
     }
 
-    // جلب القنوات، الأفلام، أو المسلسلات مع فلترة الفواصل وتوضيح جودات الباقات
     suspend fun loadXtream(host: String, user: String, pass: String, type: String): List<MediaItemModel> = withContext(Dispatchers.IO) {
-        val list = mutableListOf<MediaItemModel>()
+        val list = ArrayList<MediaItemModel>()
         try {
             val base = host.trimEnd('/')
             val catAction = when (type) {
@@ -259,7 +423,7 @@ object ServersEngine {
                 else -> "get_live_streams"
             }
 
-            val catMap = mutableMapOf<String, String>()
+            val catMap = HashMap<String, String>()
             val catArr = JSONArray(fetchJson("$base/player_api.php?username=$user&password=$pass&action=$catAction"))
             for (i in 0 until catArr.length()) {
                 val c = catArr.getJSONObject(i)
@@ -289,7 +453,6 @@ object ServersEngine {
         if (type == "live") enrichCategoryQualities(list) else list
     }
 
-    // جلب المواسم والحلقات الكاملة لأي مسلسل (Series Seasons & Episodes)
     suspend fun getSeriesDetails(seriesPseudoUrl: String): SeriesDetails? = withContext(Dispatchers.IO) {
         try {
             val parts = seriesPseudoUrl.removePrefix("series://").split("|")
@@ -332,7 +495,6 @@ object ServersEngine {
         }
     }
 
-    // جلب دليل البرامج المباشر (Live EPG) لقناة معينة
     suspend fun getShortEpg(host: String, user: String, pass: String, streamId: String): EpgProgram? = withContext(Dispatchers.IO) {
         try {
             val base = host.trimEnd('/')
@@ -357,7 +519,6 @@ object ServersEngine {
         }
     }
 
-    // Stalker Portal
     suspend fun loadStalker(portalUrl: String, mac: String): List<MediaItemModel> = withContext(Dispatchers.IO) {
         val list = mutableListOf<MediaItemModel>()
         try {
@@ -382,16 +543,13 @@ object ServersEngine {
         list
     }
 
-    // تنظيف أسماء الأفلام والقنوات من الرموز المزعجة
     fun cleanMediaName(raw: String): String {
         return raw
-            .replace(Regex("^[#|*\\-\\[\\(=]+\\s*"), "")
-            .replace(Regex("\\s*[#|*\\-=]+$"), "")
-            .replace(Regex("^(AR|EN|FR|TR|KU|VIP|4K|FHD|HD|SD)\\s*[:|\\-]\\s*", RegexOption.IGNORE_CASE), "")
+            .trim('#', '|', '*', '-', '[', ']', '(', ')', '=', ' ')
+            .replace(PREFIX_CLEAN_REGEX, "")
             .trim()
     }
 
-    // اكتشاف لغة/تصنيف الفيلم أو المسلسل تلقائياً
     fun detectContentLanguage(item: MediaItemModel): String {
         val text = "${item.category} ${item.name}".lowercase()
         val hasArabicLetters = item.name.any { it in '\u0600'..'\u06FF' }
@@ -403,30 +561,32 @@ object ServersEngine {
         }
     }
 
-    // الترتيب الطبيعي للأرقام (Channel 1 قبل Channel 2 وقبل Channel 10)
     private fun naturalCompare(a: String, b: String): Int {
-        val regex = Regex("(\\d+|\\D+)")
-        val partsA = regex.findAll(a.lowercase()).map { it.value }.toList()
-        val partsB = regex.findAll(b.lowercase()).map { it.value }.toList()
+        val partsA = NATURAL_SPLIT_REGEX.findAll(a.lowercase()).map { it.value }.toList()
+        val partsB = NATURAL_SPLIT_REGEX.findAll(b.lowercase()).map { it.value }.toList()
         val len = minOf(partsA.size, partsB.size)
         for (i in 0 until len) {
             val pA = partsA[i]
             val pB = partsB[i]
             val numA = pA.toLongOrNull()
             val numB = pB.toLongOrNull()
-            val cmp = if (numA != null && numB != null) {
-                numA.compareTo(numB)
-            } else {
-                pA.compareTo(pB)
-            }
+            val cmp = if (numA != null && numB != null) numA.compareTo(numB) else pA.compareTo(pB)
             if (cmp != 0) return cmp
         }
         return partsA.size.compareTo(partsB.size)
     }
 
-    // محرك تجميع الجودات الموحد والترتيب النظيف لأي قائمة قنوات (مباشر + رياضة)
-    fun groupChannelsByQuality(channels: List<MediaItemModel>, markLiveEvents: Boolean = false): List<GroupedSportsChannel> {
-        val groupedMap = linkedMapOf<String, MutableList<QualityVariant>>()
+    private fun stripQualityWords(name: String): String {
+        return name
+            .replace(QUALITY_REGEX, "")
+            .replace(SYMBOLS_REGEX, " ")
+            .replace(SPACES_REGEX, " ")
+            .trim()
+            .ifBlank { name }
+    }
+
+    fun groupChannelsByQuality(channels: List<MediaItemModel>): List<GroupedSportsChannel> {
+        val groupedMap = LinkedHashMap<String, MutableList<QualityVariant>>()
 
         for (ch in channels) {
             if (isSeparatorChannel(ch.name)) continue
@@ -439,70 +599,70 @@ object ServersEngine {
                 else -> Pair("بث قياسي / احتياطي", 5)
             }
 
-            val baseName = ch.name
-                .replace(Regex("\\b(4K|UHD|FHD|1080P|720P|HD|SD|LOW|MINI|HEVC|H265|RAW|VIP|BACKUP|VEGA|MULTI|SOURCE|S1|S2)\\b", RegexOption.IGNORE_CASE), "")
-                .replace(Regex("[\\[\\]\\(\\)\\|\\-_:#*]+"), " ")
-                .replace(Regex("\\s+"), " ")
-                .trim()
-                .ifBlank { ch.name }
-
+            val baseName = stripQualityWords(ch.name)
             val key = baseName.lowercase()
-            val list = groupedMap.getOrPut(key) { mutableListOf() }
+            val list = groupedMap.getOrPut(key) { ArrayList(4) }
             list.add(QualityVariant(qTag, prio, "${ch.name} (${ch.category})", ch))
         }
 
         val result = groupedMap.values.map { variants ->
             val sorted = variants.sortedBy { it.priority }
-            val first = sorted.first().item
-            val displayBase = first.name
-                .replace(Regex("\\b(4K|UHD|FHD|1080P|720P|HD|SD|LOW|MINI|HEVC|H265|RAW|VIP|BACKUP|VEGA|MULTI|SOURCE|S1|S2)\\b", RegexOption.IGNORE_CASE), "")
-                .replace(Regex("[\\[\\]\\(\\)\\|\\-_:#*]+"), " ")
-                .replace(Regex("\\s+"), " ")
-                .trim()
-                .ifBlank { first.name }
-
-            val combinedText = "${first.category} ${first.name}".lowercase()
-            val isEvent = markLiveEvents && (
-                combinedText.contains(" vs ") || combinedText.contains(" x ") ||
-                combinedText.contains("event") || combinedText.contains("match") ||
-                combinedText.contains("مبار") || combinedText.contains("نقل") ||
-                combinedText.contains("ppv") || combinedText.contains("live event") ||
-                Regex("\\b\\d{1,2}:\\d{2}\\b").containsMatchIn(first.name)
-            )
+            val first = sorted[0].item
+            val displayBase = stripQualityWords(first.name)
+            val combined = "${first.category} ${first.name}".lowercase()
+            val isArab = combined.contains("ar") || combined.contains("arab") || combined.contains("bein") ||
+                combined.contains("ssc") || combined.contains("kass") || combined.contains("alrabiaa") ||
+                combined.contains("ad sport") || first.name.any { it in '\u0600'..'\u06FF' }
 
             GroupedSportsChannel(
                 cleanName = displayBase,
                 category = first.category,
                 logo = sorted.firstOrNull { it.item.logo.isNotBlank() }?.item?.logo ?: "",
                 variants = sorted,
-                isLiveEvent = isEvent
+                regionTag = if (isArab) "arab" else "global"
             )
         }
 
         return result.sortedWith { a, b -> naturalCompare(a.cleanName, b.cleanName) }
     }
 
-    // فلترة القنوات الرياضية الحقيقية فقط (استبعاد الأفلام والمسلسلات والترفيه)
+    // تصنيف القنوات الرياضية العربية والعالمية الكبرى بشكل نظيف دون قنوات عشوائية
     fun groupSportsChannels(allChannels: List<MediaItemModel>): List<GroupedSportsChannel> {
         val excludeKeywords = listOf(
             "movie", "series", "drama", "action", "cinema", "entertainment", "kids", "cartoon", "news", "doc", "music", "box office", "star ",
             "افلام", "أفلام", "مسلسل", "دراما", "سينما", "ترفيه", "اطفال", "أطفال", "كرتون", "اخبار", "أخبار", "وثائق"
         )
-        val sportsKeywords = listOf(
-            "sport", "bein sport", "ssc", "alkass", "kass", "ad sport", "abu dhabi sport", "alrabiaa", "sky sport", "dazn", "espn", "arena sport", "super sport", "tnt sport", "euro sport", "eurosport",
-            "رياض", "الكأس", "السعودية الرياضية", "أبو ظبي الرياضية", "الرابعة الرياضية", "مبار", "كأس", "دوري"
+        val majorSportsNetworks = listOf(
+            "bein sport", "bein", "ssc", "alkass", "kass", "ad sport", "abu dhabi sport", "alrabiaa", "dubai sport", "on time", "ontime",
+            "sky sport", "dazn", "tnt sport", "bt sport", "espn", "canal+ sport", "movistar", "eurosport", "arena sport", "super sport",
+            "بين سبورت", "بي ان", "الكأس", "الكاس", "السعودية الرياضية", "أبو ظبي الرياضية", "الرابعة", "دبي الرياضية", "اون تايم"
         )
 
         val sportsOnly = allChannels.filter { ch ->
             if (isSeparatorChannel(ch.name)) return@filter false
             val combined = "${ch.category} ${ch.name}".lowercase()
-            val isExcluded = excludeKeywords.any { combined.contains(it) }
-            val isSport = sportsKeywords.any { combined.contains(it) } ||
-                (combined.contains("bein") && !isExcluded)
-            !isExcluded && isSport
+            if (excludeKeywords.any { combined.contains(it) }) return@filter false
+            majorSportsNetworks.any { combined.contains(it) }
         }
 
-        return groupChannelsByQuality(sportsOnly, markLiveEvents = true)
+        val grouped = groupChannelsByQuality(sportsOnly)
+        return grouped.sortedWith { a, b ->
+            val rankA = when {
+                a.cleanName.contains("bein", true) -> 1
+                a.cleanName.contains("ssc", true) -> 2
+                a.cleanName.contains("kass", true) || a.cleanName.contains("الكأس") -> 3
+                a.regionTag == "arab" -> 4
+                else -> 5
+            }
+            val rankB = when {
+                b.cleanName.contains("bein", true) -> 1
+                b.cleanName.contains("ssc", true) -> 2
+                b.cleanName.contains("kass", true) || b.cleanName.contains("الكأس") -> 3
+                b.regionTag == "arab" -> 4
+                else -> 5
+            }
+            if (rankA != rankB) rankA.compareTo(rankB) else naturalCompare(a.cleanName, b.cleanName)
+        }
     }
 }
 // END_ENGINE
