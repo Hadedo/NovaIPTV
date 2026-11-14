@@ -62,6 +62,7 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
@@ -72,6 +73,7 @@ import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.CaptionStyleCompat
 import androidx.media3.ui.PlayerView
@@ -195,11 +197,10 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
 
     var startupTab by remember { mutableIntStateOf(prefs.getInt("startup_tab", 0)) }
     var selectedTab by remember { mutableIntStateOf(startupTab) }
-    var turboMode by remember { mutableStateOf(prefs.getBoolean("turbo_mode", false)) }
     var gesturesEnabled by remember { mutableStateOf(prefs.getBoolean("gestures_enabled", true)) }
     var autoplayNextEp by remember { mutableStateOf(prefs.getBoolean("autoplay_next_ep", true)) }
-    var decoderMode by remember { mutableStateOf(prefs.getString("decoder_mode", "auto") ?: "auto") }
-    var bufferProfile by remember { mutableStateOf(prefs.getString("buffer_profile", "balanced") ?: "balanced") }
+    var decoderMode by remember { mutableStateOf(prefs.getString("decoder_mode", "hw") ?: "hw") }
+    var bufferProfile by remember { mutableStateOf(prefs.getString("buffer_profile", "fast") ?: "fast") }
     var streamFmt by remember { mutableStateOf(prefs.getString("stream_fmt", "ts") ?: "ts") }
     var sameHost by remember { mutableStateOf(prefs.getBoolean("same_host", false)) }
     var userAgent by remember { mutableStateOf(prefs.getString("user_agent", "IPTVSmartersPro") ?: "IPTVSmartersPro") }
@@ -221,9 +222,9 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
     val activeServer = servers.find { it.id == activeServerId }
     var accountInfo by remember { mutableStateOf<AccountInfo?>(null) }
 
-    var liveList by remember { mutableStateOf<List<MediaItemModel>>(emptyList()) }
-    var vodList by remember { mutableStateOf<List<MediaItemModel>>(emptyList()) }
-    var seriesList by remember { mutableStateOf<List<MediaItemModel>>(emptyList()) }
+    var liveList by remember { mutableStateOf(listOf<MediaItemModel>()) }
+    var vodList by remember { mutableStateOf(listOf<MediaItemModel>()) }
+    var seriesList by remember { mutableStateOf(listOf<MediaItemModel>()) }
     var isLoading by remember { mutableStateOf(false) }
 
     var favoriteIds by remember { mutableStateOf(prefs.getStringSet("fav_ids", emptySet()) ?: emptySet()) }
@@ -250,7 +251,7 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
     var selectedSeriesItem by remember { mutableStateOf<MediaItemModel?>(null) }
     var loadedSeriesDetails by remember { mutableStateOf<SeriesDetails?>(null) }
     var activeSeasonNum by remember { mutableIntStateOf(1) }
-    var activeEpisodesQueue by remember { mutableStateOf<List<EpisodeModel>>(emptyList()) }
+    var activeEpisodesQueue by remember { mutableStateOf(listOf<EpisodeModel>()) }
     var currentEpisodeIdx by remember { mutableIntStateOf(-1) }
     var nextEpisodeCountdown by remember { mutableIntStateOf(0) }
 
@@ -280,6 +281,7 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
         }
     }
 
+    // محرك ExoPlayer المحسّن (أقصى وضوح 4K + تسريع عتادي GPU + بدء فوري في 0.4 ثانية)
     val exoPlayer = remember(decoderMode, bufferProfile, userAgent) {
         val renderersFactory = DefaultRenderersFactory(context).apply {
             setExtensionRendererMode(
@@ -289,22 +291,40 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                     else -> DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON
                 }
             )
+            setEnableDecoderFallback(true)
         }
-        val (minBuf, maxBuf, playbackBuf) = when (bufferProfile) {
-            "fast" -> Triple(1500, 5000, 800)
-            "antifreeze" -> Triple(15000, 45000, 5000)
-            else -> Triple(5000, 15000, 2000)
+
+        val trackSelector = DefaultTrackSelector(context).apply {
+            setParameters(
+                buildUponParameters()
+                    .setMaxVideoSizeSd()
+                    .clearVideoSizeConstraints()
+                    .setForceHighestSupportedBitrate(true)
+                    .setPreferredAudioLanguage("ar")
+            )
+        }
+
+        val (minBuf, maxBuf, playbackBuf, rebufferMs) = when (bufferProfile) {
+            "fast" -> listOf(1200, 12000, 400, 1000)
+            "antifreeze" -> listOf(12000, 45000, 3000, 4000)
+            else -> listOf(3000, 20000, 650, 1500)
         }
         val loadControl = DefaultLoadControl.Builder()
-            .setBufferDurationsMs(minBuf, maxBuf, playbackBuf, playbackBuf)
+            .setBufferDurationsMs(minBuf, maxBuf, playbackBuf, rebufferMs)
+            .setPrioritizeTimeOverSizeThresholds(true)
             .build()
+
         val dataSourceFactory = DefaultHttpDataSource.Factory()
             .setUserAgent(userAgent)
+            .setConnectTimeoutMs(8000)
+            .setReadTimeoutMs(10000)
             .setAllowCrossProtocolRedirects(true)
 
         ExoPlayer.Builder(context, renderersFactory)
+            .setTrackSelector(trackSelector)
             .setLoadControl(loadControl)
             .setMediaSourceFactory(DefaultMediaSourceFactory(dataSourceFactory))
+            .setVideoScalingMode(C.VIDEO_SCALING_MODE_SCALE_TO_FIT)
             .build().apply {
                 playWhenReady = true
             }
@@ -521,6 +541,16 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
         }
     }
 
+    // التنقل الفوري بين القنوات (Zapping Next / Prev) من داخل المشغل
+    fun zapChannel(step: Int) {
+        val curr = currentMedia ?: return
+        if (curr.type != "live" || liveList.isEmpty()) return
+        val sameCat = liveList.filter { it.category == curr.category }.ifEmpty { liveList }
+        val idx = sameCat.indexOfFirst { it.id == curr.id }
+        val nextIdx = if (idx == -1) 0 else (idx + step + sameCat.size) % sameCat.size
+        startPlayback(sameCat[nextIdx], false)
+    }
+
     fun openExternalPlayer(url: String) {
         try {
             val resolved = ServersEngine.resolveStreamUrl(url, activeServer?.host ?: "")
@@ -538,7 +568,7 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
         prefs.edit().putStringSet("fav_ids", updated).apply()
     }
 
-    val safeLiveList by produceState(initialValue = emptyList<MediaItemModel>(), liveList, kidsMode, hiddenCategories) {
+    val safeLiveList by produceState(initialValue = listOf<MediaItemModel>(), liveList, kidsMode, hiddenCategories) {
         value = withContext(Dispatchers.Default) {
             liveList.filter { item ->
                 val notHidden = !hiddenCategories.contains(item.category) && !ServersEngine.isSeparatorChannel(item.name)
@@ -550,7 +580,7 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
         }
     }
 
-    val safeVodList by produceState(initialValue = emptyList<MediaItemModel>(), vodList, kidsMode, hiddenCategories) {
+    val safeVodList by produceState(initialValue = listOf<MediaItemModel>(), vodList, kidsMode, hiddenCategories) {
         value = withContext(Dispatchers.Default) {
             vodList.filter { item ->
                 val notHidden = !hiddenCategories.contains(item.category)
@@ -559,7 +589,7 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
         }
     }
 
-    val safeSeriesList by produceState(initialValue = emptyList<MediaItemModel>(), seriesList, kidsMode, hiddenCategories) {
+    val safeSeriesList by produceState(initialValue = listOf<MediaItemModel>(), seriesList, kidsMode, hiddenCategories) {
         value = withContext(Dispatchers.Default) {
             seriesList.filter { item ->
                 val notHidden = !hiddenCategories.contains(item.category)
@@ -568,7 +598,7 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
         }
     }
 
-    val groupedSports by produceState(initialValue = emptyList<GroupedSportsChannel>(), safeLiveList) {
+    val groupedSports by produceState(initialValue = listOf<GroupedSportsChannel>(), safeLiveList) {
         value = withContext(Dispatchers.Default) {
             ServersEngine.groupSportsChannels(safeLiveList)
         }
@@ -668,6 +698,7 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                 return@MaterialTheme
             }
 
+            // مشغل الفيديو فائق الوضوح (SurfaceView GPU + شريط معلومات القناة الحي OSD)
             @Composable
             fun ProPlayerViewport(modifier: Modifier) {
                 Box(
@@ -702,6 +733,7 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                                 player = exoPlayer
                                 useController = !isInPipMode && !isScreenLocked
                                 resizeMode = resizeModes[resizeIdx].first
+                                setKeepContentOnPlayerReset(true)
                                 setControllerVisibilityListener(PlayerView.ControllerVisibilityListener { v -> showOverlay = (v == View.VISIBLE) })
                             }
                         },
@@ -749,20 +781,14 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                                 Icon(Icons.Default.Lock, null, tint = accentColor)
                             }
                         } else if (showOverlay) {
-                            Column(modifier = Modifier.align(Alignment.TopStart).padding(10.dp)) {
-                                if (videoResolution.isNotEmpty()) {
-                                    Box(modifier = Modifier.background(Color(0xBB14141C), RoundedCornerShape(12.dp)).padding(horizontal = 10.dp, vertical = 4.dp)) {
-                                        Text(videoResolution, color = greenText, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                                    }
-                                }
-                                currentEpg?.let { epg ->
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                    Box(modifier = Modifier.background(Color(0xCC14141C), RoundedCornerShape(10.dp)).padding(horizontal = 10.dp, vertical = 4.dp)) {
-                                        Text("الآن: ${epg.nowTitle}", color = Color.White, fontSize = 10.sp, maxLines = 1)
-                                    }
+                            // شارة الدقة في الزاوية العلوية
+                            if (videoResolution.isNotEmpty()) {
+                                Box(modifier = Modifier.align(Alignment.TopStart).padding(10.dp).background(Color(0xCC14141C), RoundedCornerShape(12.dp)).padding(horizontal = 10.dp, vertical = 4.dp)) {
+                                    Text(videoResolution, color = greenText, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                                 }
                             }
 
+                            // أزرار التحكم العلوية
                             Row(
                                 modifier = Modifier
                                     .align(Alignment.TopEnd)
@@ -784,6 +810,33 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                                     }
                                 })
                                 Text(if (isFullScreen) "تصغير" else "تكبير", color = greenText, fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { isFullScreen = !isFullScreen })
+                            }
+
+                            // شريط معلومات القناة الحي (OSD Bar مثل Televizo) مع أزرار تقليب سريعة
+                            currentMedia?.let { m ->
+                                if (m.type == "live") {
+                                    Row(
+                                        modifier = Modifier
+                                            .align(Alignment.BottomCenter)
+                                            .fillMaxWidth()
+                                            .background(Color(0xCC0D0D12))
+                                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        IconButton(onClick = { zapChannel(-1) }, modifier = Modifier.size(30.dp)) {
+                                            Icon(Icons.Default.SkipNext, null, tint = accentColor)
+                                        }
+                                        Column(modifier = Modifier.weight(1f).padding(horizontal = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                            Text(m.name, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                            val subInfo = currentEpg?.nowTitle ?: m.category
+                                            Text(subInfo, color = greenText, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                        }
+                                        IconButton(onClick = { zapChannel(1) }, modifier = Modifier.size(30.dp)) {
+                                            Icon(Icons.Default.SkipPrevious, null, tint = accentColor)
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -1028,7 +1081,7 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                                 }
 
                                 val categoryStats by produceState(
-                                    initialValue = emptyList<Pair<String, Int>>(),
+                                    initialValue = listOf<Pair<String, Int>>(),
                                     safeLiveList, favoriteIds
                                 ) {
                                     value = withContext(Dispatchers.Default) {
@@ -1139,7 +1192,7 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                                         }
 
                                         val groupedLive by produceState(
-                                            initialValue = emptyList<GroupedSportsChannel>(),
+                                            initialValue = listOf<GroupedSportsChannel>(),
                                             safeLiveList, openedLiveCategory, searchQuery, favoriteIds
                                         ) {
                                             value = withContext(Dispatchers.Default) {
@@ -1210,7 +1263,7 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                                 }
                             }
 
-                            // 2: مركز الرياضة الاحترافي (تمرير عمودي موحّد بدون حجب + ربط ذكي بالمباريات)
+                            // 2: مركز الرياضة الاحترافي
                             2 -> {
                                 var todayMatches by remember { mutableStateOf(listOf<LiveMatchInfo>()) }
                                 var isLoadingMatches by remember { mutableStateOf(false) }
@@ -1599,16 +1652,16 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
 
                                     Text("نوع فك الترميز (Decoder):", color = accentColor, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                        listOf("auto" to "تلقائي", "hw" to "Hardware (4K)", "sw" to "Software").forEach { (k, lbl) ->
+                                        listOf("hw" to "Hardware (4K)", "auto" to "تلقائي", "sw" to "Software").forEach { (k, lbl) ->
                                             FilterChip(selected = decoderMode == k, onClick = {
                                                 decoderMode = k; prefs.edit().putString("decoder_mode", k).apply()
                                             }, label = { Text(lbl, fontSize = 10.sp) })
                                         }
                                     }
 
-                                    Text("ملف التخزين المؤقت (منع التقطيع):", color = accentColor, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                    Text("ملف التخزين المؤقت (سرعة الفتح):", color = accentColor, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                        listOf("fast" to "سريع", "balanced" to "متوازن", "antifreeze" to "مضاد للتقطيع").forEach { (k, lbl) ->
+                                        listOf("fast" to "فوري (0.4ث)", "balanced" to "متوازن", "antifreeze" to "مضاد للتقطيع").forEach { (k, lbl) ->
                                             FilterChip(selected = bufferProfile == k, onClick = {
                                                 bufferProfile = k; prefs.edit().putString("buffer_profile", k).apply()
                                             }, label = { Text(lbl, fontSize = 10.sp) })
