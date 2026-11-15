@@ -273,7 +273,7 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
     var defaultPlayer by remember { mutableStateOf(prefs.getString("default_player", "internal") ?: "internal") }
     var decoderMode by remember { mutableStateOf(prefs.getString("decoder_mode", "hw") ?: "hw") }
     var bufferProfile by remember { mutableStateOf(prefs.getString("buffer_profile", "zerodelay") ?: "zerodelay") }
-    var streamFmt by remember { mutableStateOf(prefs.getString("stream_fmt", "raw") ?: "raw") }
+    var streamFmt by remember { mutableStateOf(prefs.getString("stream_fmt", "ts") ?: "ts") }
     var sameHost by remember { mutableStateOf(prefs.getBoolean("same_host", false)) }
     var userAgent by remember { mutableStateOf(prefs.getString("user_agent", "IPTVSmartersPro") ?: "IPTVSmartersPro") }
     var subFontSize by remember { mutableFloatStateOf(prefs.getFloat("sub_font_size", 18f)) }
@@ -370,7 +370,6 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
             setEnableDecoderFallback(true)
         }
 
-        // إعدادات البفر وتقليل تأخير المباريات المباشرة (Zero-Delay Catch-Up)
         val (minBuf, maxBuf, playbackBuf, rebufferMs) = when (bufferProfile) {
             "zerodelay" -> listOf(1000, 8000, 400, 800)
             "fast" -> listOf(1500, 12000, 500, 1000)
@@ -417,9 +416,16 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
             }
 
             override fun onPlayerError(error: PlaybackException) {
-                videoResolution = "إعادة ربط البث..."
-                exoPlayer.prepare()
-                exoPlayer.play()
+                val currUri = exoPlayer.currentMediaItem?.localConfiguration?.uri?.toString() ?: ""
+                if (currUri.endsWith(".ts", true)) {
+                    videoResolution = "تجربة مسار بديل..."
+                    exoPlayer.setMediaItem(MediaItem.fromUri(currUri.dropLast(3) + ".m3u8"))
+                    exoPlayer.prepare()
+                    exoPlayer.play()
+                } else {
+                    isBufferingState = false
+                    videoResolution = "القناة متوقفة من المصدر"
+                }
             }
 
             override fun onPlaybackStateChanged(playbackState: Int) {
@@ -482,6 +488,7 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
         val loadSeries = prefs.getBoolean("sync_series_${srv.id}", true)
 
         if (isSwitchingServer) {
+            exoPlayer.clearMediaItems()
             exoPlayer.stop()
             currentMedia = null
             accountInfo = null
@@ -626,7 +633,6 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
         currentEpg = null
         videoResolution = "جاري الربط..."
 
-        // تفعيل الالتصاق بحافة البث المباشر والتسريع الصامت لتقليل تأخير المباريات (Live Catch-Up)
         val mediaItemBuilder = MediaItem.Builder().setUri(resolvedUrl)
         if (item.type == "live" && bufferProfile == "zerodelay") {
             mediaItemBuilder.setLiveConfiguration(
@@ -809,7 +815,12 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                         subColorYellow = subColorYellow,
                         gesturesEnabled = gesturesEnabled,
                         onToggleFullScreen = { isFullScreen = !isFullScreen },
-                        onClosePlayer = { exoPlayer.stop(); currentMedia = null; isFullScreen = false },
+                        onClosePlayer = {
+                            exoPlayer.clearMediaItems()
+                            exoPlayer.stop()
+                            currentMedia = null
+                            isFullScreen = false
+                        },
                         onSelectChannel = { startPlayback(it, false) },
                         onZapChannel = { zapChannel(it) }
                     )
@@ -912,7 +923,11 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                             subColorYellow = subColorYellow,
                             gesturesEnabled = gesturesEnabled,
                             onToggleFullScreen = { isFullScreen = true },
-                            onClosePlayer = { exoPlayer.stop(); currentMedia = null },
+                            onClosePlayer = {
+                                exoPlayer.clearMediaItems()
+                                exoPlayer.stop()
+                                currentMedia = null
+                            },
                             onSelectChannel = { startPlayback(it, false) },
                             onZapChannel = { zapChannel(it) }
                         )
@@ -1202,7 +1217,6 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                                 }
                             }
 
-                            // 1: البث المباشر السريع
                             1 -> {
                                 var openedLiveCategory by remember { mutableStateOf<String?>(null) }
                                 val catsListState = rememberLazyListState()
@@ -1480,7 +1494,6 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                                 }
                             }
 
-                            // 2: مركز الرياضة الاحترافي مع المطابقة الصارمة للقنوات الناقلة
                             2 -> {
                                 var todayMatches by remember { mutableStateOf(listOf<LiveMatchInfo>()) }
                                 var isLoadingMatches by remember { mutableStateOf(false) }
@@ -1709,7 +1722,6 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                                 }
                             }
 
-                            // 3: السينما
                             3 -> {
                                 val baseCinema = if (cinemaSubTab == 0) safeVodList else safeSeriesList
                                 val langFilters = listOf("الكل", "عربي", "أجنبي مترجم", "كوري وآسيوي", "أنمي وكرتون")
@@ -1758,7 +1770,6 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                                 }
                             }
 
-                            // 4: الإعدادات
                             4 -> {
                                 AdvancedSettingsScreen(
                                     prefs = prefs,
