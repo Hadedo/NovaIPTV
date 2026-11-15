@@ -176,11 +176,16 @@ fun ProCinemaPlayerOverlay(
         }
     }
 
-    Column(modifier = Modifier.fillMaxSize().background(Color.Black)) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(if (isFullScreen || isInPipMode) Modifier.fillMaxSize() else Modifier.wrapContentHeight())
+            .background(Color.Black)
+    ) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .then(if (isFullScreen || isInPipMode) Modifier.fillMaxSize() else Modifier.height(210.dp))
+                .then(if (isFullScreen || isInPipMode) Modifier.fillMaxSize() else Modifier.height(195.dp))
                 .background(Color.Black)
                 .pointerInput(isFullScreen) {
                     detectTapGestures(
@@ -231,7 +236,7 @@ fun ProCinemaPlayerOverlay(
             )
 
             if (isBuffering && !isInPipMode) {
-                CircularProgressIndicator(color = accentColor, modifier = Modifier.align(Alignment.Center).size(38.dp))
+                CircularProgressIndicator(color = accentColor, modifier = Modifier.align(Alignment.Center).size(36.dp))
             }
 
             if (gestureText.isNotEmpty() && isFullScreen) {
@@ -575,7 +580,7 @@ fun ProCinemaPlayerOverlay(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(Color(0xFF0B0B11))
-                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                    .padding(horizontal = 10.dp, vertical = 5.dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 if (currentMedia.type == "live" && allLiveChannels.isNotEmpty()) {
@@ -700,9 +705,9 @@ private fun MiniDeckButton(icon: ImageVector, label: String, tint: Color, modifi
             .background(Color(0xFF14141E))
             .border(1.dp, Color(0x18FFFFFF), RoundedCornerShape(12.dp))
             .clickable(onClick = onClick)
-            .padding(vertical = 6.dp)
+            .padding(vertical = 5.dp)
     ) {
-        Icon(icon, null, tint = tint, modifier = Modifier.size(16.dp))
+        Icon(icon, null, tint = tint, modifier = Modifier.size(15.dp))
         Spacer(modifier = Modifier.height(2.dp))
         Text(label, color = Color.LightGray, fontSize = 9.sp, fontWeight = FontWeight.Bold, maxLines = 1)
     }
