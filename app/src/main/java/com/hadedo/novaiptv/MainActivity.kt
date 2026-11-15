@@ -34,6 +34,8 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
@@ -151,11 +153,11 @@ data class AppStrings(
 )
 
 fun getStrings(lang: String): AppStrings = when (lang) {
-    "en" -> AppStrings("Home", "Live TV", "Sports", "Cinema", "Settings", "Continue Watching", "Recently Watched", "My Folders", "Platforms", "Search channels, movies...", "All", "Movies", "Series", "Multi-Screen (4)", "Kids Mode", "Settings", "Add Connection", "Sync Now", "Seasons & Episodes", "Select Quality")
-    "fr" -> AppStrings("Accueil", "Direct", "Sports", "Cinéma", "Paramètres", "Reprendre", "Chaînes récentes", "Mes Dossiers", "Plateformes", "Rechercher...", "Tout", "Films", "Séries", "Multi-Écran (4)", "Mode Enfants", "Paramètres", "Ajouter", "Actualiser", "Saisons & Épisodes", "Choisir la qualité")
-    "tr" -> AppStrings("Ana Sayfa", "Canlı TV", "Spor", "Sinema", "Ayarlar", "İzlemeye Devam Et", "Son İzlenenler", "Klasörlerim", "Platformlar", "Ara...", "Tümü", "Filmler", "Diziler", "Çoklu Ekran (4)", "Çocuk Modu", "Ayarlar", "Bağlantı Ekle", "Yenile", "Sezonlar ve Bölümler", "Kalite Seçin")
-    "ku" -> AppStrings("سەرەکی", "ڕاستەوخۆ", "وەرزش", "سینەما", "ڕێکخستنەکان", "بەردەوامبە لە بینین", "دوایین کەناڵەکان", "فۆڵدەرەکانم", "پلاتفۆرمەکان", "گەڕان...", "هەموو", "فیلمەکان", "زنجیرەکان", "فرە شاشە (4)", "دۆخی منداڵان", "ڕێکخستنەکان", "زیادکردنی هەژمار", "نوێکردنەوە", "وەرز و ئەڵقەکان", "کوالێتی هەڵبژێرە")
-    else -> AppStrings("الرئيسية", "مباشر", "الرياضة", "السينما", "الإعدادات", "واصل المشاهدة", "شاهدته مؤخراً", "مجلداتي", "المنصات", "ابحث في القنوات والأفلام...", "الكل", "أفلام", "مسلسلات", "تعدد الشاشات (4)", "وضع الأطفال", "الإعدادات", "إضافة اشتراك", "تحديث القوائم", "المواسم والحلقات", "اختر جودة البث")
+    "en" -> AppStrings("Home", "Live TV", "Sports", "Cinema", "Settings", "Continue Watching", "Recently Watched", "My Folders", "Platforms", "Search channels or categories...", "All", "Movies", "Series", "Multi-Screen (4)", "Kids Mode", "Settings", "Add Connection", "Sync Now", "Seasons & Episodes", "Select Quality")
+    "fr" -> AppStrings("Accueil", "Direct", "Sports", "Cinéma", "Paramètres", "Reprendre", "Chaînes récentes", "Mes Dossiers", "Plateformes", "Rechercher une chaîne...", "Tout", "Films", "Séries", "Multi-Écran (4)", "Mode Enfants", "Paramètres", "Ajouter", "Actualiser", "Saisons & Épisodes", "Choisir la qualité")
+    "tr" -> AppStrings("Ana Sayfa", "Canlı TV", "Spor", "Sinema", "Ayarlar", "İzlemeye Devam Et", "Son İzlenenler", "Klasörlerim", "Platformlar", "Kanal veya kategori ara...", "Tümü", "Filmler", "Diziler", "Çoklu Ekran (4)", "Çocuk Modu", "Ayarlar", "Bağlantı Ekle", "Yenile", "Sezonlar ve Bölümler", "Kalite Seçin")
+    "ku" -> AppStrings("سەرەکی", "ڕاستەوخۆ", "وەرزش", "سینەما", "ڕێکخستنەکان", "بەردەوامبە لە بینین", "دوایین کەناڵەکان", "فۆڵدەرەکانم", "پلاتفۆرمەکان", "گەڕان لە کەناڵەکان...", "هەموو", "فیلمەکان", "زنجیرەکان", "فرە شاشە (4)", "دۆخی منداڵان", "ڕێکخستنەکان", "زیادکردنی هەژمار", "نوێکردنەوە", "وەرز و ئەڵقەکان", "کوالێتی هەڵبژێرە")
+    else -> AppStrings("الرئيسية", "مباشر", "الرياضة", "السينما", "الإعدادات", "واصل المشاهدة", "شاهدته مؤخراً", "مجلداتي", "المنصات", "ابحث عن قناة أو باقة...", "الكل", "أفلام", "مسلسلات", "تعدد الشاشات (4)", "وضع الأطفال", "الإعدادات", "إضافة اشتراك", "تحديث القوائم", "المواسم والحلقات", "اختر جودة البث")
 }
 
 @Composable
@@ -202,6 +204,30 @@ fun VeloxBrandWordmark(accentColor: Color) {
     }
 }
 
+@Composable
+private fun ChannelMonogramBadge(name: String, logoUrl: String, accentColor: Color, modifier: Modifier = Modifier) {
+    val initials = remember(name) {
+        name.trim().split(" ").filter { it.isNotBlank() }.take(2).joinToString("") { it.take(1).uppercase() }.ifBlank { "TV" }
+    }
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(10.dp))
+            .background(Color(0xFF161622))
+            .border(1.dp, Color(0x1AFFFFFF), RoundedCornerShape(10.dp)),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(initials, color = accentColor, fontWeight = FontWeight.ExtraBold, fontSize = 11.sp)
+        if (logoUrl.isNotBlank()) {
+            AsyncImage(
+                model = logoUrl,
+                contentDescription = name,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier.fillMaxSize().padding(3.dp)
+            )
+        }
+    }
+}
+
 @androidx.annotation.OptIn(UnstableApi::class)
 @kotlin.OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -241,6 +267,7 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
 
     var startupTab by remember { mutableIntStateOf(prefs.getInt("startup_tab", 0)) }
     var selectedTab by remember { mutableIntStateOf(startupTab) }
+    var liveGridMode by remember { mutableStateOf(prefs.getBoolean("live_grid_mode", false)) }
     var gesturesEnabled by remember { mutableStateOf(prefs.getBoolean("gestures_enabled", true)) }
     var autoplayNextEp by remember { mutableStateOf(prefs.getBoolean("autoplay_next_ep", true)) }
     var defaultPlayer by remember { mutableStateOf(prefs.getString("default_player", "internal") ?: "internal") }
@@ -444,11 +471,14 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
         }
     }
 
-    // دالة التبديل الفوري والنظيف بين الاشتراكات
+    // دالة التبديل الفوري مع دعم التحميل الانتقائي (Selective Sync)
     fun syncServerData(srv: SavedServer, forceRefresh: Boolean = false) {
         val isSwitchingServer = (activeServerId != srv.id)
         activeServerId = srv.id
         prefs.edit().putString("active_server_id", srv.id).apply()
+
+        val loadMovies = prefs.getBoolean("sync_vod_${srv.id}", true)
+        val loadSeries = prefs.getBoolean("sync_series_${srv.id}", true)
 
         if (isSwitchingServer) {
             exoPlayer.stop()
@@ -461,8 +491,8 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
 
         scope.launch {
             val cachedLive = if (!forceRefresh) AppStorage.loadMediaCache(context, srv.id, "live") else null
-            val cachedVod = if (!forceRefresh) AppStorage.loadMediaCache(context, srv.id, "vod") else null
-            val cachedSeries = if (!forceRefresh) AppStorage.loadMediaCache(context, srv.id, "series") else null
+            val cachedVod = if (!forceRefresh && loadMovies) AppStorage.loadMediaCache(context, srv.id, "vod") else null
+            val cachedSeries = if (!forceRefresh && loadSeries) AppStorage.loadMediaCache(context, srv.id, "series") else null
 
             if (cachedLive != null) {
                 liveList = withContext(Dispatchers.Default) { ServersEngine.enrichCategoryQualities(cachedLive) }
@@ -470,7 +500,10 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
             if (cachedVod != null) vodList = cachedVod
             if (cachedSeries != null) seriesList = cachedSeries
 
-            if (cachedLive == null || cachedVod == null || cachedSeries == null || forceRefresh) {
+            val needsVod = loadMovies && (cachedVod == null || forceRefresh)
+            val needsSeries = loadSeries && (cachedSeries == null || forceRefresh)
+
+            if (cachedLive == null || needsVod || needsSeries || forceRefresh) {
                 isLoading = (cachedLive == null)
                 val (country, ping) = ServersEngine.detectServerCountryAndPing(srv.host)
                 val updatedServers = servers.map { if (it.id == srv.id) it.copy(countryCode = country, pingMs = ping) else it }
@@ -479,22 +512,28 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
 
                 if (srv.type == "xtream") {
                     accountInfo = ServersEngine.getAccountInfo(srv.host, srv.user, srv.pass)
-                    val freshLive = ServersEngine.loadXtream(srv.host, srv.user, srv.pass, "live")
-                    if (freshLive.isNotEmpty()) {
-                        liveList = freshLive
-                        AppStorage.saveMediaCache(context, srv.id, "live", freshLive)
+                    if (cachedLive == null || forceRefresh) {
+                        val freshLive = ServersEngine.loadXtream(srv.host, srv.user, srv.pass, "live")
+                        if (freshLive.isNotEmpty()) {
+                            liveList = freshLive
+                            AppStorage.saveMediaCache(context, srv.id, "live", freshLive)
+                        }
                     }
                     isLoading = false
 
-                    val freshVod = ServersEngine.loadXtream(srv.host, srv.user, srv.pass, "vod")
-                    if (freshVod.isNotEmpty()) {
-                        vodList = freshVod
-                        AppStorage.saveMediaCache(context, srv.id, "vod", freshVod)
+                    if (needsVod) {
+                        val freshVod = ServersEngine.loadXtream(srv.host, srv.user, srv.pass, "vod")
+                        if (freshVod.isNotEmpty()) {
+                            vodList = freshVod
+                            AppStorage.saveMediaCache(context, srv.id, "vod", freshVod)
+                        }
                     }
-                    val freshSeries = ServersEngine.loadXtream(srv.host, srv.user, srv.pass, "series")
-                    if (freshSeries.isNotEmpty()) {
-                        seriesList = freshSeries
-                        AppStorage.saveMediaCache(context, srv.id, "series", freshSeries)
+                    if (needsSeries) {
+                        val freshSeries = ServersEngine.loadXtream(srv.host, srv.user, srv.pass, "series")
+                        if (freshSeries.isNotEmpty()) {
+                            seriesList = freshSeries
+                            AppStorage.saveMediaCache(context, srv.id, "series", freshSeries)
+                        }
                     }
                 } else if (srv.type == "stalker") {
                     val freshStalker = ServersEngine.loadStalker(srv.host, srv.user)
@@ -569,7 +608,6 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
 
         val resolvedUrl = ServersEngine.resolveStreamUrl(item.url, activeServer?.host ?: "")
 
-        // التوجيه التلقائي للمشغل الخارجي (MX Player / VLC) إذا تم اختياره
         if (defaultPlayer != "internal") {
             val launched = launchPreferredExternalPlayer(context, resolvedUrl, item.name, defaultPlayer, userAgent)
             if (launched) {
@@ -735,7 +773,7 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                 return@MaterialTheme
             }
 
-            // وضع ملء الشاشة أو النافذة العائمة (PiP) عبر المشغل السينمائي المتكامل
+            // وضع ملء الشاشة أو النافذة العائمة (PiP)
             val activePlayerItem = currentMedia
             if ((isInPipMode || isFullScreen) && activePlayerItem != null) {
                 Box(modifier = Modifier.fillMaxSize()) {
@@ -777,7 +815,7 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
             ) { padding ->
                 Column(modifier = Modifier.fillMaxSize().padding(padding).background(bgColor)) {
 
-                    // الشريط العلوي الفخم بشعار VELOX ULTRA ومبدّل الاشتراكات السريع
+                    // الشريط العلوي بشعار VELOX ULTRA ومبدّل الاشتراكات
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -788,7 +826,6 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                     ) {
                         VeloxBrandWordmark(accentColor = accentColor)
 
-                        // كبسولة الاشتراك النشط (تفتح لوحة التبديل السريع بلمسة)
                         Row(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(14.dp))
@@ -826,7 +863,7 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                                         showPinDialog = true
                                     } else {
                                         kidsMode = true
-                                        Toast.makeText(context, "تم تفعيل وضع الأطفال الآمن", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, "تم تفعيل وضع الأطفال", Toast.LENGTH_SHORT).show()
                                     }
                                 },
                                 modifier = Modifier.size(34.dp)
@@ -839,9 +876,9 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                         }
                     }
 
-                    // المشغل المصغر أعلى الشاشة (يفتح بملء الشاشة السينمائي بلمسة)
+                    // المشغل المصغر المعزول + شريط الأدوات السريع أسفله (Kepler Deck)
                     if (activePlayerItem != null) {
-                        Box(modifier = Modifier.fillMaxWidth().height(215.dp)) {
+                        Box(modifier = Modifier.fillMaxWidth().wrapContentHeight()) {
                             ProCinemaPlayerOverlay(
                                 exoPlayer = exoPlayer,
                                 trackSelector = trackSelector,
@@ -870,12 +907,12 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                 CircularProgressIndicator(color = accentColor)
-                                Text("جاري مزامنة قنوات ومكتبة ${activeServer?.title ?: "VELOX"}...", color = Color.LightGray, fontSize = 13.sp)
+                                Text("جاري مزامنة القنوات...", color = Color.LightGray, fontSize = 13.sp)
                             }
                         }
                     } else {
                         when (selectedTab) {
-                            // 0: الشاشة الرئيسية السينمائية الفخمة (VELOX Cinematic Home)
+                            // 0: الرئيسية
                             0 -> {
                                 val heroItems = remember(safeVodList, safeSeriesList, safeLiveList) {
                                     (safeVodList.filter { it.logo.isNotBlank() }.take(5) +
@@ -891,7 +928,6 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                                         .padding(12.dp),
                                     verticalArrangement = Arrangement.spacedBy(16.dp)
                                 ) {
-                                    // 1. البانر السينمائي الضخم (Hero Carousel)
                                     if (heroItems.isNotEmpty()) {
                                         val pagerState = rememberPagerState(pageCount = { heroItems.size })
                                         LaunchedEffect(heroItems.size) {
@@ -905,7 +941,7 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                                         Box(
                                             modifier = Modifier
                                                 .fillMaxWidth()
-                                                .height(250.dp)
+                                                .height(245.dp)
                                                 .clip(RoundedCornerShape(24.dp))
                                                 .border(1.dp, accentColor.copy(alpha = 0.45f), RoundedCornerShape(24.dp))
                                         ) {
@@ -938,7 +974,7 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                                                                     .padding(horizontal = 8.dp, vertical = 3.dp)
                                                             ) {
                                                                 Text(
-                                                                    if (item.type == "live") "🔴 بث مباشر" else "✨ حصري على VELOX",
+                                                                    if (item.type == "live") "🔴 بث مباشر" else "✨ مختار لك",
                                                                     color = Color.White,
                                                                     fontSize = 10.sp,
                                                                     fontWeight = FontWeight.ExtraBold
@@ -966,7 +1002,7 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                                                             ) {
                                                                 Icon(Icons.Default.PlayArrow, null, tint = Color.Black, modifier = Modifier.size(20.dp))
                                                                 Spacer(modifier = Modifier.width(4.dp))
-                                                                Text("تشغيل الآن", color = Color.Black, fontWeight = FontWeight.ExtraBold, fontSize = 12.sp)
+                                                                Text("شاهد الآن", color = Color.Black, fontWeight = FontWeight.ExtraBold, fontSize = 12.sp)
                                                             }
 
                                                             OutlinedButton(
@@ -979,7 +1015,7 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                                                                 val isF = favoriteIds.contains(item.id)
                                                                 Icon(if (isF) Icons.Default.Favorite else Icons.Default.Add, null, tint = if (isF) accentColor else Color.White, modifier = Modifier.size(16.dp))
                                                                 Spacer(modifier = Modifier.width(4.dp))
-                                                                Text("قائمتي", color = Color.White, fontSize = 12.sp)
+                                                                Text("المفضلة", color = Color.White, fontSize = 12.sp)
                                                             }
                                                         }
                                                     }
@@ -995,11 +1031,11 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                                         ) {
                                             Icon(Icons.Default.AddCircleOutline, null)
                                             Spacer(modifier = Modifier.width(8.dp))
-                                            Text("أضف اشتراكك الأول للبدء مع VELOX", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                                            Text(str.addConnection, fontWeight = FontWeight.Bold, fontSize = 15.sp)
                                         }
                                     }
 
-                                    // 2. شريط إحصائيات السيرفر السريع
+                                    // بطاقة الاشتراك السريعة (Kepler Style)
                                     if (activeServer != null) {
                                         Row(
                                             modifier = Modifier
@@ -1015,7 +1051,7 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                                             Column {
                                                 Text("${activeServer.countryCode} ${activeServer.title}", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                                                 Text(
-                                                    accountInfo?.let { "ينتهي في: ${it.expDate} • المتصلين: ${it.activeCons}/${it.maxCons}" }
+                                                    accountInfo?.let { "ينتهي في: ${it.expDate} • المتصلون: ${it.activeCons}/${it.maxCons}" }
                                                         ?: "⚡ استجابة السيرفر: ${activeServer.pingMs}ms",
                                                     color = greenText,
                                                     fontSize = 11.sp
@@ -1029,11 +1065,11 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                                         }
                                     }
 
-                                    // 3. رف مباريات اليوم المباشرة في الرئيسية
+                                    // أبرز مباريات اليوم
                                     if (homeMatches.isNotEmpty()) {
                                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                                            Text("⚽ أبرز مباريات اليوم", color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 15.sp)
-                                            Text("مركز الرياضة ›", color = accentColor, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { selectedTab = 2 })
+                                            Text("⚽ مباريات اليوم", color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 15.sp)
+                                            Text("عرض الكل ›", color = accentColor, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { selectedTab = 2 })
                                         }
                                         LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                                             items(homeMatches.take(8)) { m ->
@@ -1073,7 +1109,6 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                                         }
                                     }
 
-                                    // 4. المنصات العالمية
                                     Text(str.platforms, color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 15.sp)
                                     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                         val platforms = listOf("Netflix", "Shahid", "Prime Video", "Disney+", "HBO", "Apple TV")
@@ -1091,7 +1126,6 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                                         }
                                     }
 
-                                    // 5. واصل المشاهدة
                                     if (watchHistory.isNotEmpty()) {
                                         Text(str.continueWatching, color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 15.sp)
                                         LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -1121,7 +1155,6 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                                         }
                                     }
 
-                                    // 6. القنوات الأخيرة
                                     if (recentChannels.isNotEmpty()) {
                                         Text(str.recentChannels, color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 15.sp)
                                         LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -1131,7 +1164,7 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                                                     modifier = Modifier.width(95.dp).clip(RoundedCornerShape(14.dp)).background(cardColor).clickable { startPlayback(rCh) }.padding(8.dp)
                                                 ) {
                                                     Box(modifier = Modifier.fillMaxWidth().height(55.dp)) {
-                                                        AsyncImage(model = rCh.logo, contentDescription = rCh.name, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize())
+                                                        ChannelMonogramBadge(rCh.name, rCh.logo, accentColor, Modifier.fillMaxSize())
                                                         Icon(Icons.Default.Close, null, tint = Color.Gray, modifier = Modifier.align(Alignment.TopEnd).size(15.dp).clickable {
                                                             AppStorage.removeRecentChannel(context, rCh.url)
                                                             recentChannels = AppStorage.getRecentChannels(context)
@@ -1144,7 +1177,6 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                                         }
                                     }
 
-                                    // 7. مجلداتي الخاصة
                                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                                         Text(str.myFolders, color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 15.sp)
                                         Text("+ مجلد جديد", color = accentColor, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { showCreateFolderDialog = true })
@@ -1165,25 +1197,32 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                                 }
                             }
 
-                            // 1: البث المباشر (قائمة باقات عمودية سريعة مع عداد القنوات)
+                            // 1: البث المباشر (الفهرس الأبجدي A-Z + القائمة الأفقية المرقمة + الشبكة)
                             1 -> {
                                 var openedLiveCategory by remember { mutableStateOf<String?>(null) }
+                                val catsListState = rememberLazyListState()
 
                                 BackHandler(enabled = openedLiveCategory != null) {
                                     openedLiveCategory = null
                                     searchQuery = ""
                                 }
 
-                                val categoryStats by produceState(initialValue = listOf<Pair<String, Int>>(), safeLiveList, favoriteIds) {
+                                val categoryStats by produceState(initialValue = listOf<Pair<String, Int>>(), safeLiveList, favoriteIds, searchQuery) {
                                     value = withContext(Dispatchers.Default) {
                                         val counts = safeLiveList.groupingBy { it.category }.eachCount()
                                         val result = ArrayList<Pair<String, Int>>(counts.size + 2)
                                         result.add(str.all to safeLiveList.size)
                                         result.add("المفضلة" to safeLiveList.count { favoriteIds.contains(it.id) })
-                                        counts.forEach { (cat, count) -> result.add(cat to count) }
+                                        counts.forEach { (cat, count) ->
+                                            if (searchQuery.isBlank() || cat.contains(searchQuery, ignoreCase = true)) {
+                                                result.add(cat to count)
+                                            }
+                                        }
                                         result
                                     }
                                 }
+
+                                val alphabetLetters = remember { listOf("A", "B", "C", "D", "E", "F", "G", "H", "I", "K", "L", "M", "N", "O", "P", "R", "S", "T", "U", "V", "W") }
 
                                 Column(modifier = Modifier.fillMaxSize().padding(horizontal = 10.dp)) {
                                     OutlinedTextField(
@@ -1212,36 +1251,112 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                                     )
 
                                     if (openedLiveCategory == null && searchQuery.isBlank()) {
-                                        Text("الباقات (${categoryStats.size})", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp, modifier = Modifier.padding(vertical = 6.dp, horizontal = 4.dp))
-                                        LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp), contentPadding = PaddingValues(bottom = 12.dp), modifier = Modifier.fillMaxSize()) {
-                                            items(categoryStats, key = { it.first }) { (catName, count) ->
-                                                Row(
-                                                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(cardColor).clickable { openedLiveCategory = catName }.padding(horizontal = 14.dp, vertical = 14.dp),
-                                                    verticalAlignment = Alignment.CenterVertically,
-                                                    horizontalArrangement = Arrangement.SpaceBetween
-                                                ) {
-                                                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                                                        Icon(if (catName == "المفضلة") Icons.Default.Favorite else Icons.Default.LiveTv, null, tint = accentColor, modifier = Modifier.size(20.dp))
-                                                        Spacer(modifier = Modifier.width(12.dp))
-                                                        Text(catName, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                        Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp, horizontal = 4.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                                            Text("المجموعات (${categoryStats.size})", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                                            Text("A-Z فهرس سريع", color = accentColor, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                        }
+
+                                        Row(modifier = Modifier.fillMaxSize()) {
+                                            LazyColumn(
+                                                state = catsListState,
+                                                verticalArrangement = Arrangement.spacedBy(6.dp),
+                                                contentPadding = PaddingValues(bottom = 12.dp),
+                                                modifier = Modifier.weight(1f)
+                                            ) {
+                                                items(categoryStats, key = { it.first }) { (catName, count) ->
+                                                    Row(
+                                                        modifier = Modifier
+                                                            .fillMaxWidth()
+                                                            .clip(RoundedCornerShape(14.dp))
+                                                            .background(cardColor)
+                                                            .clickable { openedLiveCategory = catName }
+                                                            .padding(horizontal = 14.dp, vertical = 14.dp),
+                                                        verticalAlignment = Alignment.CenterVertically,
+                                                        horizontalArrangement = Arrangement.SpaceBetween
+                                                    ) {
+                                                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                                                            Icon(if (catName == "المفضلة") Icons.Default.Favorite else Icons.Default.LiveTv, null, tint = accentColor, modifier = Modifier.size(19.dp))
+                                                            Spacer(modifier = Modifier.width(12.dp))
+                                                            Text(catName, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                                        }
+                                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                                            Text("$count", color = Color.Gray, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                                                            Spacer(modifier = Modifier.width(6.dp))
+                                                            Icon(Icons.Default.KeyboardArrowLeft, null, tint = Color.Gray, modifier = Modifier.size(20.dp))
+                                                        }
                                                     }
-                                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                                        Text("$count", color = Color.Gray, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                                                        Spacer(modifier = Modifier.width(6.dp))
-                                                        Icon(Icons.Default.KeyboardArrowLeft, null, tint = Color.Gray, modifier = Modifier.size(20.dp))
-                                                    }
+                                                }
+                                            }
+
+                                            // شريط الفهرس الأبجدي الجانبي (Kepler A-Z Scrubber)
+                                            Column(
+                                                modifier = Modifier
+                                                    .padding(start = 4.dp)
+                                                    .fillMaxHeight()
+                                                    .verticalScroll(rememberScrollState()),
+                                                horizontalAlignment = Alignment.CenterHorizontally,
+                                                verticalArrangement = Arrangement.spacedBy(2.dp)
+                                            ) {
+                                                alphabetLetters.forEach { letter ->
+                                                    Text(
+                                                        letter,
+                                                        color = Color.Gray,
+                                                        fontSize = 9.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        modifier = Modifier
+                                                            .clickable {
+                                                                val targetIdx = categoryStats.indexOfFirst { it.first.uppercase().contains(letter) }
+                                                                if (targetIdx >= 0) {
+                                                                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                                                    scope.launch { catsListState.scrollToItem(targetIdx) }
+                                                                }
+                                                            }
+                                                            .padding(horizontal = 4.dp, vertical = 1.dp)
+                                                    )
                                                 }
                                             }
                                         }
                                     } else {
                                         Row(
-                                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).clip(RoundedCornerShape(12.dp)).background(cardColor).clickable { openedLiveCategory = null; searchQuery = "" }.padding(horizontal = 12.dp, vertical = 10.dp),
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(vertical = 4.dp)
+                                                .clip(RoundedCornerShape(12.dp))
+                                                .background(cardColor)
+                                                .padding(horizontal = 12.dp, vertical = 8.dp),
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
-                                            Icon(Icons.Default.ArrowForward, null, tint = accentColor, modifier = Modifier.size(20.dp))
-                                            Spacer(modifier = Modifier.width(8.dp))
-                                            Text(if (searchQuery.isNotBlank()) "نتائج البحث عن: $searchQuery" else (openedLiveCategory ?: ""), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp, modifier = Modifier.weight(1f))
-                                            Text("كل الباقات", color = accentColor, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                            Row(
+                                                modifier = Modifier.weight(1f).clickable { openedLiveCategory = null; searchQuery = "" },
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Icon(Icons.Default.ArrowForward, null, tint = accentColor, modifier = Modifier.size(20.dp))
+                                                Spacer(modifier = Modifier.width(8.dp))
+                                                Text(
+                                                    if (searchQuery.isNotBlank()) "نتائج البحث" else (openedLiveCategory ?: ""),
+                                                    color = Color.White,
+                                                    fontWeight = FontWeight.Bold,
+                                                    fontSize = 14.sp,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+                                            }
+
+                                            // زر تبديل العرض بين القائمة الأفقية المرقمة والشبكة
+                                            IconButton(
+                                                onClick = {
+                                                    liveGridMode = !liveGridMode
+                                                    prefs.edit().putBoolean("live_grid_mode", liveGridMode).apply()
+                                                },
+                                                modifier = Modifier.size(32.dp)
+                                            ) {
+                                                Icon(
+                                                    if (liveGridMode) Icons.Default.ViewList else Icons.Default.GridView,
+                                                    null,
+                                                    tint = accentColor,
+                                                    modifier = Modifier.size(20.dp)
+                                                )
+                                            }
                                         }
 
                                         val groupedLive by produceState(initialValue = listOf<GroupedSportsChannel>(), safeLiveList, openedLiveCategory, searchQuery, favoriteIds) {
@@ -1255,41 +1370,106 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                                                     }
                                                     matchCat && (searchQuery.isBlank() || item.name.contains(searchQuery, ignoreCase = true))
                                                 }
-                                                ServersEngine.groupChannelsByQuality(filtered.take(1000))
+                                                ServersEngine.groupChannelsByQuality(filtered.take(1200))
                                             }
                                         }
 
-                                        Spacer(modifier = Modifier.height(6.dp))
-                                        LazyVerticalGrid(columns = GridCells.Fixed(3), contentPadding = PaddingValues(bottom = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                            items(groupedLive) { grp ->
-                                                val primaryItem = grp.variants.first().item
-                                                val isFav = grp.variants.any { favoriteIds.contains(it.item.id) }
-                                                Column(
-                                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                                    modifier = Modifier
-                                                        .clip(RoundedCornerShape(14.dp))
-                                                        .background(cardColor)
-                                                        .border(1.dp, if (grp.variants.any { it.item.url == currentMedia?.url }) accentColor else Color(0x18FFFFFF), RoundedCornerShape(14.dp))
-                                                        .clickable {
-                                                            if (grp.variants.size == 1) startPlayback(primaryItem)
-                                                            else selectedQualityGroup = grp
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        if (liveGridMode) {
+                                            LazyVerticalGrid(
+                                                columns = GridCells.Fixed(3),
+                                                contentPadding = PaddingValues(bottom = 12.dp),
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                                            ) {
+                                                items(groupedLive) { grp ->
+                                                    val primaryItem = grp.variants.first().item
+                                                    val isFav = grp.variants.any { favoriteIds.contains(it.item.id) }
+                                                    Column(
+                                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                                        modifier = Modifier
+                                                            .clip(RoundedCornerShape(14.dp))
+                                                            .background(cardColor)
+                                                            .border(1.dp, if (grp.variants.any { it.item.url == currentMedia?.url }) accentColor else Color(0x18FFFFFF), RoundedCornerShape(14.dp))
+                                                            .clickable {
+                                                                if (grp.variants.size == 1) startPlayback(primaryItem)
+                                                                else selectedQualityGroup = grp
+                                                            }
+                                                            .padding(8.dp)
+                                                    ) {
+                                                        Box(modifier = Modifier.fillMaxWidth().height(54.dp)) {
+                                                            ChannelMonogramBadge(grp.cleanName, grp.logo, accentColor, Modifier.fillMaxSize())
+                                                            Icon(if (isFav) Icons.Default.Favorite else Icons.Default.FavoriteBorder, null, tint = if (isFav) accentColor else Color.Gray, modifier = Modifier.align(Alignment.TopEnd).size(17.dp).clickable { toggleFavorite(primaryItem.id) })
                                                         }
-                                                        .padding(8.dp)
-                                                ) {
-                                                    Box(modifier = Modifier.fillMaxWidth().height(58.dp)) {
-                                                        AsyncImage(model = grp.logo, contentDescription = grp.cleanName, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize())
-                                                        Icon(if (isFav) Icons.Default.Favorite else Icons.Default.FavoriteBorder, null, tint = if (isFav) accentColor else Color.Gray, modifier = Modifier.align(Alignment.TopEnd).size(17.dp).clickable { toggleFavorite(primaryItem.id) })
-                                                        Icon(Icons.Default.CreateNewFolder, null, tint = Color.Gray, modifier = Modifier.align(Alignment.TopStart).size(16.dp).clickable { folderTargetItem = primaryItem })
+                                                        Spacer(modifier = Modifier.height(4.dp))
+                                                        Text(grp.cleanName, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                                        if (grp.variants.size > 1) {
+                                                            Spacer(modifier = Modifier.height(2.dp))
+                                                            Box(modifier = Modifier.background(greenBadge, RoundedCornerShape(8.dp)).padding(horizontal = 6.dp, vertical = 1.dp)) {
+                                                                Text("${grp.variants.size} جودات", color = greenText, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                                                            }
+                                                        }
                                                     }
-                                                    Spacer(modifier = Modifier.height(4.dp))
-                                                    Text(grp.cleanName, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                                    Spacer(modifier = Modifier.height(3.dp))
-                                                    if (grp.variants.size > 1) {
-                                                        Box(modifier = Modifier.background(greenBadge, RoundedCornerShape(10.dp)).padding(horizontal = 6.dp, vertical = 2.dp)) {
-                                                            Text("${grp.variants.size} جودات", color = greenText, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                                                }
+                                            }
+                                        } else {
+                                            // القائمة الأفقية المرقّمة الفخمة (Kepler Numbered Rows)
+                                            LazyColumn(
+                                                contentPadding = PaddingValues(bottom = 12.dp),
+                                                verticalArrangement = Arrangement.spacedBy(6.dp),
+                                                modifier = Modifier.fillMaxSize()
+                                            ) {
+                                                itemsIndexed(groupedLive) { index, grp ->
+                                                    val primaryItem = grp.variants.first().item
+                                                    val isFav = grp.variants.any { favoriteIds.contains(it.item.id) }
+                                                    val isPlayingThis = grp.variants.any { it.item.url == currentMedia?.url }
+
+                                                    Row(
+                                                        modifier = Modifier
+                                                            .fillMaxWidth()
+                                                            .clip(RoundedCornerShape(14.dp))
+                                                            .background(if (isPlayingThis) accentColor.copy(alpha = 0.16f) else cardColor)
+                                                            .border(1.dp, if (isPlayingThis) accentColor else Color(0x14FFFFFF), RoundedCornerShape(14.dp))
+                                                            .clickable {
+                                                                if (grp.variants.size == 1) startPlayback(primaryItem)
+                                                                else selectedQualityGroup = grp
+                                                            }
+                                                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                                                        verticalAlignment = Alignment.CenterVertically,
+                                                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                                    ) {
+                                                        Text(
+                                                            String.format("%03d", index + 1),
+                                                            color = Color.Gray,
+                                                            fontSize = 11.sp,
+                                                            fontWeight = FontWeight.Bold
+                                                        )
+                                                        ChannelMonogramBadge(grp.cleanName, grp.logo, accentColor, Modifier.size(36.dp))
+                                                        Column(modifier = Modifier.weight(1f)) {
+                                                            Text(
+                                                                grp.cleanName,
+                                                                color = if (isPlayingThis) accentColor else Color.White,
+                                                                fontSize = 13.sp,
+                                                                fontWeight = FontWeight.Bold,
+                                                                maxLines = 1,
+                                                                overflow = TextOverflow.Ellipsis
+                                                            )
+                                                            if (grp.variants.size > 1) {
+                                                                Text("${grp.variants.size} جودات متوفرة", color = greenText, fontSize = 10.sp)
+                                                            }
                                                         }
-                                                    } else {
-                                                        Text(grp.variants.first().qualityTag.substringBefore(" "), color = Color.Gray, fontSize = 9.sp)
+                                                        Icon(
+                                                            Icons.Default.CreateNewFolder,
+                                                            null,
+                                                            tint = Color.Gray,
+                                                            modifier = Modifier.size(18.dp).clickable { folderTargetItem = primaryItem }
+                                                        )
+                                                        Icon(
+                                                            if (isFav) Icons.Default.Star else Icons.Default.StarBorder,
+                                                            null,
+                                                            tint = if (isFav) Color(0xFFFBBF24) else Color.Gray,
+                                                            modifier = Modifier.size(20.dp).clickable { toggleFavorite(primaryItem.id) }
+                                                        )
                                                     }
                                                 }
                                             }
@@ -1343,38 +1523,38 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
 
                                 LazyColumn(
                                     contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
-                                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp),
                                     modifier = Modifier.fillMaxSize()
                                 ) {
                                     item {
-                                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                             LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                                                 item {
                                                     FilterChip(
                                                         selected = liveOnlyFilter,
                                                         onClick = { liveOnlyFilter = !liveOnlyFilter },
-                                                        label = { Text("🔴 مباشر الآن ($liveMatchesCount)", fontSize = 11.sp, fontWeight = FontWeight.Bold) }
+                                                        label = { Text("🔴 مباشر ($liveMatchesCount)", fontSize = 11.sp, fontWeight = FontWeight.Bold) }
                                                     )
                                                 }
                                                 item {
                                                     FilterChip(
                                                         selected = sportsSubFilter == 0,
                                                         onClick = { sportsSubFilter = 0 },
-                                                        label = { Text("كل القنوات (${groupedSports.size})", fontSize = 11.sp, fontWeight = FontWeight.Bold) }
+                                                        label = { Text("الكل (${groupedSports.size})", fontSize = 11.sp, fontWeight = FontWeight.Bold) }
                                                     )
                                                 }
                                                 item {
                                                     FilterChip(
                                                         selected = sportsSubFilter == 1,
                                                         onClick = { sportsSubFilter = 1 },
-                                                        label = { Text("العربية (beIN / SSC)", fontSize = 11.sp, fontWeight = FontWeight.Bold) }
+                                                        label = { Text("القنوات العربية", fontSize = 11.sp, fontWeight = FontWeight.Bold) }
                                                     )
                                                 }
                                                 item {
                                                     FilterChip(
                                                         selected = sportsSubFilter == 2,
                                                         onClick = { sportsSubFilter = 2 },
-                                                        label = { Text("العالمية (Sky / DAZN)", fontSize = 11.sp, fontWeight = FontWeight.Bold) }
+                                                        label = { Text("القنوات العالمية", fontSize = 11.sp, fontWeight = FontWeight.Bold) }
                                                     )
                                                 }
                                             }
@@ -1382,7 +1562,7 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                                             OutlinedTextField(
                                                 value = searchQuery,
                                                 onValueChange = { searchQuery = it },
-                                                placeholder = { Text("ابحث عن فريق، بطولة، أو قناة (ريال، برشلونة، beIN)...", fontSize = 12.sp) },
+                                                placeholder = { Text("ابحث عن مباراة، بطولة، أو قناة...", fontSize = 12.sp) },
                                                 leadingIcon = { Icon(Icons.Default.SportsSoccer, null, tint = accentColor) },
                                                 trailingIcon = {
                                                     if (searchQuery.isNotEmpty()) {
@@ -1396,29 +1576,29 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                                         }
                                     }
 
+                                    // شريط القنوات الرياضية المدمج
                                     if (displaySports.isNotEmpty()) {
                                         item {
-                                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                                Text("القنوات الرياضية المباشرة (${displaySports.size})", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                                                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                                    items(displaySports) { grp ->
-                                                        Card(
-                                                            colors = CardDefaults.cardColors(containerColor = cardColor),
-                                                            border = BorderStroke(1.dp, accentColor.copy(alpha = 0.35f)),
-                                                            shape = RoundedCornerShape(16.dp),
-                                                            modifier = Modifier.width(135.dp).clickable {
+                                            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                items(displaySports) { grp ->
+                                                    Row(
+                                                        modifier = Modifier
+                                                            .clip(RoundedCornerShape(14.dp))
+                                                            .background(cardColor)
+                                                            .border(1.dp, accentColor.copy(alpha = 0.35f), RoundedCornerShape(14.dp))
+                                                            .clickable {
                                                                 if (grp.variants.size == 1) startPlayback(grp.variants[0].item)
                                                                 else selectedQualityGroup = grp
                                                             }
-                                                        ) {
-                                                            Column(modifier = Modifier.padding(10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                                                                AsyncImage(model = grp.logo, contentDescription = grp.cleanName, contentScale = ContentScale.Fit, modifier = Modifier.height(40.dp).fillMaxWidth())
-                                                                Spacer(modifier = Modifier.height(6.dp))
-                                                                Text(grp.cleanName, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                                                Spacer(modifier = Modifier.height(4.dp))
-                                                                Box(modifier = Modifier.background(greenBadge, RoundedCornerShape(12.dp)).padding(horizontal = 8.dp, vertical = 2.dp)) {
-                                                                    Text("${grp.variants.size} جودات", color = greenText, fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                                                                }
+                                                            .padding(horizontal = 10.dp, vertical = 8.dp),
+                                                        verticalAlignment = Alignment.CenterVertically,
+                                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                                    ) {
+                                                        ChannelMonogramBadge(grp.cleanName, grp.logo, accentColor, Modifier.size(30.dp))
+                                                        Column {
+                                                            Text(grp.cleanName, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 11.sp, maxLines = 1)
+                                                            if (grp.variants.size > 1) {
+                                                                Text("${grp.variants.size} جودات", color = greenText, fontSize = 9.sp, fontWeight = FontWeight.Bold)
                                                             }
                                                         }
                                                     }
@@ -1432,13 +1612,14 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                                     } else {
                                         groupedByLeague.forEach { (leagueTitle, leagueMatches) ->
                                             item(key = "league_$leagueTitle") {
+                                                val cleanLeague = if (leagueTitle.equals("REGULAR-SEASON", true)) "مباريات اليوم" else leagueTitle
                                                 Row(
                                                     modifier = Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 2.dp),
                                                     horizontalArrangement = Arrangement.SpaceBetween,
                                                     verticalAlignment = Alignment.CenterVertically
                                                 ) {
-                                                    Text("🏆 $leagueTitle", color = accentColor, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                                                    Text("${leagueMatches.size} مباريات", color = Color.Gray, fontSize = 11.sp)
+                                                    Text("🏆 $cleanLeague", color = accentColor, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                                    Text("${leagueMatches.size}", color = Color.Gray, fontSize = 11.sp)
                                                 }
                                             }
 
@@ -1496,7 +1677,7 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                                                                 fontWeight = FontWeight.Bold
                                                             )
                                                             Text(
-                                                                "📺 على ${match.suggestedBroadcaster}  •  التفاصيل والمشاهدة ›",
+                                                                "📺 ${match.suggestedBroadcaster}  •  شاهد البث ›",
                                                                 color = accentColor,
                                                                 fontSize = 10.sp,
                                                                 fontWeight = FontWeight.Bold
@@ -1533,7 +1714,7 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                                 }
                             }
 
-                            // 3: السينما المنظمة
+                            // 3: السينما
                             3 -> {
                                 val baseCinema = if (cinemaSubTab == 0) safeVodList else safeSeriesList
                                 val langFilters = listOf("الكل", "عربي", "أجنبي مترجم", "كوري وآسيوي", "أنمي وكرتون")
@@ -1561,7 +1742,7 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                                     OutlinedTextField(
                                         value = searchQuery,
                                         onValueChange = { searchQuery = it },
-                                        placeholder = { Text(str.searchHint, fontSize = 12.sp) },
+                                        placeholder = { Text("ابحث في الأفلام والمسلسلات...", fontSize = 12.sp) },
                                         leadingIcon = { Icon(Icons.Default.Search, null) },
                                         singleLine = true,
                                         shape = RoundedCornerShape(14.dp),
@@ -1582,7 +1763,7 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                                 }
                             }
 
-                            // 4: الإعدادات الاحترافية المقسّمة (AdvancedSettingsScreen)
+                            // 4: الإعدادات
                             4 -> {
                                 AdvancedSettingsScreen(
                                     prefs = prefs,
@@ -1642,7 +1823,7 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                 }
             }
 
-            // لوحة التبديل السريع الفخمة بين الاشتراكات (Quick Server Switcher Sheet)
+            // لوحة التبديل السريع بين الاشتراكات
             if (showServerSwitcherSheet) {
                 ModalBottomSheet(
                     onDismissRequest = { showServerSwitcherSheet = false },
@@ -1659,7 +1840,7 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("التبديل السريع بين الاشتراكات (${servers.size})", color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 16.sp)
+                            Text("الاشتراكات المحفوظة (${servers.size})", color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 16.sp)
                             Text(
                                 "+ إضافة جديد",
                                 color = accentColor,
@@ -1702,7 +1883,7 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                                     Spacer(modifier = Modifier.width(12.dp))
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(srv.title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                                        Text("${srv.countryCode} • ${srv.type.uppercase()} • ⚡ ${srv.pingMs}ms", color = if (isAct) greenText else Color.Gray, fontSize = 11.sp)
+                                        Text("${srv.countryCode} • ${srv.type.uppercase()} • ⚡ ${srv.pingMs}ms", color = if (isAct) greenText else Color.Gray, fontSize = 11.sp, maxLines = 1)
                                     }
                                     if (isAct) {
                                         Box(modifier = Modifier.background(greenBadge, RoundedCornerShape(8.dp)).padding(horizontal = 8.dp, vertical = 3.dp)) {
@@ -1749,7 +1930,7 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                 )
             }
 
-            // نافذة المواسم والحلقات الكاملة للمسلسلات
+            // نافذة المواسم والحلقات
             selectedSeriesItem?.let { sItem ->
                 AlertDialog(
                     onDismissRequest = { selectedSeriesItem = null },
@@ -1793,13 +1974,16 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                 )
             }
 
-            // نافذة إضافة / تعديل اشتراك
+            // نافذة إضافة / تعديل اشتراك مع خيارات التحميل الانتقائي (Kepler Selective Sync)
             if (showAddServerDialog) {
                 var titleIn by remember { mutableStateOf(editingServer?.title ?: "") }
                 var typeIn by remember { mutableStateOf(editingServer?.type ?: "xtream") }
                 var hostIn by remember { mutableStateOf(editingServer?.host ?: "") }
                 var userIn by remember { mutableStateOf(editingServer?.user ?: "") }
                 var passIn by remember { mutableStateOf(editingServer?.pass ?: "") }
+                val existingId = editingServer?.id ?: ""
+                var syncMoviesToggle by remember { mutableStateOf(if (existingId.isNotEmpty()) prefs.getBoolean("sync_vod_$existingId", true) else true) }
+                var syncSeriesToggle by remember { mutableStateOf(if (existingId.isNotEmpty()) prefs.getBoolean("sync_series_$existingId", true) else true) }
 
                 AlertDialog(
                     onDismissRequest = { showAddServerDialog = false },
@@ -1819,6 +2003,16 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                             }
                             if (typeIn == "xtream") {
                                 OutlinedTextField(value = passIn, onValueChange = { passIn = it }, label = { Text("كلمة المرور") }, singleLine = true)
+                                HorizontalDivider(color = Color(0x1FFFFFFF))
+                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                    Text("تحميل الأفلام", color = Color.White, fontSize = 13.sp)
+                                    Switch(checked = syncMoviesToggle, onCheckedChange = { syncMoviesToggle = it })
+                                }
+                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                    Text("تحميل المسلسلات", color = Color.White, fontSize = 13.sp)
+                                    Switch(checked = syncSeriesToggle, onCheckedChange = { syncSeriesToggle = it })
+                                }
+                                Text("عند الإيقاف يُحرر الكاش ويبقى البث المباشر فقط", color = Color.Gray, fontSize = 10.sp)
                             }
                         }
                     },
@@ -1829,27 +2023,35 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                             val fHost = extracted?.first ?: hostIn.trim()
                             val fUser = extracted?.second ?: userIn.trim()
                             val fPass = extracted?.third ?: passIn.trim()
-                            val fTitle = titleIn.ifBlank { Uri.parse(fHost).host ?: "اشتراك جديد" }
+                            val fTitle = titleIn.ifBlank { Uri.parse(fHost).host ?: "اشتراك" }
+                            val finalId = editingServer?.id ?: System.currentTimeMillis().toString()
 
-                            val newSrv = SavedServer(editingServer?.id ?: System.currentTimeMillis().toString(), fTitle, fType, fHost, fUser, fPass)
+                            prefs.edit()
+                                .putBoolean("sync_vod_$finalId", syncMoviesToggle)
+                                .putBoolean("sync_series_$finalId", syncSeriesToggle)
+                                .apply()
+
+                            if (!syncMoviesToggle) vodList = emptyList()
+                            if (!syncSeriesToggle) seriesList = emptyList()
+
+                            val newSrv = SavedServer(finalId, fTitle, fType, fHost, fUser, fPass)
                             val upd = if (editingServer == null) servers + newSrv else servers.map { if (it.id == newSrv.id) newSrv else it }
                             servers = upd; saveServersList(prefs, upd)
                             showAddServerDialog = false
                             syncServerData(newSrv, true)
-                        }) { Text("حفظ وتحديث") }
+                        }) { Text("حفظ التغييرات") }
                     },
                     dismissButton = { TextButton(onClick = { showAddServerDialog = false }) { Text("إلغاء", color = Color.Gray) } }
                 )
             }
 
-            // نافذة إنشاء مجلد شخصي
             if (showCreateFolderDialog) {
                 var folderName by remember { mutableStateOf("") }
                 AlertDialog(
                     onDismissRequest = { showCreateFolderDialog = false },
                     containerColor = cardColor,
                     title = { Text("إنشاء مجلد شخصي جديد", color = Color.White) },
-                    text = { OutlinedTextField(value = folderName, onValueChange = { folderName = it }, label = { Text("اسم المجلد (مثلاً: مبارياتي)") }, singleLine = true) },
+                    text = { OutlinedTextField(value = folderName, onValueChange = { folderName = it }, label = { Text("اسم المجلد") }, singleLine = true) },
                     confirmButton = {
                         Button(onClick = {
                             if (folderName.isNotBlank()) {
@@ -1862,7 +2064,6 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                 )
             }
 
-            // نافذة إضافة قناة إلى مجلد
             folderTargetItem?.let { target ->
                 AlertDialog(
                     onDismissRequest = { folderTargetItem = null },
@@ -1885,7 +2086,6 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                 )
             }
 
-            // نافذة إخفاء الباقات غير المرغوبة
             if (showCategoriesManager) {
                 val allCats = remember(liveList, vodList) { (liveList.map { it.category } + vodList.map { it.category }).distinct() }
                 AlertDialog(
@@ -1910,7 +2110,6 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                 )
             }
 
-            // نافذة النسخ الاحتياطي السريع
             if (showBackupDialog) {
                 var codeIn by remember { mutableStateOf("") }
                 AlertDialog(
@@ -1922,7 +2121,7 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                             Button(onClick = {
                                 val exported = AppStorage.exportBackupCode(context)
                                 clipboard.setText(AnnotatedString(exported))
-                                Toast.makeText(context, "تم نسخ كود النسخة الاحتياطية للحافظة!", Toast.LENGTH_LONG).show()
+                                Toast.makeText(context, "تم نسخ كود النسخة الاحتياطية", Toast.LENGTH_LONG).show()
                             }, modifier = Modifier.fillMaxWidth()) { Text("نسخ كود النسخة الاحتياطية") }
                             OutlinedTextField(value = codeIn, onValueChange = { codeIn = it }, label = { Text("الصق كود الاستعادة هنا") })
                         }
@@ -1932,7 +2131,7 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                             if (AppStorage.importBackupCode(context, codeIn)) {
                                 servers = loadSavedServers(prefs)
                                 customFolders = AppStorage.getCustomFolders(context)
-                                Toast.makeText(context, "تمت الاستعادة بنجاح!", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, "تمت الاستعادة بنجاح", Toast.LENGTH_SHORT).show()
                                 showBackupDialog = false
                             }
                         }) { Text("استعادة") }
@@ -1940,13 +2139,12 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                 )
             }
 
-            // نافذة الرمز السري للخروج من وضع الأطفال (PIN)
             if (showPinDialog) {
                 var pinInput by remember { mutableStateOf("") }
                 AlertDialog(
                     onDismissRequest = { showPinDialog = false },
                     containerColor = cardColor,
-                    title = { Text("أدخل الرمز السري (الافتراضي 0000)", color = Color.White, fontSize = 14.sp) },
+                    title = { Text("أدخل الرمز السري", color = Color.White, fontSize = 14.sp) },
                     text = { OutlinedTextField(value = pinInput, onValueChange = { pinInput = it }, label = { Text("PIN") }, singleLine = true) },
                     confirmButton = {
                         Button(onClick = {
