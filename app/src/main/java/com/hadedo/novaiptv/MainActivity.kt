@@ -22,6 +22,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -48,9 +49,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -154,14 +158,59 @@ fun getStrings(lang: String): AppStrings = when (lang) {
     else -> AppStrings("الرئيسية", "مباشر", "الرياضة", "السينما", "الإعدادات", "واصل المشاهدة", "شاهدته مؤخراً", "مجلداتي", "المنصات", "ابحث في القنوات والأفلام...", "الكل", "أفلام", "مسلسلات", "تعدد الشاشات (4)", "وضع الأطفال", "الإعدادات", "إضافة اشتراك", "تحديث القوائم", "المواسم والحلقات", "اختر جودة البث")
 }
 
+@Composable
+fun VeloxBrandWordmark(accentColor: Color) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+        Box(
+            modifier = Modifier
+                .size(28.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(Brush.linearGradient(listOf(Color(0xFF1E1B4B), Color(0xFF09090F))))
+                .border(1.dp, accentColor.copy(alpha = 0.65f), RoundedCornerShape(8.dp)),
+            contentAlignment = Alignment.Center
+        ) {
+            Canvas(modifier = Modifier.size(16.dp)) {
+                val w = size.width
+                val h = size.height
+                val vPath = Path().apply {
+                    moveTo(w * 0.1f, h * 0.15f)
+                    lineTo(w * 0.34f, h * 0.15f)
+                    lineTo(w * 0.5f, h * 0.68f)
+                    lineTo(w * 0.66f, h * 0.15f)
+                    lineTo(w * 0.9f, h * 0.15f)
+                    lineTo(w * 0.58f, h * 0.88f)
+                    lineTo(w * 0.42f, h * 0.88f)
+                    close()
+                }
+                drawPath(
+                    path = vPath,
+                    brush = Brush.linearGradient(listOf(Color(0xFF38BDF8), accentColor))
+                )
+            }
+        }
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text("VELOX", color = Color.White, fontWeight = FontWeight.Black, fontSize = 15.sp, letterSpacing = 1.sp)
+            Box(
+                modifier = Modifier
+                    .background(accentColor.copy(alpha = 0.22f), RoundedCornerShape(5.dp))
+                    .border(1.dp, accentColor.copy(alpha = 0.7f), RoundedCornerShape(5.dp))
+                    .padding(horizontal = 4.dp, vertical = 1.dp)
+            ) {
+                Text("ULTRA", color = Color(0xFF38BDF8), fontWeight = FontWeight.ExtraBold, fontSize = 8.sp)
+            }
+        }
+    }
+}
+
 @androidx.annotation.OptIn(UnstableApi::class)
-@kotlin.OptIn(ExperimentalFoundationApi::class)
+@kotlin.OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun NovaIptvUltimateApp(isInPipMode: Boolean) {
     val context = LocalContext.current
     val activity = context as? Activity
     val scope = rememberCoroutineScope()
     val clipboard = LocalClipboardManager.current
+    val haptics = LocalHapticFeedback.current
     val prefs = remember { context.getSharedPreferences("nova_neon_prefs", Context.MODE_PRIVATE) }
 
     var appLang by remember { mutableStateOf(prefs.getString("app_lang", "ar") ?: "ar") }
@@ -194,6 +243,7 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
     var selectedTab by remember { mutableIntStateOf(startupTab) }
     var gesturesEnabled by remember { mutableStateOf(prefs.getBoolean("gestures_enabled", true)) }
     var autoplayNextEp by remember { mutableStateOf(prefs.getBoolean("autoplay_next_ep", true)) }
+    var defaultPlayer by remember { mutableStateOf(prefs.getString("default_player", "internal") ?: "internal") }
     var decoderMode by remember { mutableStateOf(prefs.getString("decoder_mode", "hw") ?: "hw") }
     var bufferProfile by remember { mutableStateOf(prefs.getString("buffer_profile", "balanced") ?: "balanced") }
     var streamFmt by remember { mutableStateOf(prefs.getString("stream_fmt", "ts") ?: "ts") }
@@ -220,6 +270,7 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
     var liveList by remember { mutableStateOf(listOf<MediaItemModel>()) }
     var vodList by remember { mutableStateOf(listOf<MediaItemModel>()) }
     var seriesList by remember { mutableStateOf(listOf<MediaItemModel>()) }
+    var homeMatches by remember { mutableStateOf(listOf<LiveMatchInfo>()) }
     var isLoading by remember { mutableStateOf(false) }
 
     var favoriteIds by remember { mutableStateOf(prefs.getStringSet("fav_ids", emptySet()) ?: emptySet()) }
@@ -248,7 +299,7 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
     var activeAudioSlot by remember { mutableIntStateOf(0) }
     var pickingForSlot by remember { mutableIntStateOf(-1) }
 
-    var showAccountMenu by remember { mutableStateOf(false) }
+    var showServerSwitcherSheet by remember { mutableStateOf(false) }
     var showAddServerDialog by remember { mutableStateOf(false) }
     var editingServer by remember { mutableStateOf<SavedServer?>(null) }
     var showCreateFolderDialog by remember { mutableStateOf(false) }
@@ -393,9 +444,20 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
         }
     }
 
+    // دالة التبديل الفوري والنظيف بين الاشتراكات
     fun syncServerData(srv: SavedServer, forceRefresh: Boolean = false) {
+        val isSwitchingServer = (activeServerId != srv.id)
         activeServerId = srv.id
         prefs.edit().putString("active_server_id", srv.id).apply()
+
+        if (isSwitchingServer) {
+            exoPlayer.stop()
+            currentMedia = null
+            accountInfo = null
+            liveList = emptyList()
+            vodList = emptyList()
+            seriesList = emptyList()
+        }
 
         scope.launch {
             val cachedLive = if (!forceRefresh) AppStorage.loadMediaCache(context, srv.id, "live") else null
@@ -409,7 +471,7 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
             if (cachedSeries != null) seriesList = cachedSeries
 
             if (cachedLive == null || cachedVod == null || cachedSeries == null || forceRefresh) {
-                isLoading = cachedLive == null
+                isLoading = (cachedLive == null)
                 val (country, ping) = ServersEngine.detectServerCountryAndPing(srv.host)
                 val updatedServers = servers.map { if (it.id == srv.id) it.copy(countryCode = country, pingMs = ping) else it }
                 servers = updatedServers
@@ -458,6 +520,7 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
 
     LaunchedEffect(Unit) {
         activeServer?.let { syncServerData(it, false) }
+        homeMatches = ServersEngine.fetchTodayMatches(appLang)
     }
 
     LaunchedEffect(isFullScreen) {
@@ -504,10 +567,25 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
             return
         }
 
+        val resolvedUrl = ServersEngine.resolveStreamUrl(item.url, activeServer?.host ?: "")
+
+        // التوجيه التلقائي للمشغل الخارجي (MX Player / VLC) إذا تم اختياره
+        if (defaultPlayer != "internal") {
+            val launched = launchPreferredExternalPlayer(context, resolvedUrl, item.name, defaultPlayer, userAgent)
+            if (launched) {
+                if (item.type == "live") {
+                    AppStorage.addRecentChannel(context, item)
+                    recentChannels = AppStorage.getRecentChannels(context)
+                }
+                return
+            } else {
+                Toast.makeText(context, "المشغل المختار غير مثبت، تم التشغيل في VELOX الداخلي", Toast.LENGTH_SHORT).show()
+            }
+        }
+
         currentMedia = item
         currentEpg = null
         videoResolution = "جاري الربط..."
-        val resolvedUrl = ServersEngine.resolveStreamUrl(item.url, activeServer?.host ?: "")
         exoPlayer.setMediaItem(MediaItem.fromUri(resolvedUrl))
         exoPlayer.prepare()
         if (resumeFromSaved && item.type != "live") {
@@ -699,71 +777,64 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
             ) { padding ->
                 Column(modifier = Modifier.fillMaxSize().padding(padding).background(bgColor)) {
 
-                    // الشريط العلوي الموحد
+                    // الشريط العلوي الفخم بشعار VELOX ULTRA ومبدّل الاشتراكات السريع
                     Row(
-                        modifier = Modifier.fillMaxWidth().background(cardColor).padding(horizontal = 12.dp, vertical = 8.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(cardColor)
+                            .padding(horizontal = 12.dp, vertical = 9.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Box {
-                            Row(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(14.dp))
-                                    .background(bgColor)
-                                    .border(1.dp, accentColor.copy(alpha = 0.4f), RoundedCornerShape(14.dp))
-                                    .clickable { showAccountMenu = true }
-                                    .padding(horizontal = 12.dp, vertical = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(if (activeServer != null) greenText else Color.Red))
-                                Text(activeServer?.title ?: "اختر اشتراكاً", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                                Icon(Icons.Default.KeyboardArrowDown, null, tint = accentColor, modifier = Modifier.size(18.dp))
-                            }
+                        VeloxBrandWordmark(accentColor = accentColor)
 
-                            DropdownMenu(expanded = showAccountMenu, onDismissRequest = { showAccountMenu = false }) {
-                                servers.forEach { srv ->
-                                    DropdownMenuItem(
-                                        text = {
-                                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                                Text(srv.title, fontWeight = if (srv.id == activeServerId) FontWeight.Bold else FontWeight.Normal)
-                                                Spacer(modifier = Modifier.width(8.dp))
-                                                Text(srv.countryCode, fontSize = 11.sp)
-                                            }
-                                        },
-                                        onClick = { showAccountMenu = false; syncServerData(srv, false) }
-                                    )
+                        // كبسولة الاشتراك النشط (تفتح لوحة التبديل السريع بلمسة)
+                        Row(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(bgColor)
+                                .border(1.dp, accentColor.copy(alpha = 0.45f), RoundedCornerShape(14.dp))
+                                .clickable {
+                                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    showServerSwitcherSheet = true
                                 }
-                                HorizontalDivider()
-                                DropdownMenuItem(
-                                    text = { Text("+ ${str.addConnection}", color = accentColor, fontWeight = FontWeight.Bold) },
-                                    onClick = { showAccountMenu = false; editingServer = null; showAddServerDialog = true }
-                                )
-                            }
+                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Box(modifier = Modifier.size(7.dp).clip(CircleShape).background(if (activeServer != null) greenText else Color(0xFFF87171)))
+                            Text(
+                                activeServer?.title ?: "اختر اشتراكاً",
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 11.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.widthIn(max = 95.dp)
+                            )
+                            Icon(Icons.Default.SwapVert, null, tint = accentColor, modifier = Modifier.size(15.dp))
                         }
 
-                        Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
-                            if (pickingForSlot in 0..3) {
-                                Box(modifier = Modifier.background(accentColor, RoundedCornerShape(10.dp)).padding(horizontal = 8.dp, vertical = 4.dp)) {
-                                    Text("اختر لشاشة ${pickingForSlot + 1}", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                                }
+                        Row(horizontalArrangement = Arrangement.spacedBy(0.dp), verticalAlignment = Alignment.CenterVertically) {
+                            IconButton(onClick = { isMultiScreenMode = true }, modifier = Modifier.size(34.dp)) {
+                                Icon(Icons.Default.GridView, null, tint = accentColor, modifier = Modifier.size(19.dp))
                             }
-                            IconButton(onClick = { isMultiScreenMode = true }) {
-                                Icon(Icons.Default.GridView, null, tint = accentColor)
+                            IconButton(
+                                onClick = {
+                                    if (kidsMode) {
+                                        pinActionCallback = { kidsMode = false }
+                                        showPinDialog = true
+                                    } else {
+                                        kidsMode = true
+                                        Toast.makeText(context, "تم تفعيل وضع الأطفال الآمن", Toast.LENGTH_SHORT).show()
+                                    }
+                                },
+                                modifier = Modifier.size(34.dp)
+                            ) {
+                                Icon(Icons.Default.ChildCare, null, tint = if (kidsMode) greenText else Color.Gray, modifier = Modifier.size(19.dp))
                             }
-                            IconButton(onClick = {
-                                if (kidsMode) {
-                                    pinActionCallback = { kidsMode = false }
-                                    showPinDialog = true
-                                } else {
-                                    kidsMode = true
-                                    Toast.makeText(context, "تم تفعيل وضع الأطفال الآمن", Toast.LENGTH_SHORT).show()
-                                }
-                            }) {
-                                Icon(Icons.Default.ChildCare, null, tint = if (kidsMode) greenText else Color.Gray)
-                            }
-                            IconButton(onClick = { activeServer?.let { syncServerData(it, true) } }) {
-                                Icon(Icons.Default.Refresh, null, tint = Color.White)
+                            IconButton(onClick = { activeServer?.let { syncServerData(it, true) } }, modifier = Modifier.size(34.dp)) {
+                                Icon(Icons.Default.Refresh, null, tint = Color.White, modifier = Modifier.size(19.dp))
                             }
                         }
                     }
@@ -797,33 +868,47 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
 
                     if (isLoading) {
                         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            CircularProgressIndicator(color = accentColor)
+                            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                CircularProgressIndicator(color = accentColor)
+                                Text("جاري مزامنة قنوات ومكتبة ${activeServer?.title ?: "VELOX"}...", color = Color.LightGray, fontSize = 13.sp)
+                            }
                         }
                     } else {
                         when (selectedTab) {
-                            // 0: الشاشة الرئيسية السينمائية مع البانر المتحرك (Hero Carousel)
+                            // 0: الشاشة الرئيسية السينمائية الفخمة (VELOX Cinematic Home)
                             0 -> {
                                 val heroItems = remember(safeVodList, safeSeriesList, safeLiveList) {
-                                    val pool = (safeVodList.filter { it.logo.isNotBlank() }.take(4) +
-                                        safeSeriesList.filter { it.logo.isNotBlank() }.take(3)).ifEmpty {
-                                        safeLiveList.filter { it.logo.isNotBlank() }.take(5)
+                                    (safeVodList.filter { it.logo.isNotBlank() }.take(5) +
+                                        safeSeriesList.filter { it.logo.isNotBlank() }.take(4)).ifEmpty {
+                                        safeLiveList.filter { it.logo.isNotBlank() }.take(6)
                                     }
-                                    pool
                                 }
 
-                                Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                                    // البانر السينمائي المتحرك (StreamVault Hero Carousel)
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .verticalScroll(rememberScrollState())
+                                        .padding(12.dp),
+                                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                                ) {
+                                    // 1. البانر السينمائي الضخم (Hero Carousel)
                                     if (heroItems.isNotEmpty()) {
                                         val pagerState = rememberPagerState(pageCount = { heroItems.size })
                                         LaunchedEffect(heroItems.size) {
                                             while (heroItems.size > 1) {
-                                                delay(5000L)
+                                                delay(5500L)
                                                 val next = (pagerState.currentPage + 1) % heroItems.size
                                                 pagerState.animateScrollToPage(next)
                                             }
                                         }
 
-                                        Box(modifier = Modifier.fillMaxWidth().height(215.dp).clip(RoundedCornerShape(22.dp)).border(1.dp, accentColor.copy(alpha = 0.4f), RoundedCornerShape(22.dp))) {
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .height(250.dp)
+                                                .clip(RoundedCornerShape(24.dp))
+                                                .border(1.dp, accentColor.copy(alpha = 0.45f), RoundedCornerShape(24.dp))
+                                        ) {
                                             HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
                                                 val item = heroItems[page]
                                                 Box(modifier = Modifier.fillMaxSize().clickable { startPlayback(item) }) {
@@ -838,67 +923,158 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                                                             .fillMaxSize()
                                                             .background(
                                                                 Brush.verticalGradient(
-                                                                    colors = listOf(Color.Transparent, Color(0xBB09090E), Color(0xF206060A))
+                                                                    colors = listOf(Color(0x22000000), Color(0x9908080D), Color(0xF5050508))
                                                                 )
                                                             )
                                                     )
                                                     Column(
-                                                        modifier = Modifier.align(Alignment.BottomStart).padding(16.dp),
-                                                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                                                        modifier = Modifier.align(Alignment.BottomStart).padding(18.dp),
+                                                        verticalArrangement = Arrangement.spacedBy(8.dp)
                                                     ) {
-                                                        Box(
-                                                            modifier = Modifier
-                                                                .background(accentColor.copy(alpha = 0.25f), RoundedCornerShape(8.dp))
-                                                                .border(1.dp, accentColor, RoundedCornerShape(8.dp))
-                                                                .padding(horizontal = 8.dp, vertical = 2.dp)
-                                                        ) {
-                                                            Text(
-                                                                if (item.type == "live") "🔴 بث مباشر مميز" else "🎬 عرض سينمائي مختار",
-                                                                color = Color.White,
-                                                                fontSize = 10.sp,
-                                                                fontWeight = FontWeight.Bold
-                                                            )
+                                                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                                            Box(
+                                                                modifier = Modifier
+                                                                    .background(accentColor, RoundedCornerShape(8.dp))
+                                                                    .padding(horizontal = 8.dp, vertical = 3.dp)
+                                                            ) {
+                                                                Text(
+                                                                    if (item.type == "live") "🔴 بث مباشر" else "✨ حصري على VELOX",
+                                                                    color = Color.White,
+                                                                    fontSize = 10.sp,
+                                                                    fontWeight = FontWeight.ExtraBold
+                                                                )
+                                                            }
+                                                            Box(
+                                                                modifier = Modifier
+                                                                    .background(Color(0x9914141C), RoundedCornerShape(8.dp))
+                                                                    .border(1.dp, Color(0x33FFFFFF), RoundedCornerShape(8.dp))
+                                                                    .padding(horizontal = 8.dp, vertical = 3.dp)
+                                                            ) {
+                                                                Text("4K ULTRA", color = Color(0xFF38BDF8), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                                            }
                                                         }
-                                                        Text(item.name, color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 17.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+
+                                                        Text(item.name, color = Color.White, fontWeight = FontWeight.Black, fontSize = 19.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+
                                                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
                                                             Button(
                                                                 onClick = { startPlayback(item) },
-                                                                colors = ButtonDefaults.buttonColors(containerColor = accentColor),
+                                                                colors = ButtonDefaults.buttonColors(containerColor = Color.White),
                                                                 shape = RoundedCornerShape(12.dp),
-                                                                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
-                                                                modifier = Modifier.height(34.dp)
+                                                                contentPadding = PaddingValues(horizontal = 18.dp, vertical = 6.dp),
+                                                                modifier = Modifier.height(36.dp)
                                                             ) {
-                                                                Icon(Icons.Default.PlayArrow, null, tint = Color.White, modifier = Modifier.size(18.dp))
+                                                                Icon(Icons.Default.PlayArrow, null, tint = Color.Black, modifier = Modifier.size(20.dp))
                                                                 Spacer(modifier = Modifier.width(4.dp))
-                                                                Text("شاهد الآن", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                                                Text("تشغيل الآن", color = Color.Black, fontWeight = FontWeight.ExtraBold, fontSize = 12.sp)
                                                             }
-                                                            Text(item.category, color = Color.LightGray, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+
+                                                            OutlinedButton(
+                                                                onClick = { toggleFavorite(item.id) },
+                                                                border = BorderStroke(1.dp, Color(0x55FFFFFF)),
+                                                                shape = RoundedCornerShape(12.dp),
+                                                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                                                                modifier = Modifier.height(36.dp)
+                                                            ) {
+                                                                val isF = favoriteIds.contains(item.id)
+                                                                Icon(if (isF) Icons.Default.Favorite else Icons.Default.Add, null, tint = if (isF) accentColor else Color.White, modifier = Modifier.size(16.dp))
+                                                                Spacer(modifier = Modifier.width(4.dp))
+                                                                Text("قائمتي", color = Color.White, fontSize = 12.sp)
+                                                            }
                                                         }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    } else if (servers.isEmpty()) {
+                                        Button(
+                                            onClick = { editingServer = null; showAddServerDialog = true },
+                                            colors = ButtonDefaults.buttonColors(containerColor = accentColor),
+                                            modifier = Modifier.fillMaxWidth().height(56.dp),
+                                            shape = RoundedCornerShape(16.dp)
+                                        ) {
+                                            Icon(Icons.Default.AddCircleOutline, null)
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Text("أضف اشتراكك الأول للبدء مع VELOX", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                                        }
+                                    }
+
+                                    // 2. شريط إحصائيات السيرفر السريع
+                                    if (activeServer != null) {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clip(RoundedCornerShape(18.dp))
+                                                .background(cardColor)
+                                                .border(1.dp, Color(0x1FFFFFFF), RoundedCornerShape(18.dp))
+                                                .clickable { showServerSwitcherSheet = true }
+                                                .padding(14.dp),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Column {
+                                                Text("${activeServer.countryCode} ${activeServer.title}", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                                Text(
+                                                    accountInfo?.let { "ينتهي في: ${it.expDate} • المتصلين: ${it.activeCons}/${it.maxCons}" }
+                                                        ?: "⚡ استجابة السيرفر: ${activeServer.pingMs}ms",
+                                                    color = greenText,
+                                                    fontSize = 11.sp
+                                                )
+                                            }
+                                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                HomeStatPill("مباشر", "${safeLiveList.size}", accentColor) { selectedTab = 1 }
+                                                HomeStatPill("أفلام", "${safeVodList.size}", Color(0xFF38BDF8)) { cinemaSubTab = 0; selectedTab = 3 }
+                                                HomeStatPill("مسلسلات", "${safeSeriesList.size}", greenText) { cinemaSubTab = 1; selectedTab = 3 }
+                                            }
+                                        }
+                                    }
+
+                                    // 3. رف مباريات اليوم المباشرة في الرئيسية
+                                    if (homeMatches.isNotEmpty()) {
+                                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                            Text("⚽ أبرز مباريات اليوم", color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 15.sp)
+                                            Text("مركز الرياضة ›", color = accentColor, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { selectedTab = 2 })
+                                        }
+                                        LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                            items(homeMatches.take(8)) { m ->
+                                                val isLiveNow = m.statusState == "in"
+                                                Column(
+                                                    modifier = Modifier
+                                                        .width(210.dp)
+                                                        .clip(RoundedCornerShape(16.dp))
+                                                        .background(cardColor)
+                                                        .border(1.dp, if (isLiveNow) greenText.copy(alpha = 0.5f) else Color(0x1FFFFFFF), RoundedCornerShape(16.dp))
+                                                        .clickable { selectedTab = 2 }
+                                                        .padding(12.dp),
+                                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                                ) {
+                                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                                        Text(m.leagueName, color = accentColor, fontSize = 10.sp, fontWeight = FontWeight.Bold, maxLines = 1, modifier = Modifier.weight(1f))
+                                                        Text(m.statusText, color = if (isLiveNow) Color(0xFFF87171) else Color.Gray, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                                    }
+                                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                                                            AsyncImage(model = m.awayLogo, contentDescription = m.awayTeam, modifier = Modifier.size(22.dp))
+                                                            Spacer(modifier = Modifier.width(6.dp))
+                                                            Text(m.awayTeam, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                                        }
+                                                        Text(if (m.statusState == "pre") "VS" else "${m.awayScore}-${m.homeScore}", color = greenText, fontWeight = FontWeight.ExtraBold, fontSize = 12.sp)
+                                                    }
+                                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                                                            AsyncImage(model = m.homeLogo, contentDescription = m.homeTeam, modifier = Modifier.size(22.dp))
+                                                            Spacer(modifier = Modifier.width(6.dp))
+                                                            Text(m.homeTeam, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                                        }
+                                                        Text("📺 ${m.suggestedBroadcaster.substringBefore("/")}", color = Color.Gray, fontSize = 9.sp)
                                                     }
                                                 }
                                             }
                                         }
                                     }
 
-                                    if (accountInfo != null && activeServer != null) {
-                                        Card(colors = CardDefaults.cardColors(containerColor = cardColor), border = BorderStroke(1.dp, accentColor.copy(alpha = 0.35f)), shape = RoundedCornerShape(16.dp)) {
-                                            Row(modifier = Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                                                Column {
-                                                    Text("${activeServer.countryCode} • ⚡ ${activeServer.pingMs}ms", color = greenText, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                                                    Text("ينتهي في: ${accountInfo?.expDate}", color = Color.LightGray, fontSize = 12.sp)
-                                                }
-                                                Text("المتصلين: ${accountInfo?.activeCons}/${accountInfo?.maxCons}", color = accentColor, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                                            }
-                                        }
-                                    } else if (servers.isEmpty()) {
-                                        Button(onClick = { editingServer = null; showAddServerDialog = true }, colors = ButtonDefaults.buttonColors(containerColor = accentColor), modifier = Modifier.fillMaxWidth().height(52.dp), shape = RoundedCornerShape(14.dp)) {
-                                            Icon(Icons.Default.AddCircleOutline, null)
-                                            Spacer(modifier = Modifier.width(8.dp))
-                                            Text(str.addConnection, fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                                        }
-                                    }
-
-                                    Text(str.platforms, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                                    // 4. المنصات العالمية
+                                    Text(str.platforms, color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 15.sp)
                                     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                         val platforms = listOf("Netflix", "Shahid", "Prime Video", "Disney+", "HBO", "Apple TV")
                                         items(platforms) { plat ->
@@ -915,8 +1091,9 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                                         }
                                     }
 
+                                    // 5. واصل المشاهدة
                                     if (watchHistory.isNotEmpty()) {
-                                        Text(str.continueWatching, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                                        Text(str.continueWatching, color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 15.sp)
                                         LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                                             items(watchHistory) { prog ->
                                                 val ratio = (prog.positionMs.toFloat() / prog.durationMs.coerceAtLeast(1L).toFloat()).coerceIn(0.05f, 1f)
@@ -944,8 +1121,9 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                                         }
                                     }
 
+                                    // 6. القنوات الأخيرة
                                     if (recentChannels.isNotEmpty()) {
-                                        Text(str.recentChannels, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                                        Text(str.recentChannels, color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 15.sp)
                                         LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                                             items(recentChannels) { rCh ->
                                                 Column(
@@ -966,8 +1144,9 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                                         }
                                     }
 
+                                    // 7. مجلداتي الخاصة
                                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                                        Text(str.myFolders, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                                        Text(str.myFolders, color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 15.sp)
                                         Text("+ مجلد جديد", color = accentColor, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { showCreateFolderDialog = true })
                                     }
                                     LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -1119,7 +1298,7 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                                 }
                             }
 
-                            // 2: مركز الرياضة الاحترافي (مباريات مجمعة حسب البطولة + تفاصيل الملعب والإحصائيات + باقات beIN العربية)
+                            // 2: مركز الرياضة الاحترافي
                             2 -> {
                                 var todayMatches by remember { mutableStateOf(listOf<LiveMatchInfo>()) }
                                 var isLoadingMatches by remember { mutableStateOf(false) }
@@ -1410,6 +1589,7 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                                     servers = servers,
                                     activeServerId = activeServerId,
                                     activeServer = activeServer,
+                                    accountInfo = accountInfo,
                                     appLang = appLang,
                                     onAppLangChange = { langVal: String -> appLang = langVal; prefs.edit().putString("app_lang", langVal).apply() },
                                     accentIdx = accentIdx,
@@ -1420,6 +1600,8 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                                     onBgChange = { bgVal: Int -> bgIdx = bgVal; prefs.edit().putInt("bg_idx", bgVal).apply() },
                                     startupTab = startupTab,
                                     onStartupTabChange = { tabVal: Int -> startupTab = tabVal; prefs.edit().putInt("startup_tab", tabVal).apply() },
+                                    defaultPlayer = defaultPlayer,
+                                    onDefaultPlayerChange = { plVal: String -> defaultPlayer = plVal; prefs.edit().putString("default_player", plVal).apply() },
                                     decoderMode = decoderMode,
                                     onDecoderChange = { decVal: String -> decoderMode = decVal; prefs.edit().putString("decoder_mode", decVal).apply() },
                                     bufferProfile = bufferProfile,
@@ -1456,6 +1638,81 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                                 )
                             }
                         }
+                    }
+                }
+            }
+
+            // لوحة التبديل السريع الفخمة بين الاشتراكات (Quick Server Switcher Sheet)
+            if (showServerSwitcherSheet) {
+                ModalBottomSheet(
+                    onDismissRequest = { showServerSwitcherSheet = false },
+                    containerColor = cardColor
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("التبديل السريع بين الاشتراكات (${servers.size})", color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 16.sp)
+                            Text(
+                                "+ إضافة جديد",
+                                color = accentColor,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp,
+                                modifier = Modifier.clickable {
+                                    showServerSwitcherSheet = false
+                                    editingServer = null
+                                    showAddServerDialog = true
+                                }
+                            )
+                        }
+
+                        if (servers.isEmpty()) {
+                            Text("لا توجد اشتراكات مضافة حالياً.", color = Color.Gray, fontSize = 13.sp, modifier = Modifier.padding(vertical = 12.dp))
+                        } else {
+                            servers.forEach { srv ->
+                                val isAct = srv.id == activeServerId
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(16.dp))
+                                        .background(if (isAct) accentColor.copy(alpha = 0.16f) else bgColor)
+                                        .border(1.dp, if (isAct) accentColor else Color(0x1FFFFFFF), RoundedCornerShape(16.dp))
+                                        .clickable {
+                                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                            showServerSwitcherSheet = false
+                                            syncServerData(srv, false)
+                                            Toast.makeText(context, "تم التبديل إلى: ${srv.title}", Toast.LENGTH_SHORT).show()
+                                        }
+                                        .padding(14.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        if (isAct) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
+                                        null,
+                                        tint = if (isAct) greenText else Color.Gray,
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(srv.title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                                        Text("${srv.countryCode} • ${srv.type.uppercase()} • ⚡ ${srv.pingMs}ms", color = if (isAct) greenText else Color.Gray, fontSize = 11.sp)
+                                    }
+                                    if (isAct) {
+                                        Box(modifier = Modifier.background(greenBadge, RoundedCornerShape(8.dp)).padding(horizontal = 8.dp, vertical = 3.dp)) {
+                                            Text("نشط", color = greenText, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(18.dp))
                     }
                 }
             }
@@ -1704,6 +1961,21 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun HomeStatPill(label: String, count: String, color: Color, onClick: () -> Unit) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .clip(RoundedCornerShape(10.dp))
+            .background(color.copy(alpha = 0.14f))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 8.dp, vertical = 4.dp)
+    ) {
+        Text(count, color = color, fontWeight = FontWeight.ExtraBold, fontSize = 11.sp)
+        Text(label, color = Color.LightGray, fontSize = 9.sp)
     }
 }
 // END_MAIN
