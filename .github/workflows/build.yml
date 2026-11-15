@@ -1,4 +1,4 @@
-Name: Build NovaIPTV Release APK
+name: Build NovaIPTV Release APK
 
 on:
   push:
