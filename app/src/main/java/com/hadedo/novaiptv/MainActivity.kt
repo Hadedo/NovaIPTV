@@ -272,8 +272,8 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
     var autoplayNextEp by remember { mutableStateOf(prefs.getBoolean("autoplay_next_ep", true)) }
     var defaultPlayer by remember { mutableStateOf(prefs.getString("default_player", "internal") ?: "internal") }
     var decoderMode by remember { mutableStateOf(prefs.getString("decoder_mode", "hw") ?: "hw") }
-    var bufferProfile by remember { mutableStateOf(prefs.getString("buffer_profile", "balanced") ?: "balanced") }
-    var streamFmt by remember { mutableStateOf(prefs.getString("stream_fmt", "ts") ?: "ts") }
+    var bufferProfile by remember { mutableStateOf(prefs.getString("buffer_profile", "zerodelay") ?: "zerodelay") }
+    var streamFmt by remember { mutableStateOf(prefs.getString("stream_fmt", "raw") ?: "raw") }
     var sameHost by remember { mutableStateOf(prefs.getBoolean("same_host", false)) }
     var userAgent by remember { mutableStateOf(prefs.getString("user_agent", "IPTVSmartersPro") ?: "IPTVSmartersPro") }
     var subFontSize by remember { mutableFloatStateOf(prefs.getFloat("sub_font_size", 18f)) }
@@ -370,7 +370,9 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
             setEnableDecoderFallback(true)
         }
 
+        // إعدادات البفر وتقليل تأخير المباريات المباشرة (Zero-Delay Catch-Up)
         val (minBuf, maxBuf, playbackBuf, rebufferMs) = when (bufferProfile) {
+            "zerodelay" -> listOf(1000, 8000, 400, 800)
             "fast" -> listOf(1500, 12000, 500, 1000)
             "antifreeze" -> listOf(12000, 45000, 3000, 4000)
             else -> listOf(3500, 20000, 900, 1500)
@@ -471,7 +473,6 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
         }
     }
 
-    // دالة التبديل الفوري مع دعم التحميل الانتقائي (Selective Sync)
     fun syncServerData(srv: SavedServer, forceRefresh: Boolean = false) {
         val isSwitchingServer = (activeServerId != srv.id)
         activeServerId = srv.id
@@ -624,7 +625,22 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
         currentMedia = item
         currentEpg = null
         videoResolution = "جاري الربط..."
-        exoPlayer.setMediaItem(MediaItem.fromUri(resolvedUrl))
+
+        // تفعيل الالتصاق بحافة البث المباشر والتسريع الصامت لتقليل تأخير المباريات (Live Catch-Up)
+        val mediaItemBuilder = MediaItem.Builder().setUri(resolvedUrl)
+        if (item.type == "live" && bufferProfile == "zerodelay") {
+            mediaItemBuilder.setLiveConfiguration(
+                MediaItem.LiveConfiguration.Builder()
+                    .setTargetOffsetMs(1500L)
+                    .setMinOffsetMs(500L)
+                    .setMaxOffsetMs(4000L)
+                    .setMinPlaybackSpeed(0.98f)
+                    .setMaxPlaybackSpeed(1.04f)
+                    .build()
+            )
+        }
+
+        exoPlayer.setMediaItem(mediaItemBuilder.build())
         exoPlayer.prepare()
         if (resumeFromSaved && item.type != "live") {
             val savedPos = AppStorage.getSavedPositionForUrl(context, item.url)
@@ -773,7 +789,6 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                 return@MaterialTheme
             }
 
-            // وضع ملء الشاشة أو النافذة العائمة (PiP)
             val activePlayerItem = currentMedia
             if ((isInPipMode || isFullScreen) && activePlayerItem != null) {
                 Box(modifier = Modifier.fillMaxSize()) {
@@ -815,7 +830,6 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
             ) { padding ->
                 Column(modifier = Modifier.fillMaxSize().padding(padding).background(bgColor)) {
 
-                    // الشريط العلوي بشعار VELOX ULTRA ومبدّل الاشتراكات
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -876,43 +890,36 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                         }
                     }
 
-                    // المشغل المصغر المعزول + شريط الأدوات السريع أسفله (Kepler Deck)
-                    if (activePlayerItem != null) {
-                        Box(modifier = Modifier.fillMaxWidth().wrapContentHeight()) {
-                            ProCinemaPlayerOverlay(
-                                exoPlayer = exoPlayer,
-                                trackSelector = trackSelector,
-                                currentMedia = activePlayerItem,
-                                currentEpg = currentEpg,
-                                videoResolution = videoResolution,
-                                isPlaying = isPlayingState,
-                                isBuffering = isBufferingState,
-                                isFullScreen = false,
-                                isInPipMode = false,
-                                allLiveChannels = safeLiveList,
-                                activeHost = activeServer?.host ?: "",
-                                accentColor = accentColor,
-                                subFontSize = subFontSize,
-                                subColorYellow = subColorYellow,
-                                gesturesEnabled = gesturesEnabled,
-                                onToggleFullScreen = { isFullScreen = true },
-                                onClosePlayer = { exoPlayer.stop(); currentMedia = null },
-                                onSelectChannel = { startPlayback(it, false) },
-                                onZapChannel = { zapChannel(it) }
-                            )
-                        }
+                    if (isLoading) {
+                        LinearProgressIndicator(color = accentColor, modifier = Modifier.fillMaxWidth().height(2.dp))
                     }
 
-                    if (isLoading) {
-                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                CircularProgressIndicator(color = accentColor)
-                                Text("جاري مزامنة القنوات...", color = Color.LightGray, fontSize = 13.sp)
-                            }
-                        }
-                    } else {
+                    if (activePlayerItem != null) {
+                        ProCinemaPlayerOverlay(
+                            exoPlayer = exoPlayer,
+                            trackSelector = trackSelector,
+                            currentMedia = activePlayerItem,
+                            currentEpg = currentEpg,
+                            videoResolution = videoResolution,
+                            isPlaying = isPlayingState,
+                            isBuffering = isBufferingState,
+                            isFullScreen = false,
+                            isInPipMode = false,
+                            allLiveChannels = safeLiveList,
+                            activeHost = activeServer?.host ?: "",
+                            accentColor = accentColor,
+                            subFontSize = subFontSize,
+                            subColorYellow = subColorYellow,
+                            gesturesEnabled = gesturesEnabled,
+                            onToggleFullScreen = { isFullScreen = true },
+                            onClosePlayer = { exoPlayer.stop(); currentMedia = null },
+                            onSelectChannel = { startPlayback(it, false) },
+                            onZapChannel = { zapChannel(it) }
+                        )
+                    }
+
+                    Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
                         when (selectedTab) {
-                            // 0: الرئيسية
                             0 -> {
                                 val heroItems = remember(safeVodList, safeSeriesList, safeLiveList) {
                                     (safeVodList.filter { it.logo.isNotBlank() }.take(5) +
@@ -941,7 +948,7 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                                         Box(
                                             modifier = Modifier
                                                 .fillMaxWidth()
-                                                .height(245.dp)
+                                                .height(235.dp)
                                                 .clip(RoundedCornerShape(24.dp))
                                                 .border(1.dp, accentColor.copy(alpha = 0.45f), RoundedCornerShape(24.dp))
                                         ) {
@@ -990,7 +997,7 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                                                             }
                                                         }
 
-                                                        Text(item.name, color = Color.White, fontWeight = FontWeight.Black, fontSize = 19.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                                        Text(item.name, color = Color.White, fontWeight = FontWeight.Black, fontSize = 18.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
 
                                                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
                                                             Button(
@@ -1035,7 +1042,6 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                                         }
                                     }
 
-                                    // بطاقة الاشتراك السريعة (Kepler Style)
                                     if (activeServer != null) {
                                         Row(
                                             modifier = Modifier
@@ -1065,7 +1071,6 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                                         }
                                     }
 
-                                    // أبرز مباريات اليوم
                                     if (homeMatches.isNotEmpty()) {
                                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                                             Text("⚽ مباريات اليوم", color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 15.sp)
@@ -1197,7 +1202,7 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                                 }
                             }
 
-                            // 1: البث المباشر (الفهرس الأبجدي A-Z + القائمة الأفقية المرقمة + الشبكة)
+                            // 1: البث المباشر السريع
                             1 -> {
                                 var openedLiveCategory by remember { mutableStateOf<String?>(null) }
                                 val catsListState = rememberLazyListState()
@@ -1288,7 +1293,6 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                                                 }
                                             }
 
-                                            // شريط الفهرس الأبجدي الجانبي (Kepler A-Z Scrubber)
                                             Column(
                                                 modifier = Modifier
                                                     .padding(start = 4.dp)
@@ -1342,7 +1346,6 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                                                 )
                                             }
 
-                                            // زر تبديل العرض بين القائمة الأفقية المرقمة والشبكة
                                             IconButton(
                                                 onClick = {
                                                     liveGridMode = !liveGridMode
@@ -1370,7 +1373,7 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                                                     }
                                                     matchCat && (searchQuery.isBlank() || item.name.contains(searchQuery, ignoreCase = true))
                                                 }
-                                                ServersEngine.groupChannelsByQuality(filtered.take(1200))
+                                                ServersEngine.groupChannelsByQuality(filtered.take(500))
                                             }
                                         }
 
@@ -1413,7 +1416,6 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                                                 }
                                             }
                                         } else {
-                                            // القائمة الأفقية المرقّمة الفخمة (Kepler Numbered Rows)
                                             LazyColumn(
                                                 contentPadding = PaddingValues(bottom = 12.dp),
                                                 verticalArrangement = Arrangement.spacedBy(6.dp),
@@ -1478,7 +1480,7 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                                 }
                             }
 
-                            // 2: مركز الرياضة الاحترافي
+                            // 2: مركز الرياضة الاحترافي مع المطابقة الصارمة للقنوات الناقلة
                             2 -> {
                                 var todayMatches by remember { mutableStateOf(listOf<LiveMatchInfo>()) }
                                 var isLoadingMatches by remember { mutableStateOf(false) }
@@ -1576,7 +1578,6 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                                         }
                                     }
 
-                                    // شريط القنوات الرياضية المدمج
                                     if (displaySports.isNotEmpty()) {
                                         item {
                                             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1612,13 +1613,12 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                                     } else {
                                         groupedByLeague.forEach { (leagueTitle, leagueMatches) ->
                                             item(key = "league_$leagueTitle") {
-                                                val cleanLeague = if (leagueTitle.equals("REGULAR-SEASON", true)) "مباريات اليوم" else leagueTitle
                                                 Row(
                                                     modifier = Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 2.dp),
                                                     horizontalArrangement = Arrangement.SpaceBetween,
                                                     verticalAlignment = Alignment.CenterVertically
                                                 ) {
-                                                    Text("🏆 $cleanLeague", color = accentColor, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                                    Text("🏆 $leagueTitle", color = accentColor, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                                                     Text("${leagueMatches.size}", color = Color.Gray, fontSize = 11.sp)
                                                 }
                                             }
@@ -1677,7 +1677,7 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                                                                 fontWeight = FontWeight.Bold
                                                             )
                                                             Text(
-                                                                "📺 ${match.suggestedBroadcaster}  •  شاهد البث ›",
+                                                                "📺 ${match.suggestedBroadcaster}  •  القناة الناقلة ›",
                                                                 color = accentColor,
                                                                 fontSize = 10.sp,
                                                                 fontWeight = FontWeight.Bold
@@ -1691,13 +1691,8 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                                 }
 
                                 selectedMatchSheet?.let { m ->
-                                    val matchingChannels = remember(m, groupedSports) {
-                                        val keywords = m.suggestedBroadcaster.split("/").map { it.trim().lowercase() }.filter { it.isNotBlank() }
-                                        val matched = groupedSports.filter { grp ->
-                                            val n = grp.cleanName.lowercase()
-                                            keywords.any { kw -> n.contains(kw) }
-                                        }
-                                        matched.ifEmpty { groupedSports }.take(20)
+                                    val matchingChannels = remember(m, groupedSports, liveEpgMap) {
+                                        ServersEngine.findExactChannelsForMatch(m, groupedSports, liveEpgMap)
                                     }
 
                                     NovaMatchCenterBottomSheet(
@@ -1823,7 +1818,6 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                 }
             }
 
-            // لوحة التبديل السريع بين الاشتراكات
             if (showServerSwitcherSheet) {
                 ModalBottomSheet(
                     onDismissRequest = { showServerSwitcherSheet = false },
@@ -1898,7 +1892,6 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                 }
             }
 
-            // نافذة اختيار جودة القناة
             selectedQualityGroup?.let { grp ->
                 AlertDialog(
                     onDismissRequest = { selectedQualityGroup = null },
@@ -1930,7 +1923,6 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                 )
             }
 
-            // نافذة المواسم والحلقات
             selectedSeriesItem?.let { sItem ->
                 AlertDialog(
                     onDismissRequest = { selectedSeriesItem = null },
@@ -1974,7 +1966,6 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                 )
             }
 
-            // نافذة إضافة / تعديل اشتراك مع خيارات التحميل الانتقائي (Kepler Selective Sync)
             if (showAddServerDialog) {
                 var titleIn by remember { mutableStateOf(editingServer?.title ?: "") }
                 var typeIn by remember { mutableStateOf(editingServer?.type ?: "xtream") }
