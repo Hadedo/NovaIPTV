@@ -130,11 +130,16 @@ fun AdvancedSettingsScreen(
         else -> "Hardware 4K"
     }
     val bufferLabel = when (bufferProfile) {
+        "zerodelay" -> "وضع المباريات (أقل تأخير)"
         "fast" -> "تبديل فوري"
         "antifreeze" -> "مضاد التقطيع"
         else -> "متوازن"
     }
-    val fmtLabel = if (streamFmt == "m3u8") "HLS / M3U8" else "MPEG-TS"
+    val fmtLabel = when (streamFmt) {
+        "ts" -> "MPEG-TS"
+        "m3u8" -> "HLS / M3U8"
+        else -> "TS Plus / تلقائي"
+    }
     val startupLabel = when (startupTab) {
         1 -> "البث المباشر"
         2 -> "مركز الرياضة"
@@ -198,7 +203,6 @@ fun AdvancedSettingsScreen(
 
             when (page) {
                 0 -> {
-                    // بطاقة الاشتراك النشط بتصميم معدني داكن
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -238,7 +242,8 @@ fun AdvancedSettingsScreen(
                                             else "اضغط لإضافة اشتراكك الأول",
                                             color = greenText,
                                             fontSize = 11.sp,
-                                            fontWeight = FontWeight.SemiBold
+                                            fontWeight = FontWeight.SemiBold,
+                                            maxLines = 1
                                         )
                                     }
                                 }
@@ -285,8 +290,8 @@ fun AdvancedSettingsScreen(
                             icon = Icons.Default.PlayCircleFilled,
                             iconTint = Color(0xFF4ADE80),
                             title = "محرك المشغل والبث",
-                            subtitle = "اختيار المشغل، فك الترميز، ذاكرة البفر، وصيغة البث",
-                            badgeText = playerLabel,
+                            subtitle = "وضع تقليل تأخير المباريات، صيغة TS Plus، والمشغل الافتراضي",
+                            badgeText = bufferLabel.take(12),
                             onClick = { haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove); currentSubPage = 2 }
                         )
                         HorizontalDivider(color = Color(0x14FFFFFF), modifier = Modifier.padding(horizontal = 14.dp))
@@ -319,7 +324,6 @@ fun AdvancedSettingsScreen(
                     }
                 }
 
-                // 1: الاشتراكات والسيرفرات
                 1 -> {
                     Button(
                         onClick = { haptics.performHapticFeedback(HapticFeedbackType.LongPress); onAddServerClick() },
@@ -365,7 +369,7 @@ fun AdvancedSettingsScreen(
                                     Spacer(modifier = Modifier.width(12.dp))
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(srv.title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                        Text("${srv.countryCode} • ${srv.type.uppercase()} • ⚡ ${srv.pingMs}ms", color = if (isAct) greenText else subTextColor, fontSize = 11.sp)
+                                        Text("${srv.countryCode} • ${srv.type.uppercase()} • ⚡ ${srv.pingMs}ms", color = if (isAct) greenText else subTextColor, fontSize = 11.sp, maxLines = 1)
                                     }
                                     IconButton(onClick = { onEditServerClick(srv) }) {
                                         Icon(Icons.Default.Edit, null, tint = Color.LightGray, modifier = Modifier.size(19.dp))
@@ -398,9 +402,26 @@ fun AdvancedSettingsScreen(
                     }
                 }
 
-                // 2: محرك المشغل والبث (بنوافذ سفلية منزلقة)
                 2 -> {
                     GlassSettingsGroup(cardColor = cardColor) {
+                        SettingsPortalRow(
+                            icon = Icons.Default.Speed,
+                            iconTint = greenText,
+                            title = "وضع تقليل تأخير المباريات والبفر",
+                            subtitle = "تقليص فرق التوقيت مع الستلايت واللحاق بالبث المباشر",
+                            badgeText = bufferLabel,
+                            onClick = { activeSheetType = "buffer" }
+                        )
+                        HorizontalDivider(color = Color(0x14FFFFFF), modifier = Modifier.padding(horizontal = 14.dp))
+                        SettingsPortalRow(
+                            icon = Icons.Default.Stream,
+                            iconTint = Color(0xFFFBBF24),
+                            title = "صيغة روابط البث المباشر",
+                            subtitle = "تشغيل روابط TS Plus بدون امتداد أو MPEG-TS أو HLS",
+                            badgeText = fmtLabel,
+                            onClick = { activeSheetType = "fmt" }
+                        )
+                        HorizontalDivider(color = Color(0x14FFFFFF), modifier = Modifier.padding(horizontal = 14.dp))
                         SettingsPortalRow(
                             icon = Icons.Default.SmartDisplay,
                             iconTint = accentColor,
@@ -413,28 +434,10 @@ fun AdvancedSettingsScreen(
                         SettingsPortalRow(
                             icon = Icons.Default.Memory,
                             iconTint = Color(0xFF38BDF8),
-                            title = "معالج فك الترميز",
-                            subtitle = "تسريع الرسوميات Hardware أو المعالجة البرمجية",
+                            title = "معالج فك الترميز ونقاوة الصورة",
+                            subtitle = "تسريع الرسوميات Hardware 4K لأعلى وضوح ونعومة",
                             badgeText = decoderLabel,
                             onClick = { activeSheetType = "decoder" }
-                        )
-                        HorizontalDivider(color = Color(0x14FFFFFF), modifier = Modifier.padding(horizontal = 14.dp))
-                        SettingsPortalRow(
-                            icon = Icons.Default.Speed,
-                            iconTint = greenText,
-                            title = "ذاكرة التخزين المؤقت",
-                            subtitle = "موازنة سرعة فتح القنوات مع استقرار البث",
-                            badgeText = bufferLabel,
-                            onClick = { activeSheetType = "buffer" }
-                        )
-                        HorizontalDivider(color = Color(0x14FFFFFF), modifier = Modifier.padding(horizontal = 14.dp))
-                        SettingsPortalRow(
-                            icon = Icons.Default.Stream,
-                            iconTint = Color(0xFFFBBF24),
-                            title = "صيغة البث المباشر",
-                            subtitle = "اختيار حاوية البث الافتراضية للسيرفر",
-                            badgeText = fmtLabel,
-                            onClick = { activeSheetType = "fmt" }
                         )
                     }
 
@@ -447,7 +450,6 @@ fun AdvancedSettingsScreen(
                     }
                 }
 
-                // 3: الترجمة ومؤقت النوم
                 3 -> {
                     GlassSettingsGroup(cardColor = cardColor) {
                         Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -476,7 +478,6 @@ fun AdvancedSettingsScreen(
                     }
                 }
 
-                // 4: المظهر والواجهة واللغة (بنوافذ سفلية منزلقة)
                 4 -> {
                     GlassSettingsGroup(cardColor = cardColor) {
                         SettingsPortalRow(
@@ -517,7 +518,6 @@ fun AdvancedSettingsScreen(
                     }
                 }
 
-                // 5: الحماية والنسخ الاحتياطي والنظام
                 5 -> {
                     GlassSettingsGroup(cardColor = cardColor) {
                         SettingsPortalRow(
@@ -574,7 +574,6 @@ fun AdvancedSettingsScreen(
         }
     }
 
-    // النوافذ السفلية المنزلقة الفخمة (ModalBottomSheet) لجميع الخيارات
     if (activeSheetType.isNotEmpty()) {
         val (sheetTitle, choices, selectedKey) = when (activeSheetType) {
             "lang" -> Triple(
@@ -599,17 +598,18 @@ fun AdvancedSettingsScreen(
                 defaultPlayer
             )
             "decoder" -> Triple(
-                "معالج فك الترميز",
+                "معالج فك الترميز ونقاوة الصورة",
                 listOf(
-                    SheetChoice("hw", "Hardware 4K", "يستخدم معالج الرسوميات لأعلى سلاسة وأقل استهلاك بطارية"),
+                    SheetChoice("hw", "Hardware 4K (الأعلى نقاوة)", "يمرر الفيديو مباشرة عبر معالج الرسوميات GPU بأعلى جودة"),
                     SheetChoice("auto", "تلقائي", "يبدل تلقائياً حسب صيغة القناة"),
                     SheetChoice("sw", "Software", "معالجة برمجية للصيغ النادرة")
                 ),
                 decoderMode
             )
             "buffer" -> Triple(
-                "ذاكرة التخزين المؤقت",
+                "وضع البفر وتقليل تأخير المباريات",
                 listOf(
+                    SheetChoice("zerodelay", "وضع المباريات المباشرة (أقل تأخير)", "يقلل البفر إلى 400ms ويسرّع البث تلقائياً للحاق بالستلايت"),
                     SheetChoice("fast", "تبديل فوري", "فتح القنوات خلال أجزاء من الثانية للإنترنت السريع"),
                     SheetChoice("balanced", "متوازن", "توازن مثالي بين السرعة والاستقرار"),
                     SheetChoice("antifreeze", "مضاد التقطيع", "تخزين مسبق أكبر لمنع التوقف في الشبكات الضعيفة")
@@ -617,10 +617,11 @@ fun AdvancedSettingsScreen(
                 bufferProfile
             )
             "fmt" -> Triple(
-                "صيغة البث المباشر",
+                "صيغة روابط البث المباشر",
                 listOf(
-                    SheetChoice("ts", "MPEG-TS", "الصيغة القياسية الأسرع للبث المباشر"),
-                    SheetChoice("m3u8", "HLS / M3U8", "بث تكيفي مناسب للشبكات المتقلبة")
+                    SheetChoice("raw", "TS Plus / تلقائي (بدون امتداد)", "يشغل جميع روابط Xtream الحديثة بأسرع استجابة"),
+                    SheetChoice("ts", "MPEG-TS (.ts)", "الصيغة القياسية التقليدية للبث المباشر"),
+                    SheetChoice("m3u8", "HLS (.m3u8)", "بث تكيفي مناسب للشبكات المتقلبة")
                 ),
                 streamFmt
             )
