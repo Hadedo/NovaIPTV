@@ -89,6 +89,24 @@ data class LiveMatchInfo(
     val suggestedBroadcaster: String
 )
 
+data class MatchTimelineEvent(
+    val minute: String,
+    val playerName: String,
+    val teamName: String,
+    val isHomeTeam: Boolean,
+    val eventType: String // "goal", "penalty", "owngoal", "yellow", "red", "sub"
+)
+
+data class MatchFullIntelligence(
+    val venue: String,
+    val attendance: String,
+    val homePossession: String,
+    val awayPossession: String,
+    val homeShots: String,
+    val awayShots: String,
+    val timelineEvents: List<MatchTimelineEvent>
+)
+
 data class EpgProgram(
     val nowTitle: String,
     val nextTitle: String
@@ -159,7 +177,7 @@ object ServersEngine {
                 }
 
                 val broadcaster = if (realTvNames.isNotEmpty()) {
-                    realTvNames.distinct().take(2).joinToString(" / ")
+                    realTvNames.distinct().take(3).joinToString(" / ")
                 } else {
                     detectBroadcasterHint(leagueSlug, rawLeague, lang)
                 }
@@ -228,36 +246,199 @@ object ServersEngine {
         }
     }
 
+    // جلب تفاصيل المباراة الدقيقة: مسجلو الأهداف + أصحاب البطاقات الصفراء والحمراء + الإحصائيات
+    suspend fun fetchMatchDetailedEvents(match: LiveMatchInfo): MatchFullIntelligence = withContext(Dispatchers.IO) {
+        val eventsList = mutableListOf<MatchTimelineEvent>()
+        var venueName = "ملعب المباراة"
+        var attendanceStr = ""
+        var homePoss = "50%"
+        var awayPoss = "50%"
+        var homeShots = "-"
+        var awayShots = "-"
+
+        try {
+            val slug = match.leagueSlug.ifBlank { "all" }
+            val url = "https://site.api.espn.com/apis/site/v2/sports/soccer/$slug/summary?event=${match.id}"
+            val root = JSONObject(fetchJson(url, mapOf("User-Agent" to "Mozilla/5.0")))
+
+            val gameInfo = root.optJSONObject("gameInfo")
+            val venueObj = gameInfo?.optJSONObject("venue")
+            if (venueObj != null) {
+                venueName = venueObj.optString("fullName", venueName)
+                val att = gameInfo.optInt("attendance", 0)
+                if (att > 0) attendanceStr = "$att متفرج"
+            }
+
+            val boxscore = root.optJSONObject("boxscore")
+            val teamsArr = boxscore?.optJSONArray("teams")
+            if (teamsArr != null && teamsArr.length() >= 2) {
+                for (t in 0 until teamsArr.length()) {
+                    val tObj = teamsArr.getJSONObject(t)
+                    val isHome = tObj.optString("homeAway") == "home"
+                    val statsArr = tObj.optJSONArray("statistics") ?: continue
+                    for (s in 0 until statsArr.length()) {
+                        val st = statsArr.getJSONObject(s)
+                        val name = st.optString("name", "")
+                        val disp = st.optString("displayValue", "")
+                        if (name.contains("possession", true) && disp.isNotBlank()) {
+                            if (isHome) homePoss = "$disp%" else awayPoss = "$disp%"
+                        } else if (name.equals("shotsOnTarget", true) && disp.isNotBlank()) {
+                            if (isHome) homeShots = disp else awayShots = disp
+                        }
+                    }
+                }
+            }
+
+            val headerComp = root.optJSONObject("header")?.optJSONArray("competitions")?.optJSONObject(0)
+            val homeId = headerComp?.optJSONArray("competitors")?.let { arr ->
+                (0 until arr.length()).map { arr.getJSONObject(it) }.firstOrNull { it.optString("homeAway") == "home" }?.optString("id")
+            } ?: ""
+
+            val keyEvents = root.optJSONArray("keyEvents")
+            if (keyEvents != null) {
+                for (i in 0 until keyEvents.length()) {
+                    val ev = keyEvents.getJSONObject(i)
+                    val typeObj = ev.optJSONObject("type")
+                    val typeText = typeObj?.optString("text", "")?.lowercase() ?: ""
+                    val clockText = ev.optJSONObject("clock")?.optString("displayValue", "") ?: ""
+                    val teamObj = ev.optJSONObject("team")
+                    val teamId = teamObj?.optString("id", "") ?: ""
+                    val teamName = teamObj?.optString("displayName", "") ?: ""
+                    val isHome = (teamId == homeId)
+
+                    val participants = ev.optJSONArray("participants")
+                    val playerName = participants?.optJSONObject(0)?.optJSONObject("athlete")?.optString("displayName", "")
+                        ?: ev.optString("shortText", "").substringBefore("(").trim()
+
+                    val mappedType = when {
+                        typeText.contains("own goal") -> "owngoal"
+                        typeText.contains("penalty") && typeText.contains("goal") -> "penalty"
+                        typeText.contains("goal") -> "goal"
+                        typeText.contains("red card") -> "red"
+                        typeText.contains("yellow card") -> "yellow"
+                        typeText.contains("substitution") -> "sub"
+                        else -> ""
+                    }
+
+                    if (mappedType.isNotBlank() && playerName.isNotBlank()) {
+                        eventsList.add(
+                            MatchTimelineEvent(
+                                minute = clockText,
+                                playerName = playerName,
+                                teamName = teamName,
+                                isHomeTeam = isHome,
+                                eventType = mappedType
+                            )
+                        )
+                    }
+                }
+            }
+        } catch (_: Exception) {}
+
+        MatchFullIntelligence(
+            venue = venueName,
+            attendance = attendanceStr,
+            homePossession = homePoss,
+            awayPossession = awayPoss,
+            homeShots = homeShots,
+            awayShots = awayShots,
+            timelineEvents = eventsList
+        )
+    }
+
+    // قاموس ذكي لربط أسماء المنتخبات والأندية بالعربية والإنجليزية للبحث في دليل EPG للسيرفر
+    private fun buildTeamSearchTokens(teamName: String): List<String> {
+        val clean = teamName.lowercase().trim()
+        val tokens = mutableSetOf(clean)
+        val map = mapOf(
+            "united arab emirates" to listOf("uae", "emirates", "الامارات", "الإمارات"),
+            "uae" to listOf("united arab emirates", "الامارات", "الإمارات"),
+            "jordan" to listOf("الاردن", "الأردن"),
+            "iraq" to listOf("العراق"),
+            "saudi arabia" to listOf("ksa", "السعودية"),
+            "qatar" to listOf("قطر"),
+            "kuwait" to listOf("الكويت"),
+            "oman" to listOf("عمان"),
+            "bahrain" to listOf("البحرين"),
+            "egypt" to listOf("مصر"),
+            "morocco" to listOf("المغرب"),
+            "algeria" to listOf("الجزائر"),
+            "tunisia" to listOf("تونس"),
+            "real madrid" to listOf("madrid", "ريال مدريد", "الريال"),
+            "barcelona" to listOf("barca", "برشلونة"),
+            "manchester united" to listOf("man utd", "man united", "مانشستر يونايتد"),
+            "manchester city" to listOf("man city", "مانشستر سيتي"),
+            "liverpool" to listOf("ليفربول"),
+            "arsenal" to listOf("ارسنال", "أرسنال"),
+            "chelsea" to listOf("تشيلسي"),
+            "bayern munich" to listOf("bayern", "بايرن ميونخ"),
+            "paris saint-germain" to listOf("psg", "باريس سان جيرمان"),
+            "juventus" to listOf("يوفنتوس"),
+            "inter" to listOf("انتر", "إنتر"),
+            "ac milan" to listOf("milan", "ميلان"),
+            "al hilal" to listOf("hilal", "الهلال"),
+            "al nassr" to listOf("nassr", "النصر"),
+            "al ittihad" to listOf("ittihad", "الاتحاد"),
+            "al ahli" to listOf("ahli", "الاهلي", "الأهلي")
+        )
+        map.forEach { (k, aliases) ->
+            if (clean.contains(k) || aliases.any { clean.contains(it) }) {
+                tokens.add(k)
+                tokens.addAll(aliases)
+            }
+        }
+        return tokens.filter { it.length >= 3 }
+    }
+
+    // الذكاء الاصطناعي للمطابقة ثلاثية الطبقات: يحدد القناة الناقلة الحقيقية فقط بدون خبط
     fun findExactChannelsForMatch(
         match: LiveMatchInfo,
         allSports: List<GroupedSportsChannel>,
         liveEpgMap: Map<String, String>
-    ): List<GroupedSportsChannel> {
-        val homeLow = match.homeTeam.lowercase()
-        val awayLow = match.awayTeam.lowercase()
+    ): Pair<List<GroupedSportsChannel>, Boolean> {
+        val homeTokens = buildTeamSearchTokens(match.homeTeam)
+        val awayTokens = buildTeamSearchTokens(match.awayTeam)
+        val allTeamTokens = (homeTokens + awayTokens).distinct()
 
-        val epgMatched = allSports.filter { grp ->
+        // الطبقة 1: فحص دليل البرامج الحي (EPG) لسيرفرك بحثاً عن اسم أحد الفريقين
+        val epgVerified = allSports.filter { grp ->
             val epgTitle = liveEpgMap[grp.cleanName]?.lowercase() ?: ""
-            epgTitle.isNotBlank() && ((homeLow.length >= 3 && epgTitle.contains(homeLow)) || (awayLow.length >= 3 && epgTitle.contains(awayLow)))
+            epgTitle.isNotBlank() && allTeamTokens.any { token -> epgTitle.contains(token) }
         }
-        if (epgMatched.isNotEmpty()) return epgMatched
+        if (epgVerified.isNotEmpty()) {
+            return Pair(epgVerified, true)
+        }
 
+        // الطبقة 2: المطابقة الصارمة لاسم القناة الناقلة الحقيقية + قفل رقم القناة (1 غير 10)
         val keywords = match.suggestedBroadcaster.split("/").map { it.trim().lowercase() }.filter { it.isNotBlank() }
-        val strictMatched = allSports.filter { grp ->
+        val strictBroadcasterMatched = allSports.filter { grp ->
             val chName = grp.cleanName.lowercase()
             keywords.any { kw ->
                 val numMatch = Regex("\\d+").find(kw)?.value
-                val baseKw = kw.replace(Regex("\\d+"), "").trim()
-                if (baseKw.isNotBlank() && chName.contains(baseKw)) {
+                val baseKw = kw.replace(Regex("\\d+"), "").replace("sports", "sport").trim()
+                val normalizedCh = chName.replace("sports", "sport")
+                if (baseKw.isNotBlank() && normalizedCh.contains(baseKw)) {
                     if (numMatch != null) {
-                        Regex("\\b$numMatch\\b").containsMatchIn(chName)
+                        Regex("(?<!\\d)$numMatch(?!\\d)").containsMatchIn(normalizedCh)
                     } else true
                 } else false
             }
         }
-        return if (strictMatched.isNotEmpty()) strictMatched else allSports.take(12)
+
+        if (strictBroadcasterMatched.isNotEmpty()) {
+            return Pair(strictBroadcasterMatched.take(6), false)
+        }
+
+        // الطبقة 3: في حال عدم وجود اسم قناة محدد، اعرض فقط أهم 5 قنوات رئيسية (رقم 1 و 2) بدلاً من رمي كل القنوات
+        val topMainChannels = allSports.filter { grp ->
+            val n = grp.cleanName.lowercase()
+            Regex("(?<!\\d)[12](?!\\d)").containsMatchIn(n)
+        }.take(6)
+
+        return Pair(topMainChannels.ifEmpty { allSports.take(5) }, false)
     }
 
+    // فحص دليل البرامج الحي لأوسع شريحة من القنوات الرياضية في السيرفر (حتى 60 قناة)
     suspend fun fetchLiveMatchesForSports(
         host: String,
         user: String,
@@ -266,7 +447,7 @@ object ServersEngine {
     ): Map<String, String> = withContext(Dispatchers.IO) {
         val result = mutableMapOf<String, String>()
         val base = host.trimEnd('/')
-        for (grp in sportsGroups.take(30)) {
+        for (grp in sportsGroups.take(60)) {
             val streamId = grp.variants.firstOrNull()?.item?.id ?: continue
             try {
                 val root = JSONObject(fetchJson("$base/player_api.php?username=$user&password=$pass&action=get_short_epg&stream_id=$streamId&limit=1"))
@@ -312,9 +493,9 @@ object ServersEngine {
             when {
                 s.contains("ksa") || s.contains("saudi") -> "SSC 1 / SSC 2"
                 s.contains("ita.") || s.contains("serie a") -> "AD Sports 1 / StarzPlay"
-                s.contains("afc") || s.contains("asian") -> "beIN Sports AFC / الكأس"
+                s.contains("afc") || s.contains("asian") -> "beIN Sports AFC / الكأس 1"
                 s.contains("esp.") || s.contains("eng.") || s.contains("uefa") || s.contains("fra.") || s.contains("ger.") -> "beIN Sports 1 / beIN Sports 2"
-                else -> "beIN Sports / SSC / الكأس"
+                else -> "beIN Sports 1 / SSC 1 / الكأس 1"
             }
         } else {
             when {
@@ -417,7 +598,6 @@ object ServersEngine {
                         finalUrl = finalUrl.dropLast(5) + ".ts"
                     }
                 }
-                // "raw" (TS Plus): يبقي الرابط الأصلي كما يرسله السيرفر بدون أي تعديل قسري
             }
         }
         return finalUrl
