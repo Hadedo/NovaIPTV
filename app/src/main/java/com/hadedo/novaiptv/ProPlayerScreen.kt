@@ -13,7 +13,6 @@ import android.util.TypedValue
 import android.graphics.Color as AndroidColor
 import androidx.activity.compose.BackHandler
 import androidx.annotation.OptIn
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
@@ -161,7 +160,6 @@ fun ProCinemaPlayerOverlay(
         }
     }
 
-    // تحديث عداد الزمن والسرعة في وضع ملء الشاشة فقط لمنع أي استهلاك موارد في النافذة المصغرة
     LaunchedEffect(currentMedia, isFullScreen) {
         if (!isFullScreen) return@LaunchedEffect
         var lastBytes = TrafficStats.getTotalRxBytes()
@@ -179,7 +177,6 @@ fun ProCinemaPlayerOverlay(
     }
 
     Column(modifier = Modifier.fillMaxSize().background(Color.Black)) {
-        // حاوية الفيديو المعزولة (Zero-Recomposition Surface)
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -249,7 +246,6 @@ fun ProCinemaPlayerOverlay(
                 }
             }
 
-            // واجهة التحكم في الوضع المصغر (نظيفة وخفيفة بدون أي عبء رسومي)
             if (!isFullScreen && !isInPipMode) {
                 Row(
                     modifier = Modifier
@@ -304,7 +300,6 @@ fun ProCinemaPlayerOverlay(
                     }
                 }
 
-                // اسم القناة في أسفل الفيديو المصغر
                 Row(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
@@ -327,7 +322,6 @@ fun ProCinemaPlayerOverlay(
                 }
             }
 
-            // واجهة التحكم الزجاجية الكاملة في ملء الشاشة (mtivi Glass Deck)
             if (isFullScreen && !isInPipMode) {
                 if (isLocked) {
                     IconButton(
@@ -337,7 +331,7 @@ fun ProCinemaPlayerOverlay(
                         Icon(Icons.Default.Lock, null, tint = accentColor)
                     }
                 } else {
-                    AnimatedVisibility(
+                    androidx.compose.animation.AnimatedVisibility(
                         visible = showOsd,
                         enter = fadeIn(),
                         exit = fadeOut(),
@@ -348,7 +342,6 @@ fun ProCinemaPlayerOverlay(
                                 .fillMaxSize()
                                 .background(Brush.verticalGradient(listOf(Color(0xCC000000), Color.Transparent, Color(0xE6000000))))
                         ) {
-                            // الشريط العلوي
                             Row(
                                 modifier = Modifier.align(Alignment.TopCenter).fillMaxWidth().padding(14.dp),
                                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -390,7 +383,6 @@ fun ProCinemaPlayerOverlay(
                                 }
                             }
 
-                            // أزرار التحكم المركزية
                             Row(
                                 modifier = Modifier.align(Alignment.Center),
                                 horizontalArrangement = Arrangement.spacedBy(32.dp),
@@ -429,7 +421,6 @@ fun ProCinemaPlayerOverlay(
                                 }
                             }
 
-                            // الشريط السفلي الزجاجي المستلهم من mtivi
                             Column(
                                 modifier = Modifier
                                     .align(Alignment.BottomCenter)
@@ -463,7 +454,6 @@ fun ProCinemaPlayerOverlay(
                                         }
                                     }
 
-                                    // صف الأيقونات الزجاجية السريعة (mtivi Deck)
                                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                                         if (currentMedia.type == "live" && allLiveChannels.isNotEmpty()) {
                                             OsdDeckChip(Icons.Default.List, "القنوات", accentColor) { showChannelDrawer = true; osdTick++ }
@@ -506,8 +496,7 @@ fun ProCinemaPlayerOverlay(
                 }
             }
 
-            // درج القنوات الجانبي الشفاف للتقليب داخل ملء الشاشة
-            AnimatedVisibility(
+            androidx.compose.animation.AnimatedVisibility(
                 visible = showChannelDrawer,
                 enter = slideInHorizontally(initialOffsetX = { -it }),
                 exit = slideOutHorizontally(targetOffsetX = { -it }),
@@ -581,7 +570,6 @@ fun ProCinemaPlayerOverlay(
             }
         }
 
-        // شريط الأدوات السريع أسفل المشغل المصغر (Kepler Floating Action Deck)
         if (!isFullScreen && !isInPipMode) {
             Row(
                 modifier = Modifier
