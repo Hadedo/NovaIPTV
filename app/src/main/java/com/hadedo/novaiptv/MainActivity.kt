@@ -1690,7 +1690,7 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                                                                 fontWeight = FontWeight.Bold
                                                             )
                                                             Text(
-                                                                "📺 ${match.suggestedBroadcaster}  •  القناة الناقلة ›",
+                                                                "📺 ${match.suggestedBroadcaster}  •  التفاصيل والقناة ›",
                                                                 color = accentColor,
                                                                 fontSize = 10.sp,
                                                                 fontWeight = FontWeight.Bold
@@ -1704,13 +1704,14 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                                 }
 
                                 selectedMatchSheet?.let { m ->
-                                    val matchingChannels = remember(m, groupedSports, liveEpgMap) {
+                                    val (matchingChannels, isEpgVerified) = remember(m, groupedSports, liveEpgMap) {
                                         ServersEngine.findExactChannelsForMatch(m, groupedSports, liveEpgMap)
                                     }
 
                                     NovaMatchCenterBottomSheet(
                                         match = m,
                                         matchingChannels = matchingChannels,
+                                        isEpgVerified = isEpgVerified,
                                         liveEpgMap = liveEpgMap,
                                         accentColor = accentColor,
                                         cardColor = cardColor,
