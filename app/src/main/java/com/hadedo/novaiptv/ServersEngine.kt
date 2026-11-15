@@ -99,10 +99,10 @@ object ServersEngine {
     var streamFormat: String = "ts"
     var sameHostProxy: Boolean = false
 
-    private val QUALITY_REGEX = Regex("\\b(4K|UHD|FHD|1080P|720P|HD|SD|LOW|MINI|HEVC|H265|RAW|VIP|BACKUP|VEGA|MULTI|SOURCE|S1|S2)\\b", RegexOption.IGNORE_CASE)
+    private val QUALITY_REGEX = Regex("\\b(8K|4K|UHD|FHD|1080P|720P|HD|SD|LOW|MINI|HEVC|H265|RAW|VIP|BACKUP|VEGA|MULTI|SOURCE|S1|S2)\\b", RegexOption.IGNORE_CASE)
     private val SYMBOLS_REGEX = Regex("[\\[\\]\\(\\)\\|\\-_:#*]+")
     private val SPACES_REGEX = Regex("\\s+")
-    private val PREFIX_CLEAN_REGEX = Regex("^(AR|EN|FR|TR|KU|VIP|4K|FHD|HD|SD)\\s*[:|\\-]\\s*", RegexOption.IGNORE_CASE)
+    private val PREFIX_CLEAN_REGEX = Regex("^(AR|EN|FR|TR|KU|VIP|8K|4K|FHD|HD|SD)\\s*[:|\\-]\\s*", RegexOption.IGNORE_CASE)
     private val NATURAL_SPLIT_REGEX = Regex("(\\d+|\\D+)")
 
     private fun fetchJson(urlStr: String, headers: Map<String, String> = emptyMap()): String {
@@ -369,11 +369,13 @@ object ServersEngine {
             val expFormatted = if (expTimestamp > 0) {
                 SimpleDateFormat("yyyy-MM-dd", Locale.ENGLISH).format(Date(expTimestamp * 1000))
             } else "غير محدود"
+            val rawMax = infoObj.optString("max_connections", "1")
+            val maxCons = if (rawMax == "0" || rawMax.isBlank()) "∞" else rawMax
             AccountInfo(
                 status = infoObj.optString("status", "Active"),
                 expDate = expFormatted,
                 activeCons = infoObj.optString("active_cons", "0"),
-                maxCons = infoObj.optString("max_connections", "1")
+                maxCons = maxCons
             )
         } catch (_: Exception) {
             null
@@ -403,7 +405,7 @@ object ServersEngine {
 
         for ((catName, chList) in byCat) {
             val upperCat = catName.uppercase()
-            val hasExplicitTag = upperCat.contains("4K") || upperCat.contains("UHD") || upperCat.contains("FHD") ||
+            val hasExplicitTag = upperCat.contains("8K") || upperCat.contains("4K") || upperCat.contains("UHD") || upperCat.contains("FHD") ||
                 upperCat.contains("1080") || upperCat.contains("HD") || upperCat.contains("720") ||
                 upperCat.contains("SD") || upperCat.contains("LOW") || upperCat.contains("MINI") || upperCat.contains("HEVC")
             if (hasExplicitTag || chList.isEmpty()) {
@@ -414,7 +416,7 @@ object ServersEngine {
                 for (i in 0 until sampleSize) {
                     val u = chList[i].name.uppercase()
                     when {
-                        u.contains("4K") || u.contains("UHD") || u.contains("2160") -> c4k++
+                        u.contains("8K") || u.contains("4K") || u.contains("UHD") || u.contains("2160") -> c4k++
                         u.contains("FHD") || u.contains("1080") || u.contains("RAW") || u.contains("HEVC") -> cFhd++
                         u.contains("LOW") || u.contains("MINI") || u.contains("SD") || u.contains("480") -> cSd++
                         u.contains("HD") || u.contains("720") -> cHd++
@@ -617,11 +619,12 @@ object ServersEngine {
             if (isSeparatorChannel(ch.name)) continue
             val upper = "${ch.name} ${ch.category}".uppercase()
             val (qTag, prio) = when {
+                upper.contains("8K") -> Pair("8K UHD", 0)
                 upper.contains("4K") || upper.contains("UHD") || upper.contains("2160") -> Pair("4K UHD", 1)
                 upper.contains("FHD") || upper.contains("1080") || upper.contains("RAW") || upper.contains("HEVC") -> Pair("1080p FHD", 2)
-                upper.contains("LOW") || upper.contains("MINI") || upper.contains("SD") || upper.contains("480") -> Pair("SD / LOW (للنت الضعيف)", 4)
+                upper.contains("LOW") || upper.contains("MINI") || upper.contains("SD") || upper.contains("480") -> Pair("SD / LOW", 4)
                 upper.contains("HD") || upper.contains("720") -> Pair("720p HD", 3)
-                else -> Pair("بث قياسي / احتياطي", 5)
+                else -> Pair("بث قياسي", 5)
             }
 
             val baseName = stripQualityWords(ch.name)
