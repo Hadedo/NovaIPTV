@@ -118,7 +118,6 @@ fun ProCinemaPlayerOverlay(
         }
     }
 
-    // تحديث عداد الزمن وسرعة الإنترنت المسحوبة حياً
     LaunchedEffect(currentMedia) {
         var lastBytes = TrafficStats.getTotalRxBytes()
         while (true) {
@@ -179,7 +178,6 @@ fun ProCinemaPlayerOverlay(
                 }
             }
     ) {
-        // سطح العرض النقي (SurfaceView GPU)
         AndroidView(
             factory = { ctx ->
                 PlayerView(ctx).apply {
@@ -233,7 +231,6 @@ fun ProCinemaPlayerOverlay(
                     Icon(Icons.Default.Lock, null, tint = accentColor)
                 }
             } else {
-                // واجهة التحكم الزجاجية (Nova Glass OSD)
                 AnimatedVisibility(
                     visible = showOsd,
                     enter = fadeIn(),
@@ -249,7 +246,6 @@ fun ProCinemaPlayerOverlay(
                                 )
                             )
                     ) {
-                        // 1. الشريط العلوي (معلومات البث الحية + أزرار الأدوات)
                         Row(
                             modifier = Modifier.align(Alignment.TopCenter).fillMaxWidth().padding(12.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
@@ -328,7 +324,7 @@ fun ProCinemaPlayerOverlay(
                                                 setDataAndType(Uri.parse(resolved), "video/*")
                                                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                                             }
-                                            context.startActivity(Intent.createChooser(intent, "اختر المشغل الخارجي"))
+                                            context.startActivity(Intent.createChooser(intent, "اختر المشغل"))
                                         } catch (_: Exception) {}
                                     }
                                 )
@@ -352,7 +348,6 @@ fun ProCinemaPlayerOverlay(
                             }
                         }
 
-                        // 2. أزرار التحكم المركزية المتوهجة
                         Row(
                             modifier = Modifier.align(Alignment.Center),
                             horizontalArrangement = Arrangement.spacedBy(28.dp),
@@ -391,7 +386,6 @@ fun ProCinemaPlayerOverlay(
                             }
                         }
 
-                        // 3. بطاقة معلومات القناة والبرنامج الحي في الأسفل
                         Column(
                             modifier = Modifier
                                 .align(Alignment.BottomCenter)
@@ -444,7 +438,7 @@ fun ProCinemaPlayerOverlay(
                 }
             }
 
-            // 4. درج القنوات الجانبي الشفاف (In-Player Channel Zapper Drawer مثل StreamVault و TiviMate)
+            // درج القنوات الجانبي الشفاف للتقليب داخل ملء الشاشة
             AnimatedVisibility(
                 visible = showChannelDrawer,
                 enter = slideInHorizontally(initialOffsetX = { -it }),
@@ -520,7 +514,6 @@ fun ProCinemaPlayerOverlay(
         }
     }
 
-    // نافذة اختيار مسارات الصوت والترجمة
     if (showTracksDialog) {
         val tracks = exoPlayer.currentTracks
         AlertDialog(
@@ -598,4 +591,51 @@ private fun formatDurationMs(ms: Long): String {
     val m = (totalSec % 3600L) / 60L
     val s = totalSec % 60L
     return if (h > 0) String.format("%d:%02d:%02d", h, m, s) else String.format("%02d:%02d", m, s)
+}
+
+fun launchPreferredExternalPlayer(
+    context: Context,
+    streamUrl: String,
+    title: String,
+    playerPref: String,
+    userAgent: String
+): Boolean {
+    val uri = Uri.parse(streamUrl)
+    val mxPackages = listOf("com.mxtech.videoplayer.pro", "com.mxtech.videoplayer.ad")
+    val vlcPackage = "org.videolan.vlc"
+
+    fun tryStartPackage(pkg: String): Boolean {
+        return try {
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, "video/*")
+                setPackage(pkg)
+                putExtra("title", title)
+                putExtra("headers", arrayOf("User-Agent", userAgent))
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(intent)
+            true
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    return when (playerPref) {
+        "mx" -> mxPackages.any { tryStartPackage(it) } || tryStartPackage(vlcPackage)
+        "vlc" -> tryStartPackage(vlcPackage)
+        "ask" -> {
+            try {
+                val intent = Intent(Intent.ACTION_VIEW).apply {
+                    setDataAndType(uri, "video/*")
+                    putExtra("title", title)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                context.startActivity(Intent.createChooser(intent, "اختر المشغل"))
+                true
+            } catch (_: Exception) {
+                false
+            }
+        }
+        else -> false
+    }
 }
