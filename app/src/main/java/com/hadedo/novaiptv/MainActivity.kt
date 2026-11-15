@@ -22,8 +22,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -51,13 +51,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -161,44 +161,33 @@ fun getStrings(lang: String): AppStrings = when (lang) {
 }
 
 @Composable
-fun VeloxBrandWordmark(accentColor: Color) {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-        Box(
+fun DevkanBrandWordmark(accentColor: Color) {
+    val goldColor = Color(0xFFF59E0B)
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Image(
+            painter = painterResource(id = R.drawable.devkan_logo),
+            contentDescription = "DEVKAN 34 VIP",
+            contentScale = ContentScale.Crop,
             modifier = Modifier
-                .size(28.dp)
-                .clip(RoundedCornerShape(8.dp))
-                .background(Brush.linearGradient(listOf(Color(0xFF1E1B4B), Color(0xFF09090F))))
-                .border(1.dp, accentColor.copy(alpha = 0.65f), RoundedCornerShape(8.dp)),
-            contentAlignment = Alignment.Center
-        ) {
-            Canvas(modifier = Modifier.size(16.dp)) {
-                val w = size.width
-                val h = size.height
-                val vPath = Path().apply {
-                    moveTo(w * 0.1f, h * 0.15f)
-                    lineTo(w * 0.34f, h * 0.15f)
-                    lineTo(w * 0.5f, h * 0.68f)
-                    lineTo(w * 0.66f, h * 0.15f)
-                    lineTo(w * 0.9f, h * 0.15f)
-                    lineTo(w * 0.58f, h * 0.88f)
-                    lineTo(w * 0.42f, h * 0.88f)
-                    close()
-                }
-                drawPath(
-                    path = vPath,
-                    brush = Brush.linearGradient(listOf(Color(0xFF38BDF8), accentColor))
-                )
-            }
-        }
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text("VELOX", color = Color.White, fontWeight = FontWeight.Black, fontSize = 15.sp, letterSpacing = 1.sp)
+                .size(32.dp)
+                .clip(CircleShape)
+                .border(1.5.dp, goldColor, CircleShape)
+        )
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+            Text(
+                "DEVKAN 34",
+                color = Color.White,
+                fontWeight = FontWeight.Black,
+                fontSize = 14.sp,
+                letterSpacing = 0.8.sp
+            )
             Box(
                 modifier = Modifier
-                    .background(accentColor.copy(alpha = 0.22f), RoundedCornerShape(5.dp))
-                    .border(1.dp, accentColor.copy(alpha = 0.7f), RoundedCornerShape(5.dp))
-                    .padding(horizontal = 4.dp, vertical = 1.dp)
+                    .background(goldColor.copy(alpha = 0.22f), RoundedCornerShape(5.dp))
+                    .border(1.dp, goldColor.copy(alpha = 0.8f), RoundedCornerShape(5.dp))
+                    .padding(horizontal = 5.dp, vertical = 1.dp)
             ) {
-                Text("ULTRA", color = Color(0xFF38BDF8), fontWeight = FontWeight.ExtraBold, fontSize = 8.sp)
+                Text("VIP", color = goldColor, fontWeight = FontWeight.ExtraBold, fontSize = 9.sp)
             }
         }
     }
@@ -243,7 +232,7 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
     val str = remember(appLang) { getStrings(appLang) }
     val layoutDir = if (appLang == "ar" || appLang == "ku") LayoutDirection.Rtl else LayoutDirection.Ltr
 
-    var accentIdx by remember { mutableIntStateOf(prefs.getInt("accent_idx", 0)) }
+    var accentIdx by remember { mutableIntStateOf(prefs.getInt("accent_idx", 3)) }
     val accentOptions = listOf(
         Pair("بنفسجي نيون", Color(0xFF7C6DFA)),
         Pair("أزرق كهربائي", Color(0xFF3B82F6)),
@@ -252,7 +241,7 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
         Pair("أحمر سينمائي", Color(0xFFEF4444)),
         Pair("أرجواني", Color(0xFFEC4899))
     )
-    val accentColor = accentOptions.getOrElse(accentIdx) { accentOptions[0] }.second
+    val accentColor = accentOptions.getOrElse(accentIdx) { accentOptions[3] }.second
 
     var bgIdx by remember { mutableIntStateOf(prefs.getInt("bg_idx", 0)) }
     val bgOptions = listOf(
@@ -625,7 +614,7 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                 }
                 return
             } else {
-                Toast.makeText(context, "المشغل المختار غير مثبت، تم التشغيل في VELOX الداخلي", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, "المشغل المختار غير مثبت، تم التشغيل في DEVKAN 34 VIP الداخلي", Toast.LENGTH_SHORT).show()
             }
         }
 
@@ -849,7 +838,7 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        VeloxBrandWordmark(accentColor = accentColor)
+                        DevkanBrandWordmark(accentColor = accentColor)
 
                         Row(
                             modifier = Modifier
@@ -1008,7 +997,7 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                                                                     .border(1.dp, Color(0x33FFFFFF), RoundedCornerShape(8.dp))
                                                                     .padding(horizontal = 8.dp, vertical = 3.dp)
                                                             ) {
-                                                                Text("4K ULTRA", color = Color(0xFF38BDF8), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                                                Text("4K VIP", color = Color(0xFFF59E0B), fontSize = 10.sp, fontWeight = FontWeight.Bold)
                                                             }
                                                         }
 
