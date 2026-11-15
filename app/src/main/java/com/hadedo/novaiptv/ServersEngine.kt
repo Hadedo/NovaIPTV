@@ -96,7 +96,8 @@ data class EpgProgram(
 
 object ServersEngine {
     var currentUserAgent: String = "IPTVSmartersPro"
-    var streamFormat: String = "ts"
+    // "raw" = TS Plus / بدون امتداد, "ts" = MPEG-TS, "m3u8" = HLS
+    var streamFormat: String = "raw"
     var sameHostProxy: Boolean = false
 
     private val QUALITY_REGEX = Regex("\\b(8K|4K|UHD|FHD|1080P|720P|HD|SD|LOW|MINI|HEVC|H265|RAW|VIP|BACKUP|VEGA|MULTI|SOURCE|S1|S2)\\b", RegexOption.IGNORE_CASE)
@@ -140,11 +141,30 @@ object ServersEngine {
                     ?: leagueSlug.uppercase()
 
                 val leagueTitle = translateLeagueName(rawLeague, leagueSlug, lang)
-                val broadcaster = detectBroadcasterHint(leagueSlug, rawLeague, lang)
-
                 val comp = ev.optJSONArray("competitions")?.optJSONObject(0) ?: continue
                 val competitors = comp.optJSONArray("competitors") ?: continue
                 if (competitors.length() < 2) continue
+
+                // استخراج اسم القناة الناقلة الحقيقية من بيانات البث الرسمية إن وجدت
+                val broadcastsArr = comp.optJSONArray("broadcasts")
+                val realTvNames = mutableListOf<String>()
+                if (broadcastsArr != null) {
+                    for (b in 0 until broadcastsArr.length()) {
+                        val namesArr = broadcastsArr.getJSONObject(b).optJSONArray("names")
+                        if (namesArr != null) {
+                            for (n in 0 until namesArr.length()) {
+                                val tv = namesArr.optString(n).trim()
+                                if (tv.isNotBlank()) realTvNames.add(tv)
+                            }
+                        }
+                    }
+                }
+
+                val broadcaster = if (realTvNames.isNotEmpty()) {
+                    realTvNames.distinct().take(2).joinToString(" / ")
+                } else {
+                    detectBroadcasterHint(leagueSlug, rawLeague, lang)
+                }
 
                 var homeName = ""; var homeLogo = ""; var homeScore = "0"
                 var awayName = ""; var awayLogo = ""; var awayScore = "0"
@@ -210,6 +230,39 @@ object ServersEngine {
         }
     }
 
+    // مطابقة صارمة ودقيقة للقنوات الناقلة للمباراة دون خبط
+    fun findExactChannelsForMatch(
+        match: LiveMatchInfo,
+        allSports: List<GroupedSportsChannel>,
+        liveEpgMap: Map<String, String>
+    ): List<GroupedSportsChannel> {
+        val homeLow = match.homeTeam.lowercase()
+        val awayLow = match.awayTeam.lowercase()
+
+        // 1. الأولوية القصوى: القنوات التي يذكر دليل السيرفر (EPG) أنها تبث هذه المباراة حالياً
+        val epgMatched = allSports.filter { grp ->
+            val epgTitle = liveEpgMap[grp.cleanName]?.lowercase() ?: ""
+            epgTitle.isNotBlank() && ((homeLow.length >= 3 && epgTitle.contains(homeLow)) || (awayLow.length >= 3 && epgTitle.contains(awayLow)))
+        }
+        if (epgMatched.isNotEmpty()) return epgMatched
+
+        // 2. المطابقة الدقيقة لاسم ورقم القناة الناقلة
+        val keywords = match.suggestedBroadcaster.split("/").map { it.trim().lowercase() }.filter { it.isNotBlank() }
+        val strictMatched = allSports.filter { grp ->
+            val chName = grp.cleanName.lowercase()
+            keywords.any { kw ->
+                val numMatch = Regex("\\d+").find(kw)?.value
+                val baseKw = kw.replace(Regex("\\d+"), "").trim()
+                if (baseKw.isNotBlank() && chName.contains(baseKw)) {
+                    if (numMatch != null) {
+                        Regex("\\b$numMatch\\b").containsMatchIn(chName)
+                    } else true
+                } else false
+            }
+        }
+        return if (strictMatched.isNotEmpty()) strictMatched else allSports.take(12)
+    }
+
     suspend fun fetchLiveMatchesForSports(
         host: String,
         user: String,
@@ -218,7 +271,7 @@ object ServersEngine {
     ): Map<String, String> = withContext(Dispatchers.IO) {
         val result = mutableMapOf<String, String>()
         val base = host.trimEnd('/')
-        for (grp in sportsGroups.take(25)) {
+        for (grp in sportsGroups.take(30)) {
             val streamId = grp.variants.firstOrNull()?.item?.id ?: continue
             try {
                 val root = JSONObject(fetchJson("$base/player_api.php?username=$user&password=$pass&action=get_short_epg&stream_id=$streamId&limit=1"))
@@ -250,8 +303,10 @@ object ServersEngine {
             s.contains("fra.1") || s.contains("ligue 1") -> "الدوري الفرنسي"
             s.contains("ksa.1") || s.contains("saudi") -> "دوري روشن السعودي"
             s.contains("afc.champions") -> "دوري أبطال آسيا"
+            s.contains("afc.") || s.contains("asian") -> "تصفيات / بطولة آسيا"
             s.contains("fifa.world") || s.contains("world cup") -> "تصفيات كأس العالم"
             s.contains("uefa.nations") -> "دوري الأمم الأوروبية"
+            s.contains("regular-season") -> "مباريات اليوم"
             else -> raw.ifBlank { slug.uppercase() }
         }
     }
@@ -260,10 +315,11 @@ object ServersEngine {
         val s = "${slug.lowercase()} ${raw.lowercase()}"
         return if (lang == "ar") {
             when {
-                s.contains("ksa") || s.contains("saudi") -> "SSC Sports"
-                s.contains("ita.") || s.contains("serie a") -> "AD Sports / StarzPlay"
-                s.contains("esp.") || s.contains("eng.") || s.contains("uefa") || s.contains("fra.") || s.contains("ger.") || s.contains("afc") -> "beIN Sports"
-                else -> "beIN / SSC / الكأس"
+                s.contains("ksa") || s.contains("saudi") -> "SSC 1 / SSC 2"
+                s.contains("ita.") || s.contains("serie a") -> "AD Sports 1 / StarzPlay"
+                s.contains("afc") || s.contains("asian") -> "beIN Sports AFC / الكأس"
+                s.contains("esp.") || s.contains("eng.") || s.contains("uefa") || s.contains("fra.") || s.contains("ger.") -> "beIN Sports 1 / beIN Sports 2"
+                else -> "beIN Sports / SSC / الكأس"
             }
         } else {
             when {
@@ -338,8 +394,9 @@ object ServersEngine {
         }
     }
 
+    // محرك معالجة الروابط الشامل (يدعم TS Plus بدون امتداد + .ts + .m3u8)
     fun resolveStreamUrl(rawUrl: String, activeHost: String): String {
-        var finalUrl = rawUrl
+        var finalUrl = rawUrl.trim()
         if (sameHostProxy && activeHost.isNotBlank()) {
             try {
                 val baseUri = Uri.parse(if (activeHost.startsWith("http")) activeHost else "http://$activeHost")
@@ -353,10 +410,29 @@ object ServersEngine {
                 }
             } catch (_: Exception) {}
         }
-        if (streamFormat == "m3u8" && finalUrl.endsWith(".ts", ignoreCase = true)) {
-            finalUrl = finalUrl.dropLast(3) + ".m3u8"
-        } else if (streamFormat == "ts" && finalUrl.endsWith(".m3u8", ignoreCase = true)) {
-            finalUrl = finalUrl.dropLast(5) + ".ts"
+
+        if (finalUrl.contains("/live/")) {
+            when (streamFormat) {
+                "m3u8" -> {
+                    finalUrl = when {
+                        finalUrl.endsWith(".ts", true) -> finalUrl.dropLast(3) + ".m3u8"
+                        !finalUrl.contains(".") -> "$finalUrl.m3u8"
+                        else -> finalUrl
+                    }
+                }
+                "ts" -> {
+                    finalUrl = when {
+                        finalUrl.endsWith(".m3u8", true) -> finalUrl.dropLast(5) + ".ts"
+                        !finalUrl.contains(".") -> "$finalUrl.ts"
+                        else -> finalUrl
+                    }
+                }
+                "raw" -> {
+                    // TS Plus: إزالة أي امتداد قسري إذا كان رابط بث حي قياسي ليفتح بأسرع استجابة من السيرفر
+                    if (finalUrl.endsWith(".ts", true)) finalUrl = finalUrl.dropLast(3)
+                    else if (finalUrl.endsWith(".m3u8", true)) finalUrl = finalUrl.dropLast(5)
+                }
+            }
         }
         return finalUrl
     }
@@ -472,7 +548,7 @@ object ServersEngine {
                 val playUrl = when (type) {
                     "vod" -> "$base/movie/$user/$pass/$id.$ext"
                     "series" -> "series://$base|$user|$pass|$id"
-                    else -> "$base/live/$user/$pass/$id.$streamFormat"
+                    else -> if (streamFormat == "raw") "$base/live/$user/$pass/$id" else "$base/live/$user/$pass/$id.$streamFormat"
                 }
                 list.add(MediaItemModel(id, cleanTitle, playUrl, catName, icon, type))
             }
@@ -633,7 +709,7 @@ object ServersEngine {
             list.add(QualityVariant(qTag, prio, "${ch.name} (${ch.category})", ch))
         }
 
-        val result = groupedMap.values.map { variants ->
+        return groupedMap.values.map { variants ->
             val sorted = variants.sortedBy { it.priority }
             val first = sorted[0].item
             val displayBase = stripQualityWords(first.name)
@@ -650,8 +726,6 @@ object ServersEngine {
                 regionTag = if (isArab) "arab" else "global"
             )
         }
-
-        return result.sortedWith { a, b -> naturalCompare(a.cleanName, b.cleanName) }
     }
 
     fun groupSportsChannels(allChannels: List<MediaItemModel>): List<GroupedSportsChannel> {
