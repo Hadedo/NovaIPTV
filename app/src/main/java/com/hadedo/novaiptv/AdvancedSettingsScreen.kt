@@ -203,6 +203,7 @@ fun AdvancedSettingsScreen(
 
             when (page) {
                 0 -> {
+                    // بطاقة الاشتراك الموحدة (تفتح إدارة جميع الاشتراكات مباشرة بدون تكرار)
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -252,7 +253,7 @@ fun AdvancedSettingsScreen(
                                         .background(Color(0x26FFFFFF), RoundedCornerShape(10.dp))
                                         .padding(horizontal = 10.dp, vertical = 5.dp)
                                 ) {
-                                    Text("إدارة ›", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    Text("الاشتراكات (${servers.size}) ›", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                 }
                             }
 
@@ -277,15 +278,6 @@ fun AdvancedSettingsScreen(
                     }
 
                     GlassSettingsGroup(cardColor = cardColor) {
-                        SettingsPortalRow(
-                            icon = Icons.Default.Dns,
-                            iconTint = Color(0xFF38BDF8),
-                            title = "الاشتراكات والسيرفرات",
-                            subtitle = "التبديل بين الحسابات، إضافة M3U أو Xtream، وفحص السرعة",
-                            badgeText = "${servers.size}",
-                            onClick = { haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove); currentSubPage = 1 }
-                        )
-                        HorizontalDivider(color = Color(0x14FFFFFF), modifier = Modifier.padding(horizontal = 14.dp))
                         SettingsPortalRow(
                             icon = Icons.Default.PlayCircleFilled,
                             iconTint = Color(0xFF4ADE80),
