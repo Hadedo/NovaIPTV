@@ -354,7 +354,7 @@ fun DevkanHybridPlayerScreen(
     val vlcScaleType = when (scaleIndex) {
         1 -> MediaPlayer.ScaleType.SURFACE_FILL
         2 -> MediaPlayer.ScaleType.SURFACE_16_9
-        3 -> MediaPlayer.ScaleType.SURFACE_FIT_HORIZONTAL
+        3 -> MediaPlayer.ScaleType.SURFACE_FIT_SCREEN
         else -> MediaPlayer.ScaleType.SURFACE_BEST_FIT
     }
 
