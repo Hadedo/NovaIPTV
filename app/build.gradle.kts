@@ -8,12 +8,12 @@ android {
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.hadedo.aurex"
+        applicationId = "com.hadedo.velox"
         minSdk = 24
         targetSdk = 34
         versionCode = 1
         versionName = "1.0"
-        base.archivesName.set("AUREX")
+        base.archivesName.set("فولكس")
     }
 
     signingConfigs {
