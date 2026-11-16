@@ -1,9 +1,11 @@
 package com.hadedo.novaiptv
 
+import android.app.Activity
 import android.net.Uri
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -17,7 +19,9 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -66,7 +70,9 @@ data class AppStrings(
     val cinema: String,
     val settings: String,
     val continueWatching: String,
-    val recommendedForYou: String,
+    val latestMovies: String,
+    val featuredSeries: String,
+    val movies4k: String,
     val searchHint: String,
     val all: String,
     val moviesTab: String,
@@ -88,12 +94,12 @@ data class AppStrings(
 )
 
 fun getStrings(lang: String): AppStrings = when (lang) {
-    "en" -> AppStrings("Home", "Live TV", "Sports", "Cinema", "Settings", "Continue Watching", "Recommended For You", "Search channels, movies, series...", "All", "Movies", "Series", "Add Connection", "Import M3U File", "EPG Grid", "Server Speed & Ping", "Playback Engine", "App Lock PIN", "Subscription Details", "Status", "Expires", "Allowed Region", "Connections", "Ultra-Low Latency (Satellite Sync)", "Smart Geo-Bypass Headers", "Auto-Resume Last Channel")
-    "de" -> AppStrings("Start", "Live-TV", "Sport", "Kino", "Optionen", "Weiterschauen", "Empfohlen für dich", "Kanäle, Filme, Serien suchen...", "Alle", "Filme", "Serien", "Verbindung hinzufügen", "M3U-Datei laden", "EPG-Plan", "Server-Speedtest", "Wiedergabe-Engine", "App-PIN-Sperre", "Abonnement-Details", "Status", "Ablaufdatum", "Region / Land", "Verbindungen", "Geringe Latenz (Satelliten-Sync)", "Geo-Bypass-Header", "Letzten Kanal fortsetzen")
-    "tr" -> AppStrings("Ana Sayfa", "Canlı", "Spor", "Sinema", "Ayarlar", "Devam Et", "Sizin İçin Önerilenler", "Kanal, film, dizi ara...", "Tümü", "Filmler", "Diziler", "Bağlantı Ekle", "M3U Dosyası", "EPG Rehberi", "Sunucu Hız Testi", "Oynatıcı Motoru", "Uygulama PIN", "Abonelik Bilgileri", "Durum", "Bitiş Tarihi", "Ülke / Bölge", "Bağlantılar", "Düşük Gecikme Modu", "Bölge Kısıtlama Aşımı", "Son Kanalı Otomatik Aç")
-    "fr" -> AppStrings("Accueil", "Direct", "Sports", "Cinéma", "Réglages", "Reprendre", "Recommandé", "Rechercher...", "Tout", "Films", "Séries", "Ajouter Connexion", "Fichier M3U", "Guide EPG", "Test Serveur", "Moteur Vidéo", "Code PIN App", "Abonnement", "Statut", "Expiration", "Pays Autorisé", "Connexions", "Faible Latence", "Contournement Géo", "Reprise Auto")
-    "ku" -> AppStrings("سەرەکی", "ڕاستەوخۆ", "وەرزش", "سینەما", "ڕێکخستن", "بەردەوامبە", "پێشنیارکراو", "گەڕان...", "هەموو", "فیلم", "زنجیرە", "زیادکردنی بەشداری", "فایلی M3U", "خشتەی EPG", "پشکنینی خێرایی", "بزوێنەری کارپێکردن", "قفڵی بەرنامە", "زانیاری بەشداری", "دۆخ", "بەرواری بەسەرچوون", "وڵات", "پەیوەندییەکان", "کەمکردنەوەی دواکەوتن", "کردنەوەی بلۆکی وڵات", "کردنەوەی دوایین کەناڵ")
-    else -> AppStrings("الرئيسية", "مباشر", "الرياضة", "السينما", "الإعدادات", "واصل المشاهدة", "ننصحك بمشاهدته اليوم", "ابحث عن قناة أو فيلم أو مسلسل...", "الكل", "الأفلام", "المسلسلات", "إضافة اتصال", "استيراد ملف M3U", "جدول EPG", "فحص سرعة السيرفر", "محرك التشغيل", "قفل التطبيق PIN", "بطاقة الاشتراك", "الحالة", "تاريخ الانتهاء", "الدولة / النطاق", "الاتصالات", "تقليل تأخير البث عن الستلايت", "تجاوز قيود السيرفر والدولة", "فتح آخر قناة تلقائياً عند التشغيل")
+    "en" -> AppStrings("Home", "Live TV", "Sports", "Cinema", "Settings", "Continue Watching", "Latest Movies", "Featured Series", "4K Movies", "Search channels, movies, series...", "All", "Movies", "Series", "Add Connection", "Import M3U File", "EPG Grid", "Server Speed & Ping", "Playback Engine", "App Lock PIN", "Subscription Details", "Status", "Expires", "Allowed Region", "Connections", "Ultra-Low Latency (Satellite Sync)", "Smart Geo-Bypass Headers", "Auto-Resume Last Channel")
+    "de" -> AppStrings("Start", "Live-TV", "Sport", "Kino", "Optionen", "Weiterschauen", "Neueste Filme", "Beliebte Serien", "4K-Filme", "Kanäle, Filme, Serien suchen...", "Alle", "Filme", "Serien", "Verbindung hinzufügen", "M3U-Datei laden", "EPG-Plan", "Server-Speedtest", "Wiedergabe-Engine", "App-PIN-Sperre", "Abonnement-Details", "Status", "Ablaufdatum", "Region / Land", "Verbindungen", "Geringe Latenz (Satelliten-Sync)", "Geo-Bypass-Header", "Letzten Kanal fortsetzen")
+    "tr" -> AppStrings("Ana Sayfa", "Canlı", "Spor", "Sinema", "Ayarlar", "Devam Et", "Yeni Filmler", "Öne Çıkan Diziler", "4K Filmler", "Kanal, film, dizi ara...", "Tümü", "Filmler", "Diziler", "Bağlantı Ekle", "M3U Dosyası", "EPG Rehberi", "Sunucu Hız Testi", "Oynatıcı Motoru", "Uygulama PIN", "Abonelik Bilgileri", "Durum", "Bitiş Tarihi", "Ülke / Bölge", "Bağlantılar", "Düşük Gecikme Modu", "Bölge Kısıtlama Aşımı", "Son Kanalı Otomatik Aç")
+    "fr" -> AppStrings("Accueil", "Direct", "Sports", "Cinéma", "Réglages", "Reprendre", "Derniers Films", "Séries en Vedette", "Films 4K", "Rechercher...", "Tout", "Films", "Séries", "Ajouter Connexion", "Fichier M3U", "Guide EPG", "Test Serveur", "Moteur Vidéo", "Code PIN App", "Abonnement", "Statut", "Expiration", "Pays Autorisé", "Connexions", "Faible Latence", "Contournement Géo", "Reprise Auto")
+    "ku" -> AppStrings("سەرەکی", "ڕاستەوخۆ", "وەرزش", "سینەما", "ڕێکخستن", "بەردەوامبە", "نوێترین فیلمەکان", "زنجیرە دیارەکان", "فیلمی 4K", "گەڕان...", "هەموو", "فیلم", "زنجیرە", "زیادکردنی بەشداری", "فایلی M3U", "خشتەی EPG", "پشکنینی خێرایی", "بزوێنەری کارپێکردن", "قفڵی بەرنامە", "زانیاری بەشداری", "دۆخ", "بەرواری بەسەرچوون", "وڵات", "پەیوەندییەکان", "کەمکردنەوەی دواکەوتن", "کردنەوەی بلۆکی وڵات", "کردنەوەی دوایین کەناڵ")
+    else -> AppStrings("الرئيسية", "مباشر", "الرياضة", "السينما", "الإعدادات", "واصل المشاهدة", "أحدث الأفلام", "المسلسلات المميزة", "أفلام 4K", "ابحث عن قناة أو فيلم أو مسلسل...", "الكل", "الأفلام", "المسلسلات", "إضافة اتصال", "استيراد ملف M3U", "جدول EPG", "فحص سرعة السيرفر", "محرك التشغيل", "قفل التطبيق PIN", "بطاقة الاشتراك", "الحالة", "تاريخ الانتهاء", "الدولة / النطاق", "الاتصالات", "تقليل تأخير البث عن الستلايت", "تجاوز قيود السيرفر والدولة", "فتح آخر قناة تلقائياً عند التشغيل")
 }
 
 // ============================================================================
@@ -206,11 +212,12 @@ fun DevkanBrandHeader(onAddClick: () -> Unit, onImportClick: () -> Unit, strings
 }
 
 // ============================================================================
-// اللوحة الرئيسية للتطبيق
+// اللوحة الرئيسية للتطبيق (الرجوع الهرمي الذكي + الحفاظ على موضع التمرير)
 // ============================================================================
 @Composable
 fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
     val context = LocalContext.current
+    val activity = remember(context) { context.findActivity() }
     val scope = rememberCoroutineScope()
     val strings = remember(lang) { getStrings(lang) }
     val gold = Color(0xFFD4AF37)
@@ -226,12 +233,36 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
     var searchQuery by remember { mutableStateOf("") }
     var selectedLiveCategory by remember { mutableStateOf("ALL") }
     var isSyncing by remember { mutableStateOf(false) }
+    var lastBackPressTime by remember { mutableLongStateOf(0L) }
+
+    // حفظ حالة التمرير للسينما والبث المباشر والرياضة حتى لا يعود للأعلى بعد الرجوع!
+    var cinemaSubTab by remember { mutableStateOf("MOVIE") }
+    var selectedOrigin by remember { mutableStateOf("ALL") }
+    val moviesGridState = rememberLazyGridState()
+    val seriesGridState = rememberLazyGridState()
+    val liveListState = rememberLazyListState()
+    val sportsListState = rememberLazyListState()
 
     var currentSub by remember { mutableStateOf(DevkanVault.getSavedSubscription(context)) }
     val allItems = remember { mutableStateListOf<MediaItemModel>() }
     val todayRealMatches = remember { mutableStateListOf<RealSportsMatch>() }
+    val watchlistIds = remember { mutableStateListOf<String>() }
 
-    // تحميل فوري من الذاكرة المحلية في 0.1 ثانية + جلب جدول المباريات الحقيقي لليوم
+    // الرجوع الهرمي الذكي: لا يخرج التطبيق بالخطأ أبداً
+    BackHandler(enabled = activeStream == null && selectedMovieForDetails == null && selectedSeriesForDetails == null && !showEpgSheet) {
+        if (selectedTab != 0) {
+            selectedTab = 0
+        } else {
+            val now = System.currentTimeMillis()
+            if (now - lastBackPressTime < 2000L) {
+                activity?.finish()
+            } else {
+                lastBackPressTime = now
+                Toast.makeText(context, "اضغط رجوع مرة أخرى للخروج من DEVKAN", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
     LaunchedEffect(Unit) {
         val cached = DevkanVault.getCachedItems(context)
         if (cached.isNotEmpty()) {
@@ -254,7 +285,6 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
             }
         }
 
-        // جلب مباريات اليوم الحقيقية من المصدر الرياضي
         launch {
             val realMatches = RealSportsDataSource.fetchTodayRealMatches()
             if (realMatches.isNotEmpty()) {
@@ -299,11 +329,17 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
         return
     }
 
-    // 2. صفحة تفاصيل الفيلم قبل التشغيل (التقييم + سنة الإنتاج + القصة + الممثلين)
+    // 2. صفحة تفاصيل الفيلم (تحتفظ بموضع التمرير في الخلفية وتدعم زر الرجوع)
     if (selectedMovieForDetails != null) {
+        val m = selectedMovieForDetails!!
         MovieDetailsScreen(
-            movie = selectedMovieForDetails!!,
+            movie = m,
             subscription = currentSub,
+            isInWatchlist = watchlistIds.contains(m.id),
+            onToggleWatchlist = {
+                if (watchlistIds.contains(m.id)) watchlistIds.remove(m.id) else watchlistIds.add(m.id)
+                Toast.makeText(context, if (watchlistIds.contains(m.id)) "تمت الإضافة للمشاهدة لاحقاً ✓" else "تمت الإزالة", Toast.LENGTH_SHORT).show()
+            },
             onPlayMovie = { item ->
                 selectedMovieForDetails = null
                 activeStream = item
@@ -313,11 +349,17 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
         return
     }
 
-    // 3. صفحة تفاصيل المسلسل (المواسم + الحلقات + خط تقدم المشاهدة الذهبي)
+    // 3. صفحة تفاصيل المسلسل (تحتفظ بموضع التمرير وتدعم زر الرجوع)
     if (selectedSeriesForDetails != null) {
+        val s = selectedSeriesForDetails!!
         SeriesDetailsScreen(
-            series = selectedSeriesForDetails!!,
+            series = s,
             subscription = currentSub,
+            isInWatchlist = watchlistIds.contains(s.id),
+            onToggleWatchlist = {
+                if (watchlistIds.contains(s.id)) watchlistIds.remove(s.id) else watchlistIds.add(s.id)
+                Toast.makeText(context, if (watchlistIds.contains(s.id)) "تمت الإضافة للمشاهدة لاحقاً ✓" else "تمت الإزالة", Toast.LENGTH_SHORT).show()
+            },
             onPlayEpisode = { epItem ->
                 activeStream = epItem
             },
@@ -404,70 +446,125 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
             }
 
             when (selectedTab) {
-                // 0: الشاشة الرئيسية الذكية (تنبيهات المباريات الحقيقية + ترشيحات الأفلام والمسلسلات)
+                // 0: الشاشة الرئيسية الفخمة (بانر شاهد الآن + إشعار البطولات + أحدث الأفلام + المسلسلات المميزة + أفلام 4K)
                 0 -> {
                     val lastCh = remember { DevkanVault.getLastChannel(context) }
+                    val moviesList = remember(allItems.size) { allItems.filter { it.contentType == "MOVIE" } }
+                    val seriesList = remember(allItems.size) { allItems.filter { it.contentType == "SERIES" } }
+                    val movies4kList = remember(moviesList.size) {
+                        moviesList.filter { it.title.contains("4k", true) || it.group.contains("4k", true) }.ifEmpty { moviesList.drop(10) }
+                    }
+                    val heroFeatured = seriesList.firstOrNull { it.logo.isNotEmpty() } ?: moviesList.firstOrNull { it.logo.isNotEmpty() }
+
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
                             .verticalScroll(rememberScrollState())
                             .padding(14.dp),
-                        verticalArrangement = Arrangement.spacedBy(14.dp)
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        // بطاقة تنبيه المباريات الحية القادمة من المصدر الرياضي الحقيقي
+                        // 1. بانر العرض السينمائي المميز (Hero Banner) مع زر "شاهد الآن"
+                        if (heroFeatured != null) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(210.dp)
+                                    .clip(RoundedCornerShape(20.dp))
+                                    .background(Color(0xFF14141F))
+                                    .clickable {
+                                        if (heroFeatured.contentType == "SERIES") selectedSeriesForDetails = heroFeatured
+                                        else selectedMovieForDetails = heroFeatured
+                                    }
+                            ) {
+                                AsyncImage(
+                                    model = heroFeatured.logo,
+                                    contentDescription = heroFeatured.title,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .background(
+                                            Brush.verticalGradient(
+                                                colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.88f))
+                                            )
+                                        )
+                                )
+                                Column(
+                                    modifier = Modifier.align(Alignment.BottomStart).padding(16.dp),
+                                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                                        Box(modifier = Modifier.background(gold, RoundedCornerShape(6.dp)).padding(horizontal = 6.dp, vertical = 2.dp)) {
+                                            Text("4K • VIP", color = Color.Black, fontWeight = FontWeight.Black, fontSize = 10.sp)
+                                        }
+                                        Text("${heroFeatured.originTag} • ${heroFeatured.genreTag}", color = goldLight, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                    Text(heroFeatured.title, color = Color.White, fontWeight = FontWeight.Black, fontSize = 18.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    Button(
+                                        onClick = {
+                                            if (heroFeatured.contentType == "SERIES") selectedSeriesForDetails = heroFeatured
+                                            else selectedMovieForDetails = heroFeatured
+                                        },
+                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626)),
+                                        shape = RoundedCornerShape(10.dp),
+                                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp)
+                                    ) {
+                                        Icon(Icons.Default.PlayArrow, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                                        Spacer(Modifier.width(4.dp))
+                                        Text("شاهد الآن", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                    }
+                                }
+                            }
+                        }
+
+                        // 2. إشعار البطولات والمباريات المباشرة اليوم
                         if (todayRealMatches.isNotEmpty()) {
                             val topMatch = todayRealMatches.first()
-                            Column(
+                            Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clip(RoundedCornerShape(16.dp))
                                     .background(Brush.horizontalGradient(listOf(Color(0xFF1A1429), Color(0xFF0F172A))))
                                     .border(1.dp, gold.copy(alpha = 0.5f), RoundedCornerShape(16.dp))
                                     .clickable { selectedTab = 2 }
-                                    .padding(14.dp),
-                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                                    .padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
                             ) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                        Icon(Icons.Default.NotificationsActive, contentDescription = null, tint = goldLight, modifier = Modifier.size(18.dp))
-                                        Text("تنبيه مباراة هامة اليوم • ${topMatch.league}", color = goldLight, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                                    }
-                                    Text(topMatch.matchTime, color = Color(0xFF4ADE80), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                    Text("⚽ بطولة مباشرة اليوم • ${topMatch.league}", color = goldLight, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    Text("${topMatch.homeTeam}  🆚  ${topMatch.awayTeam}", color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 14.sp)
                                 }
-                                Text(
-                                    text = "${topMatch.homeTeam}  🆚  ${topMatch.awayTeam}",
-                                    color = Color.White,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    fontSize = 15.sp
-                                )
-                                Text("اضغط هنا للانتقال لجدول المباريات وقنوات البث المباشر ←", color = Color(0xFF9CA3AF), fontSize = 11.sp)
+                                Box(
+                                    modifier = Modifier.background(Color(0xFF16A34A).copy(alpha = 0.25f), RoundedCornerShape(8.dp)).padding(horizontal = 8.dp, vertical = 4.dp)
+                                ) {
+                                    Text(topMatch.matchTime, color = Color(0xFF4ADE80), fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                                }
                             }
                         }
 
-                        // بطاقة الاستئناف الفوري لآخر قناة
+                        // 3. بطاقة واصل المشاهدة لآخر قناة
                         if (lastCh != null) {
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clip(RoundedCornerShape(16.dp))
-                                    .background(Brush.horizontalGradient(listOf(Color(0xFF1F1A0D), Color(0xFF14141C))))
-                                    .border(1.dp, gold.copy(alpha = 0.4f), RoundedCornerShape(16.dp))
+                                    .clip(RoundedCornerShape(14.dp))
+                                    .background(Color(0xFF14141D))
+                                    .border(1.dp, gold.copy(alpha = 0.35f), RoundedCornerShape(14.dp))
                                     .clickable {
                                         activeStream = MediaItemModel("last", "0", lastCh.second, lastCh.first, "", "Live", "", "LIVE")
                                     }
-                                    .padding(14.dp),
+                                    .padding(12.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
                                 Column {
                                     Text(strings.continueWatching, color = gold, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                                    Text(lastCh.second, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                                    Text(lastCh.second, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                                 }
-                                Icon(Icons.Default.PlayCircleFilled, contentDescription = null, tint = gold, modifier = Modifier.size(34.dp))
+                                Icon(Icons.Default.PlayCircleFilled, contentDescription = null, tint = gold, modifier = Modifier.size(30.dp))
                             }
                         }
 
@@ -484,74 +581,54 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
                             ) {
                                 Icon(Icons.Default.AddLink, contentDescription = null, tint = gold, modifier = Modifier.size(44.dp))
                                 Text("أضف اشتراكك للبدء", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                                Button(
-                                    onClick = { showAddDialog = true },
-                                    colors = ButtonDefaults.buttonColors(containerColor = gold)
-                                ) {
+                                Button(onClick = { showAddDialog = true }, colors = ButtonDefaults.buttonColors(containerColor = gold)) {
                                     Text(strings.addConnection, color = Color.Black, fontWeight = FontWeight.Bold)
                                 }
                             }
                         } else {
-                            OutlinedTextField(
-                                value = searchQuery,
-                                onValueChange = { searchQuery = it },
-                                singleLine = true,
-                                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = gold) },
-                                placeholder = { Text(strings.searchHint, fontSize = 13.sp) },
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(14.dp)
-                            )
-
-                            // ترشيحات ذكية من الأفلام والمسلسلات مع تصنيف النوع (مسلسل تاريخي / دراما كورية / فيلم أكشن)
-                            val recommendedVod = remember(allItems.size, searchQuery) {
-                                allItems.filter {
-                                    it.contentType != "LIVE" &&
-                                        (searchQuery.isBlank() || it.title.contains(searchQuery, ignoreCase = true))
-                                }.take(20)
+                            // صف: أحدث الأفلام (أُضيف مؤخراً) مع زر "المزيد"
+                            if (moviesList.isNotEmpty()) {
+                                CinemaHorizontalRow(
+                                    title = strings.latestMovies,
+                                    items = moviesList.take(15),
+                                    onMoreClick = {
+                                        cinemaSubTab = "MOVIE"
+                                        selectedTab = 3
+                                    },
+                                    onItemClick = { selectedMovieForDetails = it }
+                                )
                             }
-                            if (recommendedVod.isNotEmpty()) {
-                                Text(strings.recommendedForYou, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                                LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                    items(recommendedVod, key = { it.id }) { item ->
-                                        val typeLabel = if (item.contentType == "SERIES") "مسلسل ${item.genreTag} • ${item.originTag}" else "فيلم ${item.genreTag} • ${item.originTag}"
-                                        Column(
-                                            modifier = Modifier
-                                                .width(155.dp)
-                                                .clip(RoundedCornerShape(14.dp))
-                                                .background(Color(0xFF13131B))
-                                                .border(1.dp, Color(0xFF232332), RoundedCornerShape(14.dp))
-                                                .clickable {
-                                                    if (item.contentType == "SERIES") selectedSeriesForDetails = item
-                                                    else selectedMovieForDetails = item
-                                                }
-                                                .padding(10.dp),
-                                            verticalArrangement = Arrangement.spacedBy(6.dp)
-                                        ) {
-                                            if (item.logo.isNotEmpty()) {
-                                                AsyncImage(
-                                                    model = item.logo,
-                                                    contentDescription = item.title,
-                                                    contentScale = ContentScale.Crop,
-                                                    modifier = Modifier.fillMaxWidth().height(125.dp).clip(RoundedCornerShape(10.dp))
-                                                )
-                                            }
-                                            Box(
-                                                modifier = Modifier
-                                                    .background(gold.copy(alpha = 0.2f), RoundedCornerShape(6.dp))
-                                                    .padding(horizontal = 6.dp, vertical = 2.dp)
-                                            ) {
-                                                Text(typeLabel, color = goldLight, fontSize = 10.sp, fontWeight = FontWeight.Bold, maxLines = 1)
-                                            }
-                                            Text(item.title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                        }
-                                    }
-                                }
+
+                            // صف: المسلسلات المميزة مع زر "المزيد"
+                            if (seriesList.isNotEmpty()) {
+                                CinemaHorizontalRow(
+                                    title = strings.featuredSeries,
+                                    items = seriesList.take(15),
+                                    onMoreClick = {
+                                        cinemaSubTab = "SERIES"
+                                        selectedTab = 3
+                                    },
+                                    onItemClick = { selectedSeriesForDetails = it }
+                                )
+                            }
+
+                            // صف: أفلام 4K مع زر "المزيد"
+                            if (movies4kList.isNotEmpty()) {
+                                CinemaHorizontalRow(
+                                    title = strings.movies4k,
+                                    items = movies4kList.take(15),
+                                    onMoreClick = {
+                                        cinemaSubTab = "MOVIE"
+                                        selectedTab = 3
+                                    },
+                                    onItemClick = { selectedMovieForDetails = it }
+                                )
                             }
                         }
                     }
                 }
 
-                // 1: البث المباشر
+                // 1: البث المباشر (يحافظ على موضع التمرير)
                 1 -> {
                     val liveChannels = remember(allItems.size) { allItems.filter { it.contentType == "LIVE" } }
                     val groups = remember(liveChannels.size) { listOf("ALL") + liveChannels.map { it.group }.distinct() }
@@ -588,7 +665,7 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
                             if (selectedLiveCategory == "ALL") liveChannels else liveChannels.filter { it.group == selectedLiveCategory }
                         }
 
-                        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        LazyColumn(state = liveListState, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             items(filteredLive, key = { it.id }) { ch ->
                                 Row(
                                     modifier = Modifier
@@ -622,90 +699,129 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
                     }
                 }
 
-                // 2: الرياضة (جدول المباريات الحقيقي اليوم + القنوات الرياضية)
+                // 2: مركز الرياضة الذكي (مباريات اليوم + فلاتر الشبكات الرياضية للقضاء على الفوضى)
                 2 -> {
-                    val sportChannels = remember(allItems.size) {
-                        allItems.filter {
-                            it.contentType == "LIVE" && (
-                                it.group.contains("sport", true) ||
-                                    it.group.contains("bein", true) ||
-                                    it.group.contains("رياض", true) ||
-                                    it.title.contains("sport", true) ||
-                                    it.title.contains("bein", true)
+                    var selectedSportNetwork by remember { mutableStateOf("ALL") }
+                    val networks = listOf("ALL" to "الكل", "BEIN" to "beIN SPORTS", "SSC" to "SSC", "ALKASS" to "الكأس", "AD" to "أبو ظبي", "RABIAA" to "الرابعة")
+
+                    val sportChannels = remember(allItems.size, selectedSportNetwork) {
+                        allItems.filter { item ->
+                            val isSport = item.contentType == "LIVE" && (
+                                item.group.contains("sport", true) ||
+                                    item.group.contains("bein", true) ||
+                                    item.group.contains("رياض", true) ||
+                                    item.title.contains("sport", true) ||
+                                    item.title.contains("bein", true) ||
+                                    item.title.contains("ssc", true) ||
+                                    item.title.contains("kass", true)
                                 )
+                            if (!isSport) false
+                            else {
+                                val text = "${item.group} ${item.title}".lowercase()
+                                when (selectedSportNetwork) {
+                                    "BEIN" -> text.contains("bein")
+                                    "SSC" -> text.contains("ssc")
+                                    "ALKASS" -> text.contains("kass") || text.contains("كأس") || text.contains("الكاس")
+                                    "AD" -> text.contains("abu dhabi") || text.contains("ad sport") || text.contains("ابوظبي") || text.contains("أبوظبي")
+                                    "RABIAA" -> text.contains("rabiaa") || text.contains("الرابعة") || text.contains("iraq")
+                                    else -> true
+                                }
+                            }
                         }
                     }
-                    LazyColumn(
-                        modifier = Modifier.fillMaxSize().padding(14.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        if (todayRealMatches.isNotEmpty()) {
-                            item {
-                                Text("مباريات اليوم المباشرة (تحديث حي)", color = goldLight, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+
+                    Column(modifier = Modifier.fillMaxSize().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        // أزرار الشبكات الرياضية لفلترة القنوات بلمسة واحدة
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            items(networks) { (code, label) ->
+                                FilterChip(
+                                    selected = selectedSportNetwork == code,
+                                    onClick = { selectedSportNetwork = code },
+                                    label = { Text(label, fontSize = 12.sp, fontWeight = FontWeight.Bold) }
+                                )
                             }
-                            items(todayRealMatches, key = { it.id }) { match ->
-                                val title = "${match.homeTeam} vs ${match.awayTeam}"
-                                val isReminded = MatchReminderManager.remindedMatches.contains(title)
+                        }
+
+                        LazyColumn(state = sportsListState, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            if (todayRealMatches.isNotEmpty() && selectedSportNetwork == "ALL") {
+                                item {
+                                    Text("🏆 مباريات اليوم المباشرة", color = goldLight, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                                }
+                                items(todayRealMatches.take(8), key = { it.id }) { match ->
+                                    val title = "${match.homeTeam} vs ${match.awayTeam}"
+                                    val isReminded = MatchReminderManager.remindedMatches.contains(title)
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(14.dp))
+                                            .background(Color(0xFF151522))
+                                            .border(1.dp, Color(0xFF28283E), RoundedCornerShape(14.dp))
+                                            .clickable {
+                                                val firstSport = sportChannels.firstOrNull()
+                                                if (firstSport != null) {
+                                                    activeStream = firstSport.copy(title = "$title (${firstSport.title})")
+                                                }
+                                            }
+                                            .padding(12.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                            Text(title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                            Text("${match.league}  •  ${match.matchTime}", color = gold, fontSize = 11.sp)
+                                        }
+                                        IconButton(onClick = {
+                                            val added = MatchReminderManager.toggleReminder(title)
+                                            Toast.makeText(context, if (added) "تم تفعيل إشعار المباراة 🔔" else "تم إلغاء التذكير", Toast.LENGTH_SHORT).show()
+                                        }) {
+                                            Icon(
+                                                imageVector = if (isReminded) Icons.Default.NotificationsActive else Icons.Default.NotificationsNone,
+                                                contentDescription = "Reminder",
+                                                tint = if (isReminded) gold else Color.Gray
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+
+                            item {
+                                Text("📺 القنوات الرياضية (${sportChannels.size})", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                            }
+                            items(sportChannels, key = { it.id }) { ch ->
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .clip(RoundedCornerShape(14.dp))
-                                        .background(Color(0xFF151522))
-                                        .border(1.dp, Color(0xFF28283E), RoundedCornerShape(14.dp))
-                                        .clickable {
-                                            val firstSport = sportChannels.firstOrNull()
-                                            if (firstSport != null) {
-                                                activeStream = firstSport.copy(title = "$title (${firstSport.title})")
-                                            }
-                                        }
+                                        .background(Color(0xFF13131B))
+                                        .clickable { activeStream = ch }
                                         .padding(12.dp),
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
-                                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                                        Text(title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                                        Text("${match.league}  •  ${match.matchTime}", color = gold, fontSize = 11.sp)
+                                    Row(
+                                        modifier = Modifier.weight(1f),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                    ) {
+                                        if (ch.logo.isNotEmpty()) {
+                                            AsyncImage(model = ch.logo, contentDescription = null, modifier = Modifier.size(34.dp).clip(RoundedCornerShape(8.dp)))
+                                        } else {
+                                            Icon(Icons.Default.SportsSoccer, contentDescription = null, tint = gold)
+                                        }
+                                        Column {
+                                            Text(ch.title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp, maxLines = 1)
+                                            Text(ch.group, color = Color.Gray, fontSize = 11.sp)
+                                        }
                                     }
-                                    IconButton(onClick = {
-                                        val added = MatchReminderManager.toggleReminder(title)
-                                        Toast.makeText(context, if (added) "تم تفعيل إشعار المباراة 🔔" else "تم إلغاء التذكير", Toast.LENGTH_SHORT).show()
-                                    }) {
-                                        Icon(
-                                            imageVector = if (isReminded) Icons.Default.NotificationsActive else Icons.Default.NotificationsNone,
-                                            contentDescription = "Reminder",
-                                            tint = if (isReminded) gold else Color.Gray
-                                        )
-                                    }
+                                    Icon(Icons.Default.PlayArrow, contentDescription = null, tint = gold)
                                 }
-                            }
-                        }
-
-                        item {
-                            Text("القنوات الرياضية (${sportChannels.size})", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                        }
-                        items(sportChannels, key = { it.id }) { ch ->
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(14.dp))
-                                    .background(Color(0xFF13131B))
-                                    .clickable { activeStream = ch }
-                                    .padding(12.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text(ch.title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                                Icon(Icons.Default.PlayArrow, contentDescription = null, tint = gold)
                             }
                         }
                     }
                 }
 
-                // 3: السينما (قسم الأفلام + قسم المسلسلات + تصنيف عربي / كوري / هندي / أجنبي)
+                // 3: السينما (تحفظ موضع التمرير لكل من الأفلام والمسلسلات بشكل مستقل!)
                 3 -> {
-                    var cinemaSubTab by remember { mutableStateOf("MOVIE") } // "MOVIE" or "SERIES"
-                    var selectedOrigin by remember { mutableStateOf("ALL") } // "ALL", "عربي", "كوري", "هندي", "أجنبي"
-
                     val cinemaItems = remember(allItems.size, cinemaSubTab, selectedOrigin) {
                         allItems.filter {
                             it.contentType == cinemaSubTab &&
@@ -714,7 +830,6 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
                     }
 
                     Column(modifier = Modifier.fillMaxSize().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        // أزرار التبديل بين قسم الأفلام وقسم المسلسلات
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             listOf("MOVIE" to strings.moviesTab, "SERIES" to strings.seriesTab).forEach { (type, label) ->
                                 val active = cinemaSubTab == type
@@ -732,7 +847,6 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
                             }
                         }
 
-                        // فلاتر التصنيف: الكل / عربي / كوري / هندي / أجنبي
                         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             items(listOf("ALL" to strings.all, "عربي" to "عربي", "كوري" to "كوري", "هندي" to "هندي", "أجنبي" to "أجنبي")) { (tag, label) ->
                                 FilterChip(
@@ -744,6 +858,7 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
                         }
 
                         LazyVerticalGrid(
+                            state = if (cinemaSubTab == "MOVIE") moviesGridState else seriesGridState,
                             columns = GridCells.Fixed(2),
                             horizontalArrangement = Arrangement.spacedBy(10.dp),
                             verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -769,37 +884,35 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
                                                 model = item.logo,
                                                 contentDescription = item.title,
                                                 contentScale = ContentScale.Crop,
-                                                modifier = Modifier.fillMaxWidth().height(155.dp).clip(RoundedCornerShape(12.dp))
+                                                modifier = Modifier.fillMaxWidth().height(160.dp).clip(RoundedCornerShape(12.dp))
                                             )
                                         } else {
                                             Box(
-                                                modifier = Modifier.fillMaxWidth().height(145.dp).background(Color(0xFF1D1D29), RoundedCornerShape(12.dp)),
+                                                modifier = Modifier.fillMaxWidth().height(150.dp).background(Color(0xFF1D1D29), RoundedCornerShape(12.dp)),
                                                 contentAlignment = Alignment.Center
                                             ) {
                                                 Icon(Icons.Default.MovieFilter, contentDescription = null, tint = gold, modifier = Modifier.size(36.dp))
                                             }
                                         }
-                                        // شارة التصنيف (كوري / عربي / هندي) + التقييم
                                         Row(
                                             modifier = Modifier.align(Alignment.TopStart).padding(6.dp),
                                             horizontalArrangement = Arrangement.spacedBy(4.dp)
                                         ) {
                                             Box(
-                                                modifier = Modifier.background(Color.Black.copy(alpha = 0.75f), RoundedCornerShape(6.dp)).padding(horizontal = 6.dp, vertical = 2.dp)
+                                                modifier = Modifier.background(Color.Black.copy(alpha = 0.78f), RoundedCornerShape(6.dp)).padding(horizontal = 6.dp, vertical = 2.dp)
                                             ) {
                                                 Text(item.originTag, color = goldLight, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                                             }
                                             if (item.rating.isNotEmpty() && item.rating != "0") {
                                                 Box(
-                                                    modifier = Modifier.background(Color.Black.copy(alpha = 0.75f), RoundedCornerShape(6.dp)).padding(horizontal = 6.dp, vertical = 2.dp)
+                                                    modifier = Modifier.background(Color.Black.copy(alpha = 0.78f), RoundedCornerShape(6.dp)).padding(horizontal = 6.dp, vertical = 2.dp)
                                                 ) {
-                                                    Text("⭐ ${item.rating}", color = Color.White, fontSize = 10.sp)
+                                                    Text("IMDb ${item.rating}", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                                                 }
                                             }
                                         }
                                     }
 
-                                    // خط تقدم المشاهدة الذهبي إذا سبق وبدأت بمشاهدته
                                     if (progress > 0.02f) {
                                         LinearProgressIndicator(
                                             progress = { progress },
@@ -811,7 +924,7 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
 
                                     Text(item.title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                     Text(
-                                        text = if (item.year.isNotEmpty()) "${item.year} • ${item.group}" else item.group,
+                                        text = if (item.year.isNotEmpty()) "${item.year} • ${item.genreTag}" else item.genreTag,
                                         color = Color(0xFF8E929F),
                                         fontSize = 11.sp,
                                         maxLines = 1,
@@ -891,15 +1004,99 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
 }
 
 // ============================================================================
-// صفحة تفاصيل الفيلم الاحترافية قبل التشغيل (التقييم + سنة الإنتاج + القصة + الممثلين)
+// صفوف السينما الأفقية الفخمة في الرئيسية (أحدث الأفلام / المسلسلات المميزة / أفلام 4K)
+// ============================================================================
+@Composable
+fun CinemaHorizontalRow(
+    title: String,
+    items: List<MediaItemModel>,
+    onMoreClick: () -> Unit,
+    onItemClick: (MediaItemModel) -> Unit
+) {
+    val gold = Color(0xFFD4AF37)
+    val goldLight = Color(0xFFFDE047)
+
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            Text(
+                text = "المزيد",
+                color = goldLight,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.clickable { onMoreClick() }.padding(horizontal = 6.dp, vertical = 2.dp)
+            )
+        }
+
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            items(items, key = { it.id }) { item ->
+                Column(
+                    modifier = Modifier
+                        .width(135.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(Color(0xFF13131B))
+                        .clickable { onItemClick(item) }
+                        .padding(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(5.dp)
+                ) {
+                    Box {
+                        if (item.logo.isNotEmpty()) {
+                            AsyncImage(
+                                model = item.logo,
+                                contentDescription = item.title,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.fillMaxWidth().height(165.dp).clip(RoundedCornerShape(10.dp))
+                            )
+                        } else {
+                            Box(
+                                modifier = Modifier.fillMaxWidth().height(165.dp).background(Color(0xFF1D1D29), RoundedCornerShape(10.dp)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(Icons.Default.Movie, contentDescription = null, tint = gold)
+                            }
+                        }
+                        if (item.rating.isNotEmpty() && item.rating != "0") {
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.BottomStart)
+                                    .padding(5.dp)
+                                    .background(Color.Black.copy(alpha = 0.8f), RoundedCornerShape(5.dp))
+                                    .padding(horizontal = 5.dp, vertical = 2.dp)
+                            ) {
+                                Text("IMDb ${item.rating}", color = goldLight, fontSize = 9.5.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                    Text(item.title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(
+                        text = if (item.year.isNotEmpty()) "${item.year} • ${item.genreTag}" else item.genreTag,
+                        color = Color(0xFF9CA3AF),
+                        fontSize = 10.5.sp,
+                        maxLines = 1
+                    )
+                }
+            }
+        }
+    }
+}
+
+// ============================================================================
+// صفحة تفاصيل الفيلم الاحترافية (بوستر عريض + شاهد الآن + المشاهدة لاحقاً + التقييم)
 // ============================================================================
 @Composable
 fun MovieDetailsScreen(
     movie: MediaItemModel,
     subscription: SavedSubscription?,
+    isInWatchlist: Boolean,
+    onToggleWatchlist: () -> Unit,
     onPlayMovie: (MediaItemModel) -> Unit,
     onBack: () -> Unit
 ) {
+    BackHandler { onBack() }
     val context = LocalContext.current
     val gold = Color(0xFFD4AF37)
     val goldLight = Color(0xFFFDE047)
@@ -937,7 +1134,7 @@ fun MovieDetailsScreen(
                     model = info.backdropUrl,
                     contentDescription = info.title,
                     contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxWidth().height(230.dp).clip(RoundedCornerShape(18.dp))
+                    modifier = Modifier.fillMaxWidth().height(250.dp).clip(RoundedCornerShape(18.dp))
                 )
             }
 
@@ -945,10 +1142,9 @@ fun MovieDetailsScreen(
 
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
                 Box(modifier = Modifier.background(gold.copy(alpha = 0.2f), RoundedCornerShape(8.dp)).padding(horizontal = 8.dp, vertical = 4.dp)) {
-                    Text("⭐ ${info.rating}", color = goldLight, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    Text("IMDb ⭐ ${info.rating}", color = goldLight, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                 }
-                Text("سنة الإنتاج: ${info.releaseDate}", color = Color(0xFFB0B5C0), fontSize = 12.sp)
-                Text("المدة: ${info.duration}", color = Color(0xFFB0B5C0), fontSize = 12.sp)
+                Text("${info.releaseDate} • ${info.duration}", color = Color(0xFFB0B5C0), fontSize = 12.sp)
             }
 
             if (savedProgress > 0.02f) {
@@ -963,25 +1159,35 @@ fun MovieDetailsScreen(
                 }
             }
 
-            Button(
-                onClick = { onPlayMovie(movie) },
-                colors = ButtonDefaults.buttonColors(containerColor = gold),
-                shape = RoundedCornerShape(14.dp),
-                modifier = Modifier.fillMaxWidth().height(50.dp)
-            ) {
-                Icon(Icons.Default.PlayArrow, contentDescription = null, tint = Color.Black)
-                Spacer(Modifier.width(6.dp))
-                Text(
-                    text = if (savedProgress > 0.02f) "إكمال مشاهدة الفيلم" else "تشغيل الفيلم الآن",
-                    color = Color.Black,
-                    fontWeight = FontWeight.ExtraBold,
-                    fontSize = 15.sp
-                )
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Button(
+                    onClick = { onPlayMovie(movie) },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626)),
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier.weight(1f).height(50.dp)
+                ) {
+                    Icon(Icons.Default.PlayArrow, contentDescription = null, tint = Color.White)
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        text = if (savedProgress > 0.02f) "إكمال المشاهدة" else "شاهد الآن",
+                        color = Color.White,
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 15.sp
+                    )
+                }
+
+                OutlinedButton(
+                    onClick = onToggleWatchlist,
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier.height(50.dp)
+                ) {
+                    Icon(if (isInWatchlist) Icons.Default.Check else Icons.Default.Add, contentDescription = null, tint = goldLight)
+                    Spacer(Modifier.width(4.dp))
+                    Text(if (isInWatchlist) "في القائمة" else "لاحقاً", color = Color.White, fontSize = 12.sp)
+                }
             }
 
-            Text("القصة:", color = gold, fontWeight = FontWeight.Bold, fontSize = 14.sp)
             Text(info.plot, color = Color(0xFFD1D5DB), fontSize = 13.sp, lineHeight = 20.sp)
-
             Text("الممثلون: ${info.cast}", color = Color(0xFF9CA3AF), fontSize = 12.sp)
             Text("المخرج: ${info.director}", color = Color(0xFF9CA3AF), fontSize = 12.sp)
         }
@@ -989,15 +1195,18 @@ fun MovieDetailsScreen(
 }
 
 // ============================================================================
-// صفحة تفاصيل المسلسل (تبديل المواسم بسلاسة + قائمة الحلقات المرقمة + خط المشاهدة)
+// صفحة تفاصيل المسلسل (بأسلوب سينمانا: شاهد الآن + تبديل المواسم + حلقات مصورة)
 // ============================================================================
 @Composable
 fun SeriesDetailsScreen(
     series: MediaItemModel,
     subscription: SavedSubscription?,
+    isInWatchlist: Boolean,
+    onToggleWatchlist: () -> Unit,
     onPlayEpisode: (MediaItemModel) -> Unit,
     onBack: () -> Unit
 ) {
+    BackHandler { onBack() }
     val context = LocalContext.current
     val gold = Color(0xFFD4AF37)
     val goldLight = Color(0xFFFDE047)
@@ -1035,6 +1244,8 @@ fun SeriesDetailsScreen(
                 CircularProgressIndicator(color = gold)
             }
         } else {
+            val episodes = info.seasons[selectedSeason] ?: emptyList()
+
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 if (info.backdropUrl.isNotEmpty()) {
                     AsyncImage(
@@ -1045,13 +1256,38 @@ fun SeriesDetailsScreen(
                     )
                 }
                 Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("⭐ ${info.rating}  •  ${info.releaseDate}", color = goldLight, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                    Text(info.plot, color = Color(0xFFD1D5DB), fontSize = 12.sp, maxLines = 4, overflow = TextOverflow.Ellipsis)
-                    Text("الممثلون: ${info.cast}", color = Color(0xFF9CA3AF), fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    Text("IMDb ⭐ ${info.rating}  •  ${info.releaseDate}", color = goldLight, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    Text(info.plot, color = Color(0xFFD1D5DB), fontSize = 12.sp, maxLines = 3, overflow = TextOverflow.Ellipsis)
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(
+                            onClick = {
+                                val firstEp = episodes.firstOrNull()
+                                if (firstEp != null) {
+                                    onPlayEpisode(
+                                        MediaItemModel(firstEp.id, firstEp.id, "${series.title} - م${firstEp.seasonNum} ح${firstEp.episodeNum}", firstEp.url, "", series.group, series.logo, "SERIES")
+                                    )
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626)),
+                            shape = RoundedCornerShape(10.dp),
+                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
+                        ) {
+                            Icon(Icons.Default.PlayArrow, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("شاهد الآن", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                        }
+
+                        IconButton(
+                            onClick = onToggleWatchlist,
+                            modifier = Modifier.size(38.dp).background(Color(0xFF1A1A26), CircleShape)
+                        ) {
+                            Icon(if (isInWatchlist) Icons.Default.Favorite else Icons.Default.FavoriteBorder, contentDescription = null, tint = if (isInWatchlist) Color(0xFFEF4444) else Color.White, modifier = Modifier.size(18.dp))
+                        }
+                    }
                 }
             }
 
-            // أزرار التبديل السلس بين المواسم (Season 1, Season 2...)
             if (info.seasons.isNotEmpty()) {
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(info.seasons.keys.toList()) { seasonNum ->
@@ -1070,20 +1306,18 @@ fun SeriesDetailsScreen(
                 }
             }
 
-            // قائمة الحلقات المرقمة مع شريط تقدم المشاهدة الواضح لكل حلقة
-            val episodes = info.seasons[selectedSeason] ?: emptyList()
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxSize()) {
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxSize()) {
                 items(episodes, key = { it.id }) { ep ->
                     val progress = remember(ep.id) { DevkanVault.getVodProgressFraction(context, ep.id) }
                     val statusText = when {
                         progress >= 0.90f -> "مكتملة ✓"
-                        progress >= 0.45f -> "وصلت إلى منتصف الحلقة (${(progress * 100).toInt()}%)"
-                        progress >= 0.15f -> "وصلت إلى ربع الحلقة (${(progress * 100).toInt()}%)"
-                        progress > 0.02f -> "بدأت المشاهدة (${(progress * 100).toInt()}%)"
-                        else -> "لم تُشاهد بعد"
+                        progress >= 0.45f -> "نصف الحلقة (${(progress * 100).toInt()}%)"
+                        progress >= 0.15f -> "ربع الحلقة (${(progress * 100).toInt()}%)"
+                        progress > 0.02f -> "قيد المشاهدة (${(progress * 100).toInt()}%)"
+                        else -> ep.duration.ifEmpty { "جاهزة للمشاهدة" }
                     }
 
-                    Column(
+                    Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(14.dp))
@@ -1102,41 +1336,33 @@ fun SeriesDetailsScreen(
                                     )
                                 )
                             }
-                            .padding(12.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                            .padding(10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Row(
-                                modifier = Modifier.weight(1f),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(10.dp)
-                            ) {
-                                Box(
-                                    modifier = Modifier.size(32.dp).background(gold.copy(alpha = 0.2f), CircleShape),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text("${ep.episodeNum}", color = goldLight, fontWeight = FontWeight.Black, fontSize = 13.sp)
-                                }
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(ep.title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                    Text(statusText, color = if (progress > 0.02f) goldLight else Color.Gray, fontSize = 11.sp)
-                                }
+                        Box(modifier = Modifier.width(105.dp).height(64.dp).clip(RoundedCornerShape(10.dp))) {
+                            if (series.logo.isNotEmpty()) {
+                                AsyncImage(model = series.logo, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
                             }
-                            Icon(Icons.Default.PlayCircleOutline, contentDescription = null, tint = gold, modifier = Modifier.size(26.dp))
+                            Box(
+                                modifier = Modifier.align(Alignment.Center).size(28.dp).background(Color(0xFFDC2626).copy(alpha = 0.9f), CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(Icons.Default.PlayArrow, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                            }
                         }
 
-                        // خط تقدم المشاهدة الذهبي أسفل الحلقة
-                        if (progress > 0.02f) {
-                            LinearProgressIndicator(
-                                progress = { progress },
-                                color = gold,
-                                trackColor = Color(0xFF2B2B3C),
-                                modifier = Modifier.fillMaxWidth().height(4.dp).clip(CircleShape)
-                            )
+                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text("${series.title} • الحلقة ${ep.episodeNum}", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(statusText, color = if (progress > 0.02f) goldLight else Color.Gray, fontSize = 11.sp)
+                            if (progress > 0.02f) {
+                                LinearProgressIndicator(
+                                    progress = { progress },
+                                    color = gold,
+                                    trackColor = Color(0xFF2B2B3C),
+                                    modifier = Modifier.fillMaxWidth().height(4.dp).clip(CircleShape)
+                                )
+                            }
                         }
                     }
                 }
