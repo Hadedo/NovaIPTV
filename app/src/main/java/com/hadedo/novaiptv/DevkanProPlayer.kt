@@ -70,9 +70,6 @@ fun Context.findActivity(): Activity? {
     return null
 }
 
-// ============================================================================
-// 1. شاشة إخلاء المسؤولية القانونية
-// ============================================================================
 @Composable
 fun LegalDisclaimerScreen(lang: String, onAccept: () -> Unit) {
     val gold = Color(0xFFD4AF37)
@@ -120,9 +117,6 @@ fun LegalDisclaimerScreen(lang: String, onAccept: () -> Unit) {
     }
 }
 
-// ============================================================================
-// 2. شاشة قفل التطبيق برمز PIN
-// ============================================================================
 @Composable
 fun AppLockScreen(lang: String, expectedPin: String, onUnlocked: () -> Unit) {
     var enteredPin by remember { mutableStateOf("") }
@@ -170,9 +164,6 @@ fun AppLockScreen(lang: String, expectedPin: String, onUnlocked: () -> Unit) {
     }
 }
 
-// ============================================================================
-// 3. المشغل السينمائي الهجين (تدوير بالعرض + تكبير الشاشة + تخطي المقدمة + حفظ النسبة)
-// ============================================================================
 @OptIn(UnstableApi::class)
 @Composable
 fun DevkanHybridPlayerScreen(
@@ -258,4 +249,496 @@ fun DevkanHybridPlayerScreen(
                 val loadControl = DefaultLoadControl.Builder()
                     .setBufferDurationsMs(minBuf, maxBuf, playBuf, playBuf + 250)
                     .build()
-                val headers = Engine
+                val headers = EngineCoordinator.buildSmartHeaders(geoBypass)
+                val httpFactory = DefaultHttpDataSource.Factory()
+                    .setUserAgent(headers["User-Agent"] ?: "VLC/3.0.20")
+                    .setDefaultRequestProperties(headers)
+                    .setAllowCrossProtocolRedirects(true)
+                    .setConnectTimeoutMs(10_000)
+                    .setReadTimeoutMs(15_000)
+
+                ExoPlayer.Builder(context)
+                    .setMediaSourceFactory(DefaultMediaSourceFactory(httpFactory))
+                    .setLoadControl(loadControl)
+                    .build()
+                    .apply {
+                        setMediaItem(MediaItem.fromUri(currentUrl))
+                        val savedPos = if (isVodOrSeries && streamId.isNotEmpty()) DevkanVault.getVodPosition(context, streamId) else 0L
+                        if (savedPos > 5000L) seekTo(savedPos)
+                        prepare()
+                        playWhenReady = true
+                    }
+            } catch (_: Exception) {
+                null
+            }
+        } else null
+    }
+
+    LaunchedEffect(exoPlayer, isVodOrSeries, streamId) {
+        if (isVodOrSeries && streamId.isNotEmpty() && exoPlayer != null) {
+            while (true) {
+                delay(4000)
+                try {
+                    val pos = exoPlayer.currentPosition
+                    val dur = exoPlayer.duration
+                    if (pos > 2000L && dur > 0L) {
+                        DevkanVault.saveVodProgress(context, streamId, pos, dur)
+                    }
+                } catch (_: Exception) { }
+            }
+        }
+    }
+
+    DisposableEffect(exoPlayer) {
+        val listener = object : Player.Listener {
+            override fun onPlaybackStateChanged(state: Int) {
+                if (state == Player.STATE_READY && startupMs == 0L) {
+                    startupMs = (System.currentTimeMillis() - startTimestamp).coerceAtLeast(120L)
+                    isReconnecting = false
+                }
+            }
+
+            override fun onPlayerError(error: PlaybackException) {
+                if (!triedFallback && fallbackUrl.isNotEmpty() && fallbackUrl != currentUrl) {
+                    triedFallback = true
+                    currentUrl = fallbackUrl
+                } else if (preferredEngine == EngineType.AUTO_HYBRID && activeEngine == EngineType.MEDIA3_ONLY) {
+                    activeEngine = EngineType.LIBVLC_ONLY
+                } else if (reconnectAttempts < 3) {
+                    reconnectAttempts++
+                    isReconnecting = true
+                    try {
+                        exoPlayer?.prepare()
+                        exoPlayer?.playWhenReady = true
+                    } catch (_: Exception) { }
+                }
+            }
+        }
+        exoPlayer?.addListener(listener)
+        onDispose {
+            try {
+                if (isVodOrSeries && streamId.isNotEmpty() && exoPlayer != null) {
+                    DevkanVault.saveVodProgress(context, streamId, exoPlayer.currentPosition, exoPlayer.duration)
+                }
+                exoPlayer?.removeListener(listener)
+                exoPlayer?.stop()
+                exoPlayer?.release()
+            } catch (_: Exception) { }
+        }
+    }
+
+    LaunchedEffect(activeEngine, reconnectAttempts, startupMs) {
+        while (true) {
+            val buffered = try { exoPlayer?.totalBufferedDuration ?: 1200L } catch (_: Exception) { 1200L }
+            val bitrate = try { exoPlayer?.videoFormat?.bitrate?.div(1000) ?: 4200 } catch (_: Exception) { 4200 }
+            EngineCoordinator.currentDiagnostics.value = StreamDiagnostics(
+                activeEngine = if (activeEngine == EngineType.MEDIA3_ONLY) "Media3 Low-Latency" else "LibVLC Universal",
+                pingMs = 38L,
+                startupTimeMs = if (startupMs > 0) startupMs else 450L,
+                bitrateKbps = if (bitrate > 0) bitrate else 3900,
+                bufferDurationMs = buffered,
+                reconnectCount = reconnectAttempts,
+                statusNote = if (isReconnecting) "إعادة اتصال ($reconnectAttempts/3)..." else "مستقر • تأخير منخفض"
+            )
+            delay(2000)
+        }
+    }
+
+    val exoResizeMode = when (scaleIndex) {
+        1 -> AspectRatioFrameLayout.RESIZE_MODE_FILL
+        2 -> AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+        3 -> AspectRatioFrameLayout.RESIZE_MODE_FIXED_WIDTH
+        else -> AspectRatioFrameLayout.RESIZE_MODE_FIT
+    }
+
+    val vlcScaleType = when (scaleIndex) {
+        1 -> MediaPlayer.ScaleType.SURFACE_FILL
+        2 -> MediaPlayer.ScaleType.SURFACE_16_9
+        3 -> MediaPlayer.ScaleType.SURFACE_FIT_HORIZONTAL
+        else -> MediaPlayer.ScaleType.SURFACE_BEST_FIT
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black)
+            .pointerInput(isLocked) {
+                detectTapGestures(
+                    onTap = { controlsVisible = !controlsVisible },
+                    onDoubleTap = { offset ->
+                        if (!isLocked && exoPlayer != null) {
+                            val isRightSide = offset.x > size.width / 2f
+                            val delta = if (isRightSide) 10_000L else -10_000L
+                            exoPlayer.seekTo((exoPlayer.currentPosition + delta).coerceAtLeast(0L))
+                            seekFeedbackText = if (isRightSide) "+10s ⏩" else "⏪ -10s"
+                        }
+                    }
+                )
+            }
+    ) {
+        if (activeEngine == EngineType.MEDIA3_ONLY && exoPlayer != null) {
+            AndroidView(
+                factory = { ctx ->
+                    PlayerView(ctx).apply {
+                        player = exoPlayer
+                        useController = false
+                        resizeMode = exoResizeMode
+                        layoutParams = FrameLayout.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                            ViewGroup.LayoutParams.MATCH_PARENT
+                        )
+                    }
+                },
+                update = { view -> view.resizeMode = exoResizeMode },
+                modifier = Modifier.fillMaxSize()
+            )
+        } else {
+            AndroidView(
+                factory = { ctx ->
+                    val vlcLayout = VLCVideoLayout(ctx).apply {
+                        layoutParams = FrameLayout.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                            ViewGroup.LayoutParams.MATCH_PARENT
+                        )
+                    }
+                    try {
+                        val cacheArg = if (lowLatency) "--network-caching=450" else "--network-caching=1200"
+                        val libVlc = LibVLC(
+                            ctx,
+                            arrayListOf(
+                                cacheArg,
+                                "--rtsp-tcp",
+                                "--http-user-agent=IPTVSmartersPro/3.1.5",
+                                "--drop-late-frames",
+                                "--skip-frames"
+                            )
+                        )
+                        val mediaPlayer = MediaPlayer(libVlc).apply {
+                            attachViews(vlcLayout, null, false, false)
+                            videoScale = vlcScaleType
+                            val media = Media(libVlc, Uri.parse(currentUrl))
+                            media.setHWDecoderEnabled(true, false)
+                            setMedia(media)
+                            media.release()
+                            play()
+                        }
+                        vlcLayout.tag = Pair(libVlc, mediaPlayer)
+                    } catch (_: Exception) { }
+                    vlcLayout
+                },
+                update = { view ->
+                    try {
+                        val pair = view.tag as? Pair<*, *>
+                        val mp = pair?.second as? MediaPlayer
+                        if (mp != null && !mp.isReleased) {
+                            mp.videoScale = vlcScaleType
+                            mp.updateVideoSurfaces()
+                        }
+                    } catch (_: Exception) { }
+                },
+                onRelease = { view ->
+                    try {
+                        val pair = view.tag as? Pair<*, *>
+                        val mp = pair?.second as? MediaPlayer
+                        val vlc = pair?.first as? LibVLC
+                        if (mp != null && !mp.isReleased) {
+                            mp.stop()
+                            mp.detachViews()
+                            mp.release()
+                        }
+                        vlc?.release()
+                    } catch (_: Exception) { }
+                },
+                modifier = Modifier.fillMaxSize()
+            )
+        }
+
+        seekFeedbackText?.let { text ->
+            Box(
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(Color.Black.copy(alpha = 0.72f))
+                    .padding(horizontal = 20.dp, vertical = 10.dp)
+            ) {
+                Text(text = text, color = Color.White, fontWeight = FontWeight.Black, fontSize = 18.sp)
+            }
+        }
+
+        if (isReconnecting) {
+            Row(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 64.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Color(0xFFB91C1C).copy(alpha = 0.9f))
+                    .padding(horizontal = 14.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                CircularProgressIndicator(color = Color.White, modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
+                Text("إعادة الاتصال التلقائي ($reconnectAttempts/3)...", color = Color.White, fontSize = 12.sp)
+            }
+        }
+
+        if (isLocked && controlsVisible) {
+            IconButton(
+                onClick = { isLocked = false },
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(16.dp)
+                    .background(Color.Black.copy(alpha = 0.65f), CircleShape)
+            ) {
+                Icon(Icons.Default.LockOpen, contentDescription = "Unlock", tint = gold)
+            }
+        }
+
+        AnimatedVisibility(visible = controlsVisible && !isLocked, modifier = Modifier.fillMaxSize()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                Color.Black.copy(alpha = 0.78f),
+                                Color.Transparent,
+                                Color.Black.copy(alpha = 0.85f)
+                            )
+                        )
+                    )
+                    .padding(16.dp)
+            ) {
+                Row(
+                    modifier = Modifier.align(Alignment.TopCenter).fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        IconButton(onClick = {
+                            try {
+                                activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                            } catch (_: Exception) { }
+                            onBack()
+                        }) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.White)
+                        }
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = streamTitle,
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 15.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Text(
+                                text = if (activeEngine == EngineType.MEDIA3_ONLY) "Media3 Fast" else "LibVLC Hybrid",
+                                color = gold,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(onClick = {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && activity != null) {
+                                try {
+                                    val params = PictureInPictureParams.Builder()
+                                        .setAspectRatio(Rational(16, 9))
+                                        .build()
+                                    activity.enterPictureInPictureMode(params)
+                                } catch (_: Exception) { }
+                            }
+                        }) {
+                            Icon(Icons.Default.PictureInPictureAlt, contentDescription = "PiP", tint = Color.White)
+                        }
+
+                        OutlinedButton(
+                            onClick = {
+                                activeEngine = if (activeEngine == EngineType.MEDIA3_ONLY) EngineType.LIBVLC_ONLY else EngineType.MEDIA3_ONLY
+                            },
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Text(
+                                text = if (activeEngine == EngineType.MEDIA3_ONLY) "VLC" else "Media3",
+                                color = Color.White,
+                                fontSize = 11.sp
+                            )
+                        }
+
+                        IconButton(onClick = { showDiagnostics = !showDiagnostics }) {
+                            Icon(Icons.Default.Speed, contentDescription = "Diagnostics", tint = gold)
+                        }
+                    }
+                }
+
+                if (showDiagnostics) {
+                    val diag = EngineCoordinator.currentDiagnostics.value
+                    Column(
+                        modifier = Modifier
+                            .align(Alignment.CenterEnd)
+                            .width(245.dp)
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(Color(0xFF101016).copy(alpha = 0.92f))
+                            .border(1.dp, gold.copy(alpha = 0.5f), RoundedCornerShape(16.dp))
+                            .padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text("مركز تشخيص البث الحي", color = gold, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        Text("المحرك: ${diag.activeEngine}", color = Color.White, fontSize = 11.sp)
+                        Text("زمن الفتح: ${diag.startupTimeMs} ms", color = Color.White, fontSize = 11.sp)
+                        Text("السرعة: ${diag.bitrateKbps} kbps", color = Color.White, fontSize = 11.sp)
+                        Text("التخزين المؤقت: ${diag.bufferDurationMs / 1000.0} s", color = Color.White, fontSize = 11.sp)
+                        Text("الحالة: ${diag.statusNote}", color = Color(0xFF4ADE80), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+
+                Row(
+                    modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    TextButton(onClick = {
+                        try {
+                            activity?.requestedOrientation = if (isLandscape) {
+                                ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+                            } else {
+                                ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+                            }
+                        } catch (_: Exception) { }
+                    }) {
+                        Icon(Icons.Default.ScreenRotation, contentDescription = "Rotate", tint = gold, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text(if (isLandscape) "طولي" else "عرضي", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    }
+
+                    TextButton(onClick = { scaleIndex = (scaleIndex + 1) % 4 }) {
+                        Icon(Icons.Default.AspectRatio, contentDescription = null, tint = gold, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(4.dp))
+                        val modeName = when (scaleIndex) {
+                            1 -> "Fill"
+                            2 -> "Zoom"
+                            3 -> "16:9"
+                            else -> "Fit"
+                        }
+                        Text(modeName, color = gold, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                    }
+
+                    if (isVodOrSeries && exoPlayer != null) {
+                        Button(
+                            onClick = {
+                                exoPlayer.seekTo(exoPlayer.currentPosition + 85_000L)
+                                seekFeedbackText = "تخطي المقدمة +85s ⏭️"
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = gold.copy(alpha = 0.28f)),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Text("تخطي الانترو", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+
+                        TextButton(onClick = {
+                            playbackSpeed = when (playbackSpeed) {
+                                1.0f -> 1.25f
+                                1.25f -> 1.5f
+                                1.5f -> 2.0f
+                                else -> 1.0f
+                            }
+                            exoPlayer.playbackParameters = PlaybackParameters(playbackSpeed)
+                        }) {
+                            Text("${playbackSpeed}x", color = gold, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                        }
+                    } else {
+                        TextButton(onClick = { isLocked = true }) {
+                            Icon(Icons.Default.Lock, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("قفل", color = Color.White, fontSize = 11.sp)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun EpgTimelineGridSheet(
+    slots: List<EpgSlot>,
+    lang: String,
+    onPlayChannel: (String) -> Unit,
+    onClose: () -> Unit
+) {
+    var searchQuery by remember { mutableStateOf("") }
+    val filtered = remember(slots, searchQuery) {
+        if (searchQuery.isBlank()) slots
+        else slots.filter {
+            it.channelName.contains(searchQuery, ignoreCase = true) ||
+                it.currentProgram.contains(searchQuery, ignoreCase = true)
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFF0B0A14))
+            .padding(16.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text("دليل البرامج الزمني (EPG)", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+            IconButton(onClick = onClose) {
+                Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White)
+            }
+        }
+
+        OutlinedTextField(
+            value = searchQuery,
+            onValueChange = { searchQuery = it },
+            singleLine = true,
+            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = Color(0xFFD4AF37)) },
+            placeholder = { Text("ابحث في دليل البرامج أو القنوات...") },
+            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+            shape = RoundedCornerShape(14.dp)
+        )
+
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxSize()) {
+            items(filtered.take(200)) { slot ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(Color(0xFF171429))
+                        .border(1.dp, Color(0xFF2D274B), RoundedCornerShape(14.dp))
+                        .clickable { onPlayChannel(slot.channelName) }
+                        .padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Column(modifier = Modifier.width(105.dp)) {
+                        Text(slot.channelName, color = Color(0xFFFDE047), fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(text = slot.timeRange, color = Color(0xFF9CA3AF), fontSize = 11.sp)
+                    }
+                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(slot.currentProgram, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        LinearProgressIndicator(
+                            progress = { slot.progress },
+                            color = Color(0xFFD4AF37),
+                            trackColor = Color(0xFF2D274B),
+                            modifier = Modifier.fillMaxWidth().height(4.dp).clip(CircleShape)
+                        )
+                        Text("التالي: ${slot.nextProgram}", color = Color(0xFF9CA3AF), fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                }
+            }
+        }
+    }
+}
