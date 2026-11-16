@@ -7,6 +7,8 @@
 }
 -dontwarn androidx.media3.**
 -keep class androidx.media3.** { *; }
+-dontwarn org.videolan.libvlc.**
+-keep class org.videolan.libvlc.** { *; }
 -dontwarn okhttp3.**
 -keep class okhttp3.** { *; }
 -dontwarn org.json.**
