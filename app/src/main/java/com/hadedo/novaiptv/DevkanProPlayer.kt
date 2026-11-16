@@ -10,6 +10,7 @@ import android.net.Uri
 import android.os.Build
 import android.util.Rational
 import android.view.ViewGroup
+import android.view.WindowManager
 import android.widget.FrameLayout
 import androidx.activity.compose.BackHandler
 import androidx.annotation.OptIn
@@ -184,6 +185,8 @@ fun DevkanHybridPlayerScreen(
     streamTitle: String,
     isVodOrSeries: Boolean = false,
     streamId: String = "",
+    quickChannels: List<MediaItemModel> = emptyList(),
+    onSwitchChannel: (MediaItemModel) -> Unit = {},
     lang: String = "ar",
     onBack: () -> Unit
 ) {
@@ -206,10 +209,10 @@ fun DevkanHybridPlayerScreen(
     var controlsVisible by remember { mutableStateOf(true) }
     var isLocked by remember { mutableStateOf(false) }
     var isPaused by remember { mutableStateOf(false) }
+    var showQuickDrawer by remember { mutableStateOf(false) }
     var currentPosMs by remember { mutableLongStateOf(0L) }
     var totalDurMs by remember { mutableLongStateOf(0L) }
 
-    // 0 = Fit (أبعاد طبيعية في الوضع الطولي بدون تشويه), 1 = Fill (ملء الشاشة بالعرض), 2 = Zoom, 3 = 16:9
     var scaleIndex by remember { mutableIntStateOf(if (isLandscape) 1 else 0) }
     var playbackSpeed by remember { mutableFloatStateOf(1.0f) }
     var reconnectAttempts by remember { mutableIntStateOf(0) }
@@ -221,17 +224,36 @@ fun DevkanHybridPlayerScreen(
     val startTimestamp = remember { System.currentTimeMillis() }
     var startupMs by remember { mutableLongStateOf(0L) }
 
-    // التبديل الذكي للأبعاد: Fit في الطول لمنع التشويه، و Fill في العرض لملء الشاشة
+    // منع انطفاء الشاشة نهائياً أثناء المشاهدة (FLAG_KEEP_SCREEN_ON)
+    DisposableEffect(activity, isPaused) {
+        val window = activity?.window
+        if (window != null) {
+            if (!isPaused) {
+                window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            } else {
+                window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            }
+        }
+        onDispose {
+            try {
+                window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            } catch (_: Exception) { }
+        }
+    }
+
     LaunchedEffect(isLandscape) {
         scaleIndex = if (isLandscape) 1 else 0
     }
 
-    // زر الرجوع في الهاتف يعيدك للشاشة السابقة بأمان
     BackHandler {
-        try {
-            activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
-        } catch (_: Exception) { }
-        onBack()
+        if (showQuickDrawer) {
+            showQuickDrawer = false
+        } else {
+            try {
+                activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+            } catch (_: Exception) { }
+            onBack()
+        }
     }
 
     DisposableEffect(activity) {
@@ -259,8 +281,8 @@ fun DevkanHybridPlayerScreen(
         }
     }
 
-    LaunchedEffect(controlsVisible, isLocked, isPaused) {
-        if (controlsVisible && !isLocked && !isPaused) {
+    LaunchedEffect(controlsVisible, isLocked, isPaused, showQuickDrawer) {
+        if (controlsVisible && !isLocked && !isPaused && !showQuickDrawer) {
             delay(5000)
             controlsVisible = false
         }
@@ -305,7 +327,6 @@ fun DevkanHybridPlayerScreen(
         } else null
     }
 
-    // تحديث شريط الوقت وحفظ نسبة المشاهدة للأفلام والمسلسلات
     LaunchedEffect(exoPlayer, vlcPlayerRef, isVodOrSeries, streamId) {
         while (true) {
             delay(1000)
@@ -378,7 +399,7 @@ fun DevkanHybridPlayerScreen(
                 bitrateKbps = if (bitrate > 0) bitrate else 3900,
                 bufferDurationMs = buffered,
                 reconnectCount = reconnectAttempts,
-                statusNote = if (isReconnecting) "إعادة اتصال ($reconnectAttempts/3)..." else "مستقر • تأخير منخفض"
+                statusNote = if (isReconnecting) "إعادة اتصال ($reconnectAttempts/3)..." else "مستقر • الشاشة محمية من الانطفاء"
             )
             delay(2000)
         }
@@ -436,7 +457,10 @@ fun DevkanHybridPlayerScreen(
             .background(Color.Black)
             .pointerInput(isLocked) {
                 detectTapGestures(
-                    onTap = { controlsVisible = !controlsVisible },
+                    onTap = {
+                        if (showQuickDrawer) showQuickDrawer = false
+                        else controlsVisible = !controlsVisible
+                    },
                     onDoubleTap = { offset ->
                         if (!isLocked) {
                             val isRightSide = offset.x > size.width / 2f
@@ -569,6 +593,62 @@ fun DevkanHybridPlayerScreen(
             }
         }
 
+        // القائمة الجانبية السريعة لتبديل القنوات داخل المشغل دون مغادرة الفيديو
+        if (showQuickDrawer && quickChannels.isNotEmpty()) {
+            Column(
+                modifier = Modifier
+                    .align(Alignment.CenterStart)
+                    .fillMaxHeight()
+                    .width(260.dp)
+                    .background(Color(0xFF0E0E16).copy(alpha = 0.94f))
+                    .border(1.dp, gold.copy(alpha = 0.4f))
+                    .padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("التنقل السريع بين القنوات", color = gold, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    IconButton(onClick = { showQuickDrawer = false }) {
+                        Icon(Icons.Default.Close, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                    }
+                }
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    items(quickChannels.take(100), key = { it.id }) { ch ->
+                        val isCurrent = ch.url == currentUrl
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(if (isCurrent) gold.copy(alpha = 0.25f) else Color(0xFF171724))
+                                .clickable {
+                                    showQuickDrawer = false
+                                    onSwitchChannel(ch)
+                                }
+                                .padding(10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = ch.title,
+                                color = if (isCurrent) gold else Color.White,
+                                fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal,
+                                fontSize = 12.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f)
+                            )
+                            if (isCurrent) {
+                                Icon(Icons.Default.Equalizer, contentDescription = null, tint = gold, modifier = Modifier.size(16.dp))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         AnimatedVisibility(visible = controlsVisible && !isLocked, modifier = Modifier.fillMaxSize()) {
             Box(
                 modifier = Modifier
@@ -584,7 +664,6 @@ fun DevkanHybridPlayerScreen(
                     )
                     .padding(16.dp)
             ) {
-                // الشريط العلوي
                 Row(
                     modifier = Modifier.align(Alignment.TopCenter).fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
@@ -622,6 +701,12 @@ fun DevkanHybridPlayerScreen(
                     }
 
                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                        if (!isVodOrSeries && quickChannels.isNotEmpty()) {
+                            IconButton(onClick = { showQuickDrawer = !showQuickDrawer }) {
+                                Icon(Icons.Default.List, contentDescription = "Channels", tint = gold)
+                            }
+                        }
+
                         IconButton(onClick = {
                             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && activity != null) {
                                 try {
@@ -715,7 +800,6 @@ fun DevkanHybridPlayerScreen(
                     }
                 }
 
-                // الشريط السفلي + شريط الوقت التفاعلي للأفلام والمسلسلات
                 Column(
                     modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(4.dp)
