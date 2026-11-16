@@ -93,7 +93,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         setContent {
-            NovaIptvUltimateApp(isInPipMode = isInPipState)
+            AurexUltimateApp(isInPipMode = isInPipState)
         }
     }
 
@@ -161,33 +161,58 @@ fun getStrings(lang: String): AppStrings = when (lang) {
 }
 
 @Composable
-fun DevkanBrandWordmark(accentColor: Color) {
-    val goldColor = Color(0xFFF59E0B)
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Image(
-            painter = painterResource(id = R.drawable.devkan_logo),
-            contentDescription = "DEVKAN 34 VIP",
-            contentScale = ContentScale.Crop,
+fun AurexBrandWordmark(accentColor: Color) {
+    val goldLight = Color(0xFFFDE047)
+    val goldMid = Color(0xFFD4AF37)
+    val goldDark = Color(0xFFB45309)
+
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Box(
             modifier = Modifier
                 .size(32.dp)
-                .clip(CircleShape)
-                .border(1.5.dp, goldColor, CircleShape)
-        )
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                .clip(RoundedCornerShape(9.dp))
+                .background(
+                    brush = Brush.linearGradient(
+                        colors = listOf(goldLight, goldMid, goldDark)
+                    )
+                )
+                .border(1.dp, goldLight.copy(alpha = 0.7f), RoundedCornerShape(9.dp)),
+            contentAlignment = Alignment.Center
+        ) {
+            Image(
+                painter = painterResource(id = R.drawable.ic_launcher),
+                contentDescription = "AUREX",
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
+        }
+
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(5.dp)
+        ) {
             Text(
-                "DEVKAN 34",
+                text = "AUREX",
                 color = Color.White,
                 fontWeight = FontWeight.Black,
-                fontSize = 14.sp,
-                letterSpacing = 0.8.sp
+                fontSize = 16.sp,
+                letterSpacing = 1.4.sp
             )
             Box(
                 modifier = Modifier
-                    .background(goldColor.copy(alpha = 0.22f), RoundedCornerShape(5.dp))
-                    .border(1.dp, goldColor.copy(alpha = 0.8f), RoundedCornerShape(5.dp))
+                    .background(goldMid.copy(alpha = 0.2f), RoundedCornerShape(5.dp))
+                    .border(1.dp, goldMid.copy(alpha = 0.85f), RoundedCornerShape(5.dp))
                     .padding(horizontal = 5.dp, vertical = 1.dp)
             ) {
-                Text("VIP", color = goldColor, fontWeight = FontWeight.ExtraBold, fontSize = 9.sp)
+                Text(
+                    text = "GOLD",
+                    color = goldLight,
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 9.sp
+                )
             }
         }
     }
@@ -220,13 +245,13 @@ private fun ChannelMonogramBadge(name: String, logoUrl: String, accentColor: Col
 @androidx.annotation.OptIn(UnstableApi::class)
 @kotlin.OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
-fun NovaIptvUltimateApp(isInPipMode: Boolean) {
+fun AurexUltimateApp(isInPipMode: Boolean) {
     val context = LocalContext.current
     val activity = context as? Activity
     val scope = rememberCoroutineScope()
     val clipboard = LocalClipboardManager.current
     val haptics = LocalHapticFeedback.current
-    val prefs = remember { context.getSharedPreferences("nova_neon_prefs", Context.MODE_PRIVATE) }
+    val prefs = remember { context.getSharedPreferences("aurex_gold_prefs", Context.MODE_PRIVATE) }
 
     var appLang by remember { mutableStateOf(prefs.getString("app_lang", "ar") ?: "ar") }
     val str = remember(appLang) { getStrings(appLang) }
@@ -237,7 +262,7 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
         Pair("بنفسجي نيون", Color(0xFF7C6DFA)),
         Pair("أزرق كهربائي", Color(0xFF3B82F6)),
         Pair("زمردي", Color(0xFF10B981)),
-        Pair("عنبري ذهبي", Color(0xFFF59E0B)),
+        Pair("ذهبي ملكي", Color(0xFFD4AF37)),
         Pair("أحمر سينمائي", Color(0xFFEF4444)),
         Pair("أرجواني", Color(0xFFEC4899))
     )
@@ -614,7 +639,7 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                 }
                 return
             } else {
-                Toast.makeText(context, "المشغل المختار غير مثبت، تم التشغيل في DEVKAN 34 VIP الداخلي", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, "المشغل المختار غير مثبت، تم التشغيل في مشغل AUREX الداخلي", Toast.LENGTH_SHORT).show()
             }
         }
 
@@ -838,7 +863,7 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        DevkanBrandWordmark(accentColor = accentColor)
+                        AurexBrandWordmark(accentColor = accentColor)
 
                         Row(
                             modifier = Modifier
@@ -997,7 +1022,7 @@ fun NovaIptvUltimateApp(isInPipMode: Boolean) {
                                                                     .border(1.dp, Color(0x33FFFFFF), RoundedCornerShape(8.dp))
                                                                     .padding(horizontal = 8.dp, vertical = 3.dp)
                                                             ) {
-                                                                Text("4K VIP", color = Color(0xFFF59E0B), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                                                Text("4K GOLD", color = Color(0xFFFDE047), fontSize = 10.sp, fontWeight = FontWeight.Bold)
                                                             }
                                                         }
 
@@ -2168,4 +2193,3 @@ private fun HomeStatPill(label: String, count: String, color: Color, onClick: ()
         Text(label, color = Color.LightGray, fontSize = 9.sp)
     }
 }
-// END_MAIN
