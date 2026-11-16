@@ -1,5 +1,6 @@
 package com.hadedo.novaiptv
 
+import android.net.Uri
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -31,25 +32,20 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import org.json.JSONArray
-import java.net.URLEncoder
-import java.util.concurrent.TimeUnit
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -61,7 +57,7 @@ class MainActivity : ComponentActivity() {
 }
 
 // ============================================================================
-// نماذج البيانات والترجمة متعددة اللغات (عربي + إنجليزي + ألماني + فرنسي + تركي + كردي)
+// الترجمة متعددة اللغات (عربي + إنجليزي + ألماني + تركي + فرنسي + كردي)
 // ============================================================================
 data class AppStrings(
     val home: String,
@@ -71,45 +67,40 @@ data class AppStrings(
     val settings: String,
     val continueWatching: String,
     val recentlyWatched: String,
-    val myFolders: String,
     val searchHint: String,
     val all: String,
-    val movies: String,
-    val series: String,
-    val addPlaylist: String,
+    val addConnection: String,
     val importFile: String,
     val epgGuide: String,
     val speedTest: String,
     val engineTitle: String,
     val appLockTitle: String,
-    val watchlist: String
+    val subscriptionCard: String,
+    val statusLabel: String,
+    val expiryLabel: String,
+    val countryLabel: String,
+    val connectionsLabel: String,
+    val lowLatencyTitle: String,
+    val geoBypassTitle: String,
+    val autoResumeTitle: String
 )
 
 fun getStrings(lang: String): AppStrings = when (lang) {
-    "en" -> AppStrings("Home", "Live TV", "Sports", "Cinema", "Settings", "Continue Watching", "Recently Watched", "My Folders", "Search channels or movies...", "All", "Movies", "Series", "Add Playlist", "Import M3U File", "EPG Grid", "Server Speed & Ping", "Playback Engine", "App Lock PIN", "Watchlist")
-    "de" -> AppStrings("Start", "Live-TV", "Sport", "Kino", "Optionen", "Weiterschauen", "Zuletzt gesehen", "Ordner", "Kanäle oder Filme suchen...", "Alle", "Filme", "Serien", "Abo hinzufügen", "M3U-Datei laden", "EPG-Plan", "Server-Speedtest", "Wiedergabe-Engine", "App-PIN-Sperre", "Merkliste")
-    "fr" -> AppStrings("Accueil", "Direct", "Sports", "Cinéma", "Réglages", "Reprendre", "Récents", "Dossiers", "Rechercher...", "Tout", "Films", "Séries", "Ajouter Abo", "Fichier M3U", "Guide EPG", "Test Serveur", "Moteur Vidéo", "Code PIN App", "À voir")
-    "tr" -> AppStrings("Ana Sayfa", "Canlı", "Spor", "Sinema", "Ayarlar", "Devam Et", "Son İzlenen", "Klasörler", "Kanal veya film ara...", "Tümü", "Filmler", "Diziler", "Abonelik Ekle", "M3U Dosyası", "EPG Rehberi", "Sunucu Hız Testi", "Oynatıcı Motoru", "Uygulama PIN", "İzleme Listesi")
-    "ku" -> AppStrings("سەرەکی", "ڕاستەوخۆ", "وەرزش", "سینەما", "ڕێکخستن", "بەردەوامبە", "دوایینەکان", "فۆڵدەر", "گەڕان...", "هەموو", "فیلم", "زنجیرە", "زیادکردن", "فایلی M3U", "خشتەی EPG", "پشکنینی خێرایی", "بزوێنەری کارپێکردن", "قفڵی بەرنامە", "لیستی بینین")
-    else -> AppStrings("الرئيسية", "مباشر", "الرياضة", "السينما", "الإعدادات", "واصل المشاهدة", "شاهدته مؤخراً", "مجلداتي", "ابحث عن قناة أو فيلم...", "الكل", "أفلام", "مسلسلات", "إضافة اشتراك", "استيراد ملف M3U", "جدول EPG", "فحص سرعة السيرفر", "محرك التشغيل", "قفل التطبيق PIN", "المشاهدة لاحقاً")
+    "en" -> AppStrings("Home", "Live TV", "Sports", "Cinema", "Settings", "Continue Watching", "Featured Channels", "Search channels or movies...", "All", "Add Connection", "Import M3U File", "EPG Grid", "Server Speed & Ping", "Playback Engine", "App Lock PIN", "Subscription Details", "Status", "Expires", "Allowed Region", "Connections", "Ultra-Low Latency (Satellite Sync)", "Smart Geo-Bypass Headers", "Auto-Resume Last Channel")
+    "de" -> AppStrings("Start", "Live-TV", "Sport", "Kino", "Optionen", "Weiterschauen", "Empfohlene Kanäle", "Kanäle oder Filme suchen...", "Alle", "Verbindung hinzufügen", "M3U-Datei laden", "EPG-Plan", "Server-Speedtest", "Wiedergabe-Engine", "App-PIN-Sperre", "Abonnement-Details", "Status", "Ablaufdatum", "Region / Land", "Verbindungen", "Geringe Latenz (Satelliten-Sync)", "Geo-Bypass-Header", "Letzten Kanal fortsetzen")
+    "tr" -> AppStrings("Ana Sayfa", "Canlı", "Spor", "Sinema", "Ayarlar", "Devam Et", "Öne Çıkan Kanallar", "Kanal veya film ara...", "Tümü", "Bağlantı Ekle", "M3U Dosyası", "EPG Rehberi", "Sunucu Hız Testi", "Oynatıcı Motoru", "Uygulama PIN", "Abonelik Bilgileri", "Durum", "Bitiş Tarihi", "Ülke / Bölge", "Bağlantılar", "Düşük Gecikme Modu", "Bölge Kısıtlama Aşımı", "Son Kanalı Otomatik Aç")
+    "fr" -> AppStrings("Accueil", "Direct", "Sports", "Cinéma", "Réglages", "Reprendre", "Chaînes", "Rechercher...", "Tout", "Ajouter Connexion", "Fichier M3U", "Guide EPG", "Test Serveur", "Moteur Vidéo", "Code PIN App", "Abonnement", "Statut", "Expiration", "Pays Autorisé", "Connexions", "Faible Latence", "Contournement Géo", "Reprise Auto")
+    "ku" -> AppStrings("سەرەکی", "ڕاستەوخۆ", "وەرزش", "سینەما", "ڕێکخستن", "بەردەوامبە", "کەناڵەکان", "گەڕان...", "هەموو", "زیادکردنی بەشداری", "فایلی M3U", "خشتەی EPG", "پشکنینی خێرایی", "بزوێنەری کارپێکردن", "قفڵی بەرنامە", "زانیاری بەشداری", "دۆخ", "بەرواری بەسەرچوون", "وڵات", "پەیوەندییەکان", "کەمکردنەوەی دواکەوتن", "کردنەوەی بلۆکی وڵات", "کردنەوەی دوایین کەناڵ")
+    else -> AppStrings("الرئيسية", "مباشر", "الرياضة", "السينما", "الإعدادات", "واصل المشاهدة", "قنوات مختارة", "ابحث عن قناة أو فيلم...", "الكل", "إضافة اتصال", "استيراد ملف M3U", "جدول EPG", "فحص سرعة السيرفر", "محرك التشغيل", "قفل التطبيق PIN", "بطاقة الاشتراك", "الحالة", "تاريخ الانتهاء", "الدولة / النطاق", "الاتصالات", "تقليل تأخير البث عن الستلايت", "تجاوز قيود السيرفر والدولة", "فتح آخر قناة تلقائياً عند التشغيل")
 }
 
-data class MediaItemModel(
-    val id: String,
-    val title: String,
-    val url: String,
-    val group: String,
-    val logo: String = "",
-    val isVod: Boolean = false
-)
-
 // ============================================================================
-// الجذر الرئيسي للتطبيق (Disclaimer -> App Lock -> Main App / Hybrid Player)
+// الجذر الرئيسي للتطبيق
 // ============================================================================
 @Composable
 fun DevkanAppRoot() {
     val context = LocalContext.current
-    var lang by remember { mutableStateOf("ar") }
+    var lang by remember { mutableStateOf(DevkanVault.getLanguage(context)) }
     var disclaimerAccepted by remember { mutableStateOf(DevkanVault.isDisclaimerAccepted(context)) }
     val savedPin = remember { DevkanVault.getAppLockPin(context) }
     var isUnlocked by remember { mutableStateOf(savedPin.isEmpty()) }
@@ -136,7 +127,13 @@ fun DevkanAppRoot() {
                     )
                 }
                 else -> {
-                    DevkanMainDashboard(lang = lang, onLanguageChange = { lang = it })
+                    DevkanMainDashboard(
+                        lang = lang,
+                        onLanguageChange = { newLang ->
+                            lang = newLang
+                            DevkanVault.setLanguage(context, newLang)
+                        }
+                    )
                 }
             }
         }
@@ -177,20 +174,14 @@ fun DevkanBrandHeader(onAddClick: () -> Unit, onImportClick: () -> Unit, strings
                 )
             }
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                Text(
-                    text = "DEVKAN 34",
-                    color = Color.White,
-                    fontWeight = FontWeight.Black,
-                    fontSize = 15.sp,
-                    letterSpacing = 1.sp
-                )
+                Text("DEVKAN 34", color = Color.White, fontWeight = FontWeight.Black, fontSize = 15.sp, letterSpacing = 1.sp)
                 Box(
                     modifier = Modifier
                         .background(goldMid.copy(alpha = 0.22f), RoundedCornerShape(5.dp))
                         .border(1.dp, goldMid.copy(alpha = 0.85f), RoundedCornerShape(5.dp))
                         .padding(horizontal = 5.dp, vertical = 1.dp)
                 ) {
-                    Text(text = "VIP", color = goldLight, fontWeight = FontWeight.ExtraBold, fontSize = 9.sp)
+                    Text("VIP", color = goldLight, fontWeight = FontWeight.ExtraBold, fontSize = 9.sp)
                 }
             }
         }
@@ -198,26 +189,22 @@ fun DevkanBrandHeader(onAddClick: () -> Unit, onImportClick: () -> Unit, strings
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             IconButton(
                 onClick = onImportClick,
-                modifier = Modifier
-                    .size(34.dp)
-                    .background(Color(0xFF161620), CircleShape)
+                modifier = Modifier.size(34.dp).background(Color(0xFF161620), CircleShape)
             ) {
                 Icon(Icons.Default.FolderOpen, contentDescription = strings.importFile, tint = goldLight, modifier = Modifier.size(18.dp))
             }
             IconButton(
                 onClick = onAddClick,
-                modifier = Modifier
-                    .size(34.dp)
-                    .background(goldMid, CircleShape)
+                modifier = Modifier.size(34.dp).background(goldMid, CircleShape)
             ) {
-                Icon(Icons.Default.Add, contentDescription = strings.addPlaylist, tint = Color.Black, modifier = Modifier.size(20.dp))
+                Icon(Icons.Default.Add, contentDescription = strings.addConnection, tint = Color.Black, modifier = Modifier.size(20.dp))
             }
         }
     }
 }
 
 // ============================================================================
-// اللوحة الرئيسية للتطبيق (5 تبويبات + المشغل الهجين + EPG + الإعدادات المتقدمة)
+// اللوحة الرئيسية للتطبيق (استعادة الاشتراك تلقائياً + كل الأقسام)
 // ============================================================================
 @Composable
 fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
@@ -232,52 +219,54 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
     var showEpgSheet by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
     var selectedCategory by remember { mutableStateOf("ALL") }
+    var isSyncing by remember { mutableStateOf(false) }
 
-    // قائمة القنوات والأفلام المحملة
-    val channelsList = remember {
-        mutableStateListOf(
-            MediaItemModel("ch_1", "beIN SPORTS 1 HD", "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8", "Sports"),
-            MediaItemModel("ch_2", "beIN SPORTS 2 HD", "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8", "Sports"),
-            MediaItemModel("ch_3", "MBC 1 HD", "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8", "Arabic"),
-            MediaItemModel("ch_4", "National Geographic", "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8", "Documentary"),
-            MediaItemModel("vod_1", "Dune: Part Two (4K)", "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4", "Movies", isVod = true),
-            MediaItemModel("vod_2", "House of the Dragon S02", "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4", "Series", isVod = true)
-        )
+    var currentSub by remember { mutableStateOf(DevkanVault.getSavedSubscription(context)) }
+    val allItems = remember { mutableStateListOf<MediaItemModel>() }
+
+    // تحميل الاشتراك المحفوظ تلقائياً عند فتح التطبيق + فتح آخر قناة إذا كان مفعلاً
+    LaunchedEffect(Unit) {
+        val saved = DevkanVault.getSavedSubscription(context)
+        if (saved != null) {
+            isSyncing = true
+            val geoBypass = DevkanVault.isGeoBypassEnabled(context)
+            val (updatedSub, loadedItems) = DevkanPlaylistRepository.loadSubscriptionContent(saved, geoBypass)
+            currentSub = updatedSub
+            DevkanVault.saveSubscription(context, updatedSub)
+            if (loadedItems.isNotEmpty()) {
+                allItems.clear()
+                allItems.addAll(loadedItems)
+            }
+            isSyncing = false
+        }
+
+        if (DevkanVault.isAutoResumeEnabled(context)) {
+            val last = DevkanVault.getLastChannel(context)
+            if (last != null) {
+                activeStream = MediaItemModel("resume", last.second, last.first, "", "Live", "", "LIVE")
+            }
+        }
     }
 
-    // مستورد ملفات M3U المحلية من الهاتف
     val m3uFileLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) {
             scope.launch {
-                val imported = LocalPlaylistImporter.parseUri(context, uri)
+                val imported = DevkanPlaylistRepository.parseLocalUri(context, uri)
                 if (imported.isNotEmpty()) {
-                    channelsList.clear()
-                    imported.forEachIndexed { idx, item ->
-                        channelsList.add(
-                            MediaItemModel(
-                                id = "local_$idx",
-                                title = item.name,
-                                url = item.url,
-                                group = item.group,
-                                logo = item.logo,
-                                isVod = item.url.endsWith(".mp4") || item.url.endsWith(".mkv")
-                            )
-                        )
-                    }
-                    Toast.makeText(context, "تم استيراد ${imported.size} قناة بنجاح!", Toast.LENGTH_SHORT).show()
-                } else {
-                    Toast.makeText(context, "تعذر قراءة الملف أو الملف فارغ", Toast.LENGTH_SHORT).show()
+                    allItems.clear()
+                    allItems.addAll(imported)
+                    Toast.makeText(context, "تم استيراد ${imported.size} عنصر بنجاح!", Toast.LENGTH_SHORT).show()
                 }
             }
         }
     }
 
-    // فتح المشغل الهجين بملء الشاشة عند اختيار أي قناة أو فيلم
     if (activeStream != null) {
         DevkanHybridPlayerScreen(
             streamUrl = activeStream!!.url,
+            fallbackUrl = activeStream!!.fallbackUrl,
             streamTitle = activeStream!!.title,
-            isVodOrSeries = activeStream!!.isVod,
+            isVodOrSeries = activeStream!!.contentType != "LIVE",
             streamId = activeStream!!.id,
             lang = lang,
             onBack = { activeStream = null }
@@ -285,23 +274,22 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
         return
     }
 
-    // عرض جدول البرامج الزمني (EPG Timeline Grid)
     if (showEpgSheet) {
-        val sampleEpg = channelsList.filter { !it.isVod }.mapIndexed { idx, ch ->
+        val sampleEpg = allItems.filter { it.contentType == "LIVE" }.take(120).mapIndexed { idx, ch ->
             EpgSlot(
                 channelName = ch.title,
                 channelLogo = ch.logo,
-                currentProgram = if (idx % 2 == 0) "البث المباشر - الاستوديو التحليلي" else "نشرة الأخبار والتغطية الخاصة",
-                nextProgram = "البرنامج المسائي المباشر",
-                timeRange = "20:00 - 22:00",
-                progress = 0.65f
+                currentProgram = if (idx % 2 == 0) "البث المباشر الحالي (${ch.group})" else "التغطية المباشرة المستمرة",
+                nextProgram = "البرنامج التالي على الجدول",
+                timeRange = "LIVE • HD",
+                progress = 0.6f
             )
         }
         EpgTimelineGridSheet(
             slots = sampleEpg,
             lang = lang,
             onPlayChannel = { chName ->
-                val found = channelsList.firstOrNull { it.title == chName }
+                val found = allItems.firstOrNull { it.title == chName }
                 showEpgSheet = false
                 if (found != null) activeStream = found
             },
@@ -320,7 +308,6 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
             )
         },
         bottomBar = {
-            // شريط تنقل سفلي محسن بسطر واحد لا ينكسر أبداً في أي شاشة
             NavigationBar(containerColor = Color(0xFF0E0E14), tonalElevation = 8.dp) {
                 val navItems = listOf(
                     Triple(strings.home, Icons.Default.Home, 0),
@@ -358,13 +345,13 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
             }
         }
     ) { innerPadding ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-        ) {
+        Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
+            if (isSyncing) {
+                LinearProgressIndicator(color = gold, modifier = Modifier.fillMaxWidth().align(Alignment.TopCenter))
+            }
+
             when (selectedTab) {
-                // 0: الرئيسية (متابعة آخر قناة + شريط البحث + القنوات المميزة)
+                // 0: الرئيسية
                 0 -> {
                     val lastCh = remember { DevkanVault.getLastChannel(context) }
                     Column(
@@ -374,7 +361,6 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
                             .padding(14.dp),
                         verticalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
-                        // بطاقة الاستئناف الفوري لآخر قناة
                         if (lastCh != null) {
                             Row(
                                 modifier = Modifier
@@ -383,7 +369,7 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
                                     .background(Brush.horizontalGradient(listOf(Color(0xFF1F1A0D), Color(0xFF14141C))))
                                     .border(1.dp, gold.copy(alpha = 0.5f), RoundedCornerShape(16.dp))
                                     .clickable {
-                                        activeStream = MediaItemModel("last", lastCh.second, lastCh.first, "Last")
+                                        activeStream = MediaItemModel("last", lastCh.second, lastCh.first, "", "Live", "", "LIVE")
                                     }
                                     .padding(14.dp),
                                 verticalAlignment = Alignment.CenterVertically,
@@ -397,54 +383,79 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
                             }
                         }
 
-                        // شريط البحث السريع
-                        OutlinedTextField(
-                            value = searchQuery,
-                            onValueChange = { searchQuery = it },
-                            singleLine = true,
-                            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = gold) },
-                            placeholder = { Text(strings.searchHint, fontSize = 13.sp) },
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(14.dp)
-                        )
-
-                        Text(strings.recentlyWatched, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                        LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            items(channelsList.filter { it.title.contains(searchQuery, ignoreCase = true) }) { item ->
-                                Column(
-                                    modifier = Modifier
-                                        .width(145.dp)
-                                        .clip(RoundedCornerShape(14.dp))
-                                        .background(Color(0xFF13131B))
-                                        .border(1.dp, Color(0xFF232332), RoundedCornerShape(14.dp))
-                                        .clickable { activeStream = item }
-                                        .padding(12.dp),
-                                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                        if (allItems.isEmpty() && !isSyncing) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(18.dp))
+                                    .background(Color(0xFF12121A))
+                                    .border(1.dp, gold.copy(alpha = 0.35f), RoundedCornerShape(18.dp))
+                                    .padding(24.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Icon(Icons.Default.AddLink, contentDescription = null, tint = gold, modifier = Modifier.size(44.dp))
+                                Text("أضف اشتراكك للبدء", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                                Text("يدعم Xtream Codes وروابط M3U و Stalker Portal MAC مع الحفظ التلقائي", color = Color.Gray, fontSize = 12.sp)
+                                Button(
+                                    onClick = { showAddDialog = true },
+                                    colors = ButtonDefaults.buttonColors(containerColor = gold)
                                 ) {
-                                    Icon(
-                                        imageVector = if (item.isVod) Icons.Default.Movie else Icons.Default.LiveTv,
-                                        contentDescription = null,
-                                        tint = gold
-                                    )
-                                    Text(item.title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                    Text(item.group, color = Color(0xFF8E929F), fontSize = 11.sp, maxLines = 1)
+                                    Text(strings.addConnection, color = Color.Black, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        } else {
+                            OutlinedTextField(
+                                value = searchQuery,
+                                onValueChange = { searchQuery = it },
+                                singleLine = true,
+                                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = gold) },
+                                placeholder = { Text(strings.searchHint, fontSize = 13.sp) },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(14.dp)
+                            )
+
+                            val filtered = remember(allItems.size, searchQuery) {
+                                allItems.filter { it.title.contains(searchQuery, ignoreCase = true) }.take(40)
+                            }
+                            Text("${strings.recentlyWatched} (${allItems.size})", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                            LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                items(filtered) { item ->
+                                    Column(
+                                        modifier = Modifier
+                                            .width(145.dp)
+                                            .clip(RoundedCornerShape(14.dp))
+                                            .background(Color(0xFF13131B))
+                                            .border(1.dp, Color(0xFF232332), RoundedCornerShape(14.dp))
+                                            .clickable { activeStream = item }
+                                            .padding(12.dp),
+                                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        if (item.logo.isNotEmpty()) {
+                                            AsyncImage(model = item.logo, contentDescription = null, modifier = Modifier.size(34.dp).clip(RoundedCornerShape(8.dp)))
+                                        } else {
+                                            Icon(if (item.contentType == "LIVE") Icons.Default.LiveTv else Icons.Default.Movie, contentDescription = null, tint = gold)
+                                        }
+                                        Text(item.title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                        Text(item.group, color = Color(0xFF8E929F), fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    }
                                 }
                             }
                         }
                     }
                 }
 
-                // 1: البث المباشر (مع زر جدول البرامج EPG Grid وفلترة الباقات)
+                // 1: البث المباشر مع الباقات الحقيقية ودليل البرامج
                 1 -> {
-                    val liveChannels = channelsList.filter { !it.isVod }
-                    val groups = listOf("ALL") + liveChannels.map { it.group }.distinct()
+                    val liveChannels = remember(allItems.size) { allItems.filter { it.contentType == "LIVE" } }
+                    val groups = remember(liveChannels.size) { listOf("ALL") + liveChannels.map { it.group }.distinct() }
                     Column(modifier = Modifier.fillMaxSize().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(strings.live, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                            Text("${strings.live} (${liveChannels.size})", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 17.sp)
                             Button(
                                 onClick = { showEpgSheet = true },
                                 colors = ButtonDefaults.buttonColors(containerColor = gold.copy(alpha = 0.2f)),
@@ -457,8 +468,8 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
                             }
                         }
 
-                        Row(modifier = Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            groups.forEach { grp ->
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            items(groups) { grp ->
                                 FilterChip(
                                     selected = selectedCategory == grp,
                                     onClick = { selectedCategory = grp },
@@ -467,9 +478,12 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
                             }
                         }
 
+                        val filteredLive = remember(liveChannels.size, selectedCategory) {
+                            if (selectedCategory == "ALL") liveChannels else liveChannels.filter { it.group == selectedCategory }
+                        }
+
                         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            val filtered = liveChannels.filter { selectedCategory == "ALL" || it.group == selectedCategory }
-                            items(filtered) { ch ->
+                            items(filteredLive, key = { it.id }) { ch ->
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -480,15 +494,19 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
-                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    Row(
+                                        modifier = Modifier.weight(1f),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                    ) {
                                         if (ch.logo.isNotEmpty()) {
-                                            AsyncImage(model = ch.logo, contentDescription = null, modifier = Modifier.size(36.dp).clip(RoundedCornerShape(8.dp)))
+                                            AsyncImage(model = ch.logo, contentDescription = null, modifier = Modifier.size(38.dp).clip(RoundedCornerShape(8.dp)))
                                         } else {
-                                            Icon(Icons.Default.Tv, contentDescription = null, tint = gold, modifier = Modifier.size(30.dp))
+                                            Icon(Icons.Default.Tv, contentDescription = null, tint = gold, modifier = Modifier.size(32.dp))
                                         }
-                                        Column {
-                                            Text(ch.title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                                            Text(ch.group, color = Color(0xFF8E929F), fontSize = 11.sp)
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(ch.title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                            Text(ch.group, color = gold.copy(alpha = 0.85f), fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                         }
                                     }
                                     Icon(Icons.Default.PlayArrow, contentDescription = null, tint = gold)
@@ -498,47 +516,56 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
                     }
                 }
 
-                // 2: مركز المباريات المباشر مع زر التذكير (🔔)
+                // 2: الرياضة (فلترة ذكية للقنوات الرياضية فقط + تذكير المباريات)
                 2 -> {
-                    val matches = listOf(
-                        Triple("Real Madrid vs Barcelona", "22:00 - LaLiga", "beIN SPORTS 1 HD"),
-                        Triple("Liverpool vs Arsenal", "20:30 - Premier League", "beIN SPORTS 2 HD"),
-                        Triple("Iraq vs Jordan", "19:15 - World Cup Qualifiers", "beIN SPORTS 1 HD")
-                    )
+                    val sportChannels = remember(allItems.size) {
+                        allItems.filter {
+                            it.contentType == "LIVE" && (
+                                it.group.contains("sport", true) ||
+                                    it.group.contains("bein", true) ||
+                                    it.group.contains("رياض", true) ||
+                                    it.title.contains("sport", true) ||
+                                    it.title.contains("bein", true)
+                                )
+                        }
+                    }
                     LazyColumn(
                         modifier = Modifier.fillMaxSize().padding(14.dp),
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         item {
-                            Text(strings.sports, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                            Text("${strings.sports} (${sportChannels.size})", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 17.sp)
                         }
-                        items(matches) { (matchTitle, timeInfo, channelName) ->
-                            val isReminded = MatchReminderManager.remindedMatches.contains(matchTitle)
+                        items(sportChannels, key = { it.id }) { ch ->
+                            val isReminded = MatchReminderManager.remindedMatches.contains(ch.title)
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clip(RoundedCornerShape(16.dp))
+                                    .clip(RoundedCornerShape(14.dp))
                                     .background(Color(0xFF13131B))
-                                    .border(1.dp, Color(0xFF252536), RoundedCornerShape(16.dp))
-                                    .clickable {
-                                        val ch = channelsList.firstOrNull { it.title.contains("beIN") } ?: channelsList.first()
-                                        activeStream = ch.copy(title = "$matchTitle ($channelName)")
-                                    }
-                                    .padding(14.dp),
+                                    .clickable { activeStream = ch }
+                                    .padding(12.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
-                                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                    Text(matchTitle, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                                    Text("$timeInfo • $channelName", color = gold, fontSize = 12.sp)
+                                Row(
+                                    modifier = Modifier.weight(1f),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    if (ch.logo.isNotEmpty()) {
+                                        AsyncImage(model = ch.logo, contentDescription = null, modifier = Modifier.size(36.dp).clip(RoundedCornerShape(8.dp)))
+                                    } else {
+                                        Icon(Icons.Default.SportsSoccer, contentDescription = null, tint = gold)
+                                    }
+                                    Column {
+                                        Text(ch.title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp, maxLines = 1)
+                                        Text(ch.group, color = gold, fontSize = 11.sp)
+                                    }
                                 }
                                 IconButton(onClick = {
-                                    val added = MatchReminderManager.toggleReminder(matchTitle)
-                                    Toast.makeText(
-                                        context,
-                                        if (added) "تم تفعيل التذكير للمباراة 🔔" else "تم إلغاء التذكير",
-                                        Toast.LENGTH_SHORT
-                                    ).show()
+                                    val added = MatchReminderManager.toggleReminder(ch.title)
+                                    Toast.makeText(context, if (added) "تم تفعيل التذكير 🔔" else "تم إلغاء التذكير", Toast.LENGTH_SHORT).show()
                                 }) {
                                     Icon(
                                         imageVector = if (isReminded) Icons.Default.NotificationsActive else Icons.Default.NotificationsNone,
@@ -551,10 +578,9 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
                     }
                 }
 
-                // 3: السينما (الأفلام والمسلسلات + قائمة المشاهدة لاحقاً Watchlist)
+                // 3: السينما (الأفلام الحقيقية من سيرفرك)
                 3 -> {
-                    val vodItems = channelsList.filter { it.isVod }
-                    var watchlistState by remember { mutableStateOf(DevkanVault.getWatchlist(context)) }
+                    val vodItems = remember(allItems.size) { allItems.filter { it.contentType != "LIVE" } }
                     LazyVerticalGrid(
                         columns = GridCells.Fixed(2),
                         contentPadding = PaddingValues(14.dp),
@@ -562,241 +588,570 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
                         verticalArrangement = Arrangement.spacedBy(10.dp),
                         modifier = Modifier.fillMaxSize()
                     ) {
-                        items(vodItems) { item ->
-                            val inWatchlist = watchlistState.contains(item.id)
+                        items(vodItems, key = { it.id }) { item ->
                             Column(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(16.dp))
                                     .background(Color(0xFF13131B))
                                     .border(1.dp, Color(0xFF232332), RoundedCornerShape(16.dp))
                                     .clickable { activeStream = item }
-                                    .padding(12.dp),
+                                    .padding(10.dp),
                                 verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                    Icon(Icons.Default.MovieFilter, contentDescription = null, tint = gold)
-                                    IconButton(
-                                        onClick = {
-                                            DevkanVault.toggleWatchlist(context, item.id)
-                                            watchlistState = DevkanVault.getWatchlist(context)
-                                        },
-                                        modifier = Modifier.size(24.dp)
+                                if (item.logo.isNotEmpty()) {
+                                    AsyncImage(
+                                        model = item.logo,
+                                        contentDescription = item.title,
+                                        contentScale = ContentScale.Crop,
+                                        modifier = Modifier.fillMaxWidth().height(145.dp).clip(RoundedCornerShape(12.dp))
+                                    )
+                                } else {
+                                    Box(
+                                        modifier = Modifier.fillMaxWidth().height(120.dp).background(Color(0xFF1D1D29), RoundedCornerShape(12.dp)),
+                                        contentAlignment = Alignment.Center
                                     ) {
-                                        Icon(
-                                            imageVector = if (inWatchlist) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
-                                            contentDescription = strings.watchlist,
-                                            tint = gold
-                                        )
+                                        Icon(Icons.Default.MovieFilter, contentDescription = null, tint = gold, modifier = Modifier.size(36.dp))
                                     }
                                 }
-                                Text(item.title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 2)
-                                Text(item.group, color = Color(0xFF8E929F), fontSize = 11.sp)
+                                Text(item.title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text(item.group, color = Color(0xFF8E929F), fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             }
                         }
                     }
                 }
 
-                // 4: الإعدادات المتقدمة (اللغة الألمانية + المحرك الهجين + فحص سرعة السيرفر + قفل PIN)
+                // 4: الإعدادات الاحترافية (بطاقة الاشتراك + قائمة اللغات المنسدلة + خيارات الأداء)
                 4 -> {
-                    var selectedEngine by remember { mutableStateOf(DevkanVault.getPreferredEngine(context)) }
-                    var pinInput by remember { mutableStateOf(DevkanVault.getAppLockPin(context)) }
-                    var speedResult by remember { mutableStateOf<String?>(null) }
-                    var testingSpeed by remember { mutableStateOf(false) }
-
-                    Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .verticalScroll(rememberScrollState())
-                            .padding(14.dp),
-                        verticalArrangement = Arrangement.spacedBy(14.dp)
-                    ) {
-                        // اختيار اللغة (بما فيها الألمانية Deutsch)
-                        Text("اللغة / Language / Sprache", color = gold, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                        Row(modifier = Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            listOf("ar" to "العربية", "en" to "English", "de" to "Deutsch", "fr" to "Français", "tr" to "Türkçe", "ku" to "کوردی").forEach { (code, name) ->
-                                FilterChip(
-                                    selected = lang == code,
-                                    onClick = { onLanguageChange(code) },
-                                    label = { Text(name) }
-                                )
-                            }
-                        }
-
-                        // اختيار محرك التشغيل (Hybrid Media3 + LibVLC)
-                        Text(strings.engineTitle, color = gold, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                        EngineType.entries.forEach { engine ->
-                            val label = when (lang) {
-                                "en" -> engine.labelEn
-                                "de" -> engine.labelDe
-                                else -> engine.labelAr
-                            }
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .background(Color(0xFF13131B))
-                                    .clickable {
-                                        selectedEngine = engine
-                                        DevkanVault.savePreferredEngine(context, engine)
-                                    }
-                                    .padding(12.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text(label, color = Color.White, fontSize = 13.sp)
-                                RadioButton(selected = selectedEngine == engine, onClick = null)
-                            }
-                        }
-
-                        // أداة فحص سرعة السيرفر والـ Ping الفعلي
-                        Button(
-                            onClick = {
-                                testingSpeed = true
-                                scope.launch {
-                                    val testUrl = channelsList.firstOrNull()?.url ?: "https://www.google.com"
-                                    val (ping, mbps) = EngineCoordinator.runServerSpeedAndPingTest(testUrl)
-                                    speedResult = "Ping: ${ping} ms  |  Speed: ${mbps} Mbps"
-                                    testingSpeed = false
+                    DevkanSettingsScreen(
+                        strings = strings,
+                        lang = lang,
+                        onLanguageChange = onLanguageChange,
+                        subscription = currentSub,
+                        onRefreshSub = {
+                            val sub = currentSub ?: return@DevkanSettingsScreen
+                            scope.launch {
+                                isSyncing = true
+                                val (updated, items) = DevkanPlaylistRepository.loadSubscriptionContent(sub, DevkanVault.isGeoBypassEnabled(context))
+                                currentSub = updated
+                                DevkanVault.saveSubscription(context, updated)
+                                if (items.isNotEmpty()) {
+                                    allItems.clear()
+                                    allItems.addAll(items)
                                 }
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = gold),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text(
-                                text = if (testingSpeed) "جاري فحص السيرفر..." else strings.speedTest,
-                                color = Color.Black,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                        speedResult?.let {
-                            Text(it, color = Color(0xFF4ADE80), fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                        }
-
-                        // إعداد قفل التطبيق برمز PIN
-                        Text(strings.appLockTitle, color = gold, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                            OutlinedTextField(
-                                value = pinInput,
-                                onValueChange = { if (it.length <= 6) pinInput = it },
-                                placeholder = { Text("4-6 digits (فارغ = معطل)") },
-                                singleLine = true,
-                                modifier = Modifier.weight(1f)
-                            )
-                            Button(
-                                onClick = {
-                                    DevkanVault.setAppLockPin(context, pinInput)
-                                    Toast.makeText(context, if (pinInput.isEmpty()) "تم إيقاف القفل" else "تم حفظ رمز القفل بنجاح", Toast.LENGTH_SHORT).show()
-                                },
-                                colors = ButtonDefaults.buttonColors(containerColor = gold)
-                            ) {
-                                Text("حفظ", color = Color.Black, fontWeight = FontWeight.Bold)
+                                isSyncing = false
+                                Toast.makeText(context, "تم تحديث بيانات الاشتراك والقنوات!", Toast.LENGTH_SHORT).show()
                             }
-                        }
-                    }
+                        },
+                        onDeleteSub = {
+                            DevkanVault.clearSubscription(context)
+                            currentSub = null
+                            allItems.clear()
+                            Toast.makeText(context, "تم حذف الاشتراك", Toast.LENGTH_SHORT).show()
+                        },
+                        onOpenAddDialog = { showAddDialog = true },
+                        sampleTestUrl = allItems.firstOrNull()?.url ?: "https://www.google.com"
+                    )
                 }
             }
         }
     }
 
-    // نافذة إضافة اشتراك (Xtream Codes أو رابط M3U)
+    // نافذة إضافة اتصال ذكية (Xtream + M3U + Stalker MAC مع التعبئة التلقائية الفورية)
     if (showAddDialog) {
-        var host by remember { mutableStateOf("") }
-        var user by remember { mutableStateOf("") }
-        var pass by remember { mutableStateOf("") }
-        var m3uDirect by remember { mutableStateOf("") }
-        var isLoading by remember { mutableStateOf(false) }
-
-        AlertDialog(
-            onDismissRequest = { showAddDialog = false },
-            title = { Text(strings.addPlaylist, fontWeight = FontWeight.Bold) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(value = host, onValueChange = { host = it }, label = { Text("Server URL (http://...)") }, singleLine = true)
-                    OutlinedTextField(value = user, onValueChange = { user = it }, label = { Text("Username") }, singleLine = true)
-                    OutlinedTextField(value = pass, onValueChange = { pass = it }, label = { Text("Password") }, singleLine = true)
-                    HorizontalDivider()
-                    OutlinedTextField(value = m3uDirect, onValueChange = { m3uDirect = it }, label = { Text("أو رابط M3U مباشر") }, singleLine = true)
-                }
-            },
-            confirmButton = {
-                Button(
-                    enabled = !isLoading,
-                    onClick = {
-                        isLoading = true
-                        scope.launch {
-                            val loaded = fetchPlaylistFromNetwork(host.trim(), user.trim(), pass.trim(), m3uDirect.trim())
-                            if (loaded.isNotEmpty()) {
-                                channelsList.clear()
-                                channelsList.addAll(loaded)
-                                Toast.makeText(context, "تم تحميل ${loaded.size} قناة!", Toast.LENGTH_SHORT).show()
-                                showAddDialog = false
-                            } else {
-                                Toast.makeText(context, "تعذر الاتصال بالسيرفر، تأكد من البيانات", Toast.LENGTH_SHORT).show()
-                            }
-                            isLoading = false
-                        }
+        SmartAddConnectionDialog(
+            strings = strings,
+            onDismiss = { showAddDialog = false },
+            onSaveAndConnect = { newSub ->
+                scope.launch {
+                    isSyncing = true
+                    DevkanVault.saveSubscription(context, newSub)
+                    val (updatedSub, loadedItems) = DevkanPlaylistRepository.loadSubscriptionContent(
+                        newSub,
+                        DevkanVault.isGeoBypassEnabled(context)
+                    )
+                    currentSub = updatedSub
+                    DevkanVault.saveSubscription(context, updatedSub)
+                    if (loadedItems.isNotEmpty()) {
+                        allItems.clear()
+                        allItems.addAll(loadedItems)
+                        Toast.makeText(context, "تم الاتصال وحفظ ${loadedItems.size} قناة وفيلم!", Toast.LENGTH_SHORT).show()
+                        showAddDialog = false
+                    } else {
+                        Toast.makeText(context, "تم حفظ الاشتراك، لكن السيرفر لم يُرجع قنوات — تأكد من البيانات", Toast.LENGTH_LONG).show()
                     }
-                ) {
-                    Text(if (isLoading) "جاري التحميل..." else "اتصال")
+                    isSyncing = false
                 }
-            },
-            dismissButton = {
-                TextButton(onClick = { showAddDialog = false }) { Text("إلغاء") }
             }
         )
     }
 }
 
-// دالة جلب القنوات من Xtream Codes API أو رابط M3U
-suspend fun fetchPlaylistFromNetwork(
-    host: String,
-    user: String,
-    pass: String,
-    m3uUrl: String
-): List<MediaItemModel> = withContext(Dispatchers.IO) {
-    val client = OkHttpClient.Builder()
-        .connectTimeout(12, TimeUnit.SECONDS)
-        .readTimeout(20, TimeUnit.SECONDS)
-        .build()
-    val result = mutableListOf<MediaItemModel>()
-    try {
-        if (host.isNotEmpty() && user.isNotEmpty()) {
-            val cleanHost = host.trimEnd('/')
-            val api = "$cleanHost/player_api.php?username=${URLEncoder.encode(user, "UTF-8")}&password=${URLEncoder.encode(pass, "UTF-8")}&action=get_live_streams"
-            val req = Request.Builder().url(api).build()
-            client.newCall(req).execute().use { resp ->
-                val body = resp.body?.string() ?: "[]"
-                val arr = JSONArray(body)
-                for (i in 0 until minOf(arr.length(), 1500)) {
-                    val obj = arr.getJSONObject(i)
-                    val id = obj.optString("stream_id")
-                    val name = obj.optString("name", "Channel $i")
-                    val icon = obj.optString("stream_icon", "")
-                    val cat = obj.optString("category_id", "Live")
-                    val streamUrl = "$cleanHost/live/$user/$pass/$id.m3u8"
-                    result.add(MediaItemModel(id, name, streamUrl, "Group $cat", icon))
+// ============================================================================
+// شاشة الإعدادات المنظمة (بطاقة الاشتراك الملكية + قوائم منسدلة أنيقة)
+// ============================================================================
+@Composable
+fun DevkanSettingsScreen(
+    strings: AppStrings,
+    lang: String,
+    onLanguageChange: (String) -> Unit,
+    subscription: SavedSubscription?,
+    onRefreshSub: () -> Unit,
+    onDeleteSub: () -> Unit,
+    onOpenAddDialog: () -> Unit,
+    sampleTestUrl: String
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val gold = Color(0xFFD4AF37)
+    val goldLight = Color(0xFFFDE047)
+
+    var langMenuExpanded by remember { mutableStateOf(false) }
+    var engineMenuExpanded by remember { mutableStateOf(false) }
+
+    var selectedEngine by remember { mutableStateOf(DevkanVault.getPreferredEngine(context)) }
+    var lowLatency by remember { mutableStateOf(DevkanVault.isLowLatencyEnabled(context)) }
+    var geoBypass by remember { mutableStateOf(DevkanVault.isGeoBypassEnabled(context)) }
+    var autoResume by remember { mutableStateOf(DevkanVault.isAutoResumeEnabled(context)) }
+
+    var pinInput by remember { mutableStateOf(DevkanVault.getAppLockPin(context)) }
+    var speedResult by remember { mutableStateOf<String?>(null) }
+    var testingSpeed by remember { mutableStateOf(false) }
+
+    val languagesList = listOf(
+        "ar" to "العربية (Arabic)",
+        "en" to "English (الإنجليزية)",
+        "de" to "Deutsch (الألمانية)",
+        "tr" to "Türkçe (التركية)",
+        "fr" to "Français (الفرنسية)",
+        "ku" to "کوردی (الكردية)"
+    )
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        // 1. بطاقة الاشتراك الملكية (تاريخ الانتهاء + الدولة + الحالة + الاتصالات)
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(18.dp))
+                .background(Brush.verticalGradient(listOf(Color(0xFF1B170E), Color(0xFF111118))))
+                .border(1.dp, gold.copy(alpha = 0.55f), RoundedCornerShape(18.dp))
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Icon(Icons.Default.WorkspacePremium, contentDescription = null, tint = goldLight)
+                    Text(strings.subscriptionCard, color = goldLight, fontWeight = FontWeight.Bold, fontSize = 15.sp)
                 }
-            }
-        } else if (m3uUrl.isNotEmpty()) {
-            val req = Request.Builder().url(m3uUrl).build()
-            client.newCall(req).execute().use { resp ->
-                val lines = (resp.body?.string() ?: "").lines()
-                var name = "Channel"
-                var group = "M3U"
-                var logo = ""
-                lines.forEachIndexed { idx, line ->
-                    val t = line.trim()
-                    if (t.startsWith("#EXTINF:")) {
-                        name = t.substringAfterLast(",").trim()
-                        group = Regex("""group-title="([^"]*)"""").find(t)?.groupValues?.get(1)?.ifEmpty { "M3U" } ?: "M3U"
-                        logo = Regex("""tvg-logo="([^"]*)"""").find(t)?.groupValues?.get(1) ?: ""
-                    } else if (t.startsWith("http")) {
-                        result.add(MediaItemModel("m3u_$idx", name, t, group, logo))
+                if (subscription != null) {
+                    Box(
+                        modifier = Modifier
+                            .background(Color(0xFF16A34A).copy(alpha = 0.22f), RoundedCornerShape(8.dp))
+                            .padding(horizontal = 8.dp, vertical = 3.dp)
+                    ) {
+                        Text(subscription.status, color = Color(0xFF4ADE80), fontSize = 11.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }
+
+            if (subscription != null) {
+                Text(
+                    text = when (subscription.type) {
+                        "XTREAM" -> "Xtream Codes • ${subscription.username}"
+                        "STALKER" -> "Stalker MAC • ${subscription.macAddress}"
+                        else -> "M3U Playlist"
+                    },
+                    color = Color.White,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 13.sp
+                )
+                HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
+
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text(strings.expiryLabel, color = Color.Gray, fontSize = 12.sp)
+                    Text(subscription.expDateFormatted, color = goldLight, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                }
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text(strings.countryLabel, color = Color.Gray, fontSize = 12.sp)
+                    Text(subscription.allowedCountries, color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                }
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text(strings.connectionsLabel, color = Color.Gray, fontSize = 12.sp)
+                    Text("${subscription.activeCons} / ${subscription.maxCons}", color = Color.White, fontSize = 12.sp)
+                }
+
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(
+                        onClick = onRefreshSub,
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Icon(Icons.Default.Refresh, contentDescription = null, tint = gold, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("تحديث", color = gold, fontSize = 12.sp)
+                    }
+                    OutlinedButton(
+                        onClick = onDeleteSub,
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Icon(Icons.Default.DeleteOutline, contentDescription = null, tint = Color(0xFFF87171), modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("حذف", color = Color(0xFFF87171), fontSize = 12.sp)
+                    }
+                }
+            } else {
+                Text("لا يوجد اشتراك محفوظ حالياً", color = Color.Gray, fontSize = 12.sp)
+                Button(
+                    onClick = onOpenAddDialog,
+                    colors = ButtonDefaults.buttonColors(containerColor = gold),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(strings.addConnection, color = Color.Black, fontWeight = FontWeight.Bold)
+                }
+            }
         }
-    } catch (_: Exception) {
+
+        // 2. قائمة منسدلة نظيفة لاختيار اللغة (Language Dropdown)
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(14.dp))
+                .background(Color(0xFF13131B))
+                .clickable { langMenuExpanded = true }
+                .padding(14.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Icon(Icons.Default.Language, contentDescription = null, tint = gold)
+                    Text("اللغة / Language / Sprache", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    val currentLabel = languagesList.firstOrNull { it.first == lang }?.second?.substringBefore(" ") ?: "العربية"
+                    Text(currentLabel, color = goldLight, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = gold)
+                }
+            }
+            DropdownMenu(
+                expanded = langMenuExpanded,
+                onDismissRequest = { langMenuExpanded = false }
+            ) {
+                languagesList.forEach { (code, title) ->
+                    DropdownMenuItem(
+                        text = { Text(title, fontWeight = if (lang == code) FontWeight.Bold else FontWeight.Normal) },
+                        onClick = {
+                            onLanguageChange(code)
+                            langMenuExpanded = false
+                        }
+                    )
+                }
+            }
+        }
+
+        // 3. قائمة منسدلة نظيفة لاختيار محرك التشغيل (Playback Engine Dropdown)
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(14.dp))
+                .background(Color(0xFF13131B))
+                .clickable { engineMenuExpanded = true }
+                .padding(14.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Icon(Icons.Default.SettingsInputComponent, contentDescription = null, tint = gold)
+                    Column {
+                        Text(strings.engineTitle, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                        val engineName = when (lang) {
+                            "en" -> selectedEngine.labelEn
+                            "de" -> selectedEngine.labelDe
+                            "tr" -> selectedEngine.labelTr
+                            else -> selectedEngine.labelAr
+                        }
+                        Text(engineName, color = gold, fontSize = 11.sp)
+                    }
+                }
+                Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = gold)
+            }
+            DropdownMenu(
+                expanded = engineMenuExpanded,
+                onDismissRequest = { engineMenuExpanded = false }
+            ) {
+                EngineType.entries.forEach { eng ->
+                    val label = when (lang) {
+                        "en" -> eng.labelEn
+                        "de" -> eng.labelDe
+                        "tr" -> eng.labelTr
+                        else -> eng.labelAr
+                    }
+                    DropdownMenuItem(
+                        text = { Text(label) },
+                        onClick = {
+                            selectedEngine = eng
+                            DevkanVault.savePreferredEngine(context, eng)
+                            engineMenuExpanded = false
+                        }
+                    )
+                }
+            }
+        }
+
+        // 4. مفاتيح التحكم الذكية (Low Latency + Geo-Bypass + Auto-Resume)
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(14.dp))
+                .background(Color(0xFF13131B))
+                .padding(horizontal = 14.dp, vertical = 6.dp)
+        ) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Text(strings.lowLatencyTitle, color = Color.White, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                Switch(checked = lowLatency, onCheckedChange = {
+                    lowLatency = it
+                    DevkanVault.setLowLatencyEnabled(context, it)
+                })
+            }
+            HorizontalDivider(color = Color.White.copy(alpha = 0.06f))
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Text(strings.geoBypassTitle, color = Color.White, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                Switch(checked = geoBypass, onCheckedChange = {
+                    geoBypass = it
+                    DevkanVault.setGeoBypassEnabled(context, it)
+                })
+            }
+            HorizontalDivider(color = Color.White.copy(alpha = 0.06f))
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Text(strings.autoResumeTitle, color = Color.White, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                Switch(checked = autoResume, onCheckedChange = {
+                    autoResume = it
+                    DevkanVault.setAutoResumeEnabled(context, it)
+                })
+            }
+        }
+
+        // 5. فحص سرعة السيرفر والـ Ping الفعلي
+        Button(
+            onClick = {
+                testingSpeed = true
+                scope.launch {
+                    val (ping, mbps) = EngineCoordinator.runServerSpeedAndPingTest(sampleTestUrl)
+                    speedResult = "Ping: ${ping} ms   •   Speed: ${mbps} Mbps"
+                    testingSpeed = false
+                }
+            },
+            colors = ButtonDefaults.buttonColors(containerColor = gold),
+            shape = RoundedCornerShape(12.dp),
+            modifier = Modifier.fillMaxWidth().height(46.dp)
+        ) {
+            Text(if (testingSpeed) "جاري الفحص..." else strings.speedTest, color = Color.Black, fontWeight = FontWeight.Bold)
+        }
+        speedResult?.let {
+            Text(it, color = Color(0xFF4ADE80), fontWeight = FontWeight.Bold, fontSize = 13.sp)
+        }
+
+        // 6. قفل التطبيق برمز PIN
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(14.dp))
+                .background(Color(0xFF13131B))
+                .padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(strings.appLockTitle, color = gold, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(
+                    value = pinInput,
+                    onValueChange = { if (it.length <= 6) pinInput = it },
+                    placeholder = { Text("4-6 digits (فارغ = معطل)", fontSize = 12.sp) },
+                    singleLine = true,
+                    modifier = Modifier.weight(1f)
+                )
+                Button(
+                    onClick = {
+                        DevkanVault.setAppLockPin(context, pinInput)
+                        Toast.makeText(context, if (pinInput.isEmpty()) "تم إيقاف القفل" else "تم حفظ رمز القفل", Toast.LENGTH_SHORT).show()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = gold)
+                ) {
+                    Text("حفظ", color = Color.Black, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
     }
-    result
+}
+
+// ============================================================================
+// نافذة إضافة اتصال الذكية (Xtream + M3U + Stalker MAC + تعبئة تلقائية من الرابط)
+// ============================================================================
+@Composable
+fun SmartAddConnectionDialog(
+    strings: AppStrings,
+    onDismiss: () -> Unit,
+    onSaveAndConnect: (SavedSubscription) -> Unit
+) {
+    val clipboardManager = LocalClipboardManager.current
+    val gold = Color(0xFFD4AF37)
+
+    var selectedMode by remember { mutableStateOf("XTREAM") } // "XTREAM", "M3U", "STALKER"
+    var smartPasteInput by remember { mutableStateOf("") }
+    var autoDetectedBanner by remember { mutableStateOf(false) }
+
+    var host by remember { mutableStateOf("") }
+    var username by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+    var passwordVisible by remember { mutableStateOf(false) }
+    var m3uUrl by remember { mutableStateOf("") }
+    var macAddress by remember { mutableStateOf("00:1A:79:") }
+
+    fun parseSmartUrl(raw: String) {
+        smartPasteInput = raw
+        try {
+            val uri = Uri.parse(raw.trim())
+            val u = uri.getQueryParameter("username")
+            val p = uri.getQueryParameter("password")
+            val scheme = uri.scheme
+            val auth = uri.authority
+            if (!u.isNullOrEmpty() && !p.isNullOrEmpty() && !scheme.isNullOrEmpty() && !auth.isNullOrEmpty()) {
+                host = "$scheme://$auth"
+                username = u
+                password = p
+                selectedMode = "XTREAM"
+                autoDetectedBanner = true
+            } else if (raw.trim().startsWith("http")) {
+                m3uUrl = raw.trim()
+                autoDetectedBanner = false
+            }
+        } catch (_: Exception) { }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Color(0xFF14141D),
+        title = {
+            Text(strings.addConnection, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+        },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                // أزرار التبديل الثلاثة: Xtream Codes | قائمة M3U | Stalker Portal
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf("XTREAM" to "Xtream Codes", "M3U" to "قائمة M3U", "STALKER" to "Stalker MAC").forEach { (mode, label) ->
+                        val active = selectedMode == mode
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(if (active) gold else Color(0xFF1F1F2C))
+                                .clickable { selectedMode = mode }
+                                .padding(vertical = 8.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = label,
+                                color = if (active) Color.Black else Color.White,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 11.sp,
+                                maxLines = 1
+                            )
+                        }
+                    }
+                }
+
+                // خانة اللصق الذكي للتعبئة التلقائية (كما في صورتك!)
+                OutlinedTextField(
+                    value = smartPasteInput,
+                    onValueChange = { parseSmartUrl(it) },
+                    singleLine = true,
+                    label = { Text("رابط M3U / Xtream (الصقه للتعبئة التلقائية)", fontSize = 11.sp) },
+                    trailingIcon = {
+                        IconButton(onClick = {
+                            val clip = clipboardManager.getText()?.text ?: ""
+                            if (clip.isNotEmpty()) parseSmartUrl(clip)
+                        }) {
+                            Icon(Icons.Default.ContentPaste, contentDescription = "Paste", tint = gold)
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                if (autoDetectedBanner) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Icon(Icons.Default.CheckCircle, contentDescription = null, tint = Color(0xFF4ADE80), modifier = Modifier.size(16.dp))
+                        Text("تم اكتشاف بيانات الاعتماد تلقائياً", color = Color(0xFF4ADE80), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+
+                when (selectedMode) {
+                    "XTREAM" -> {
+                        OutlinedTextField(value = host, onValueChange = { host = it }, label = { Text("رابط الخادم (http://server:port)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                        OutlinedTextField(value = username, onValueChange = { username = it }, label = { Text("اسم المستخدم") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                        OutlinedTextField(
+                            value = password,
+                            onValueChange = { password = it },
+                            label = { Text("كلمة المرور") },
+                            singleLine = true,
+                            visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                            trailingIcon = {
+                                IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                                    Icon(if (passwordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility, contentDescription = null)
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                    "M3U" -> {
+                        OutlinedTextField(
+                            value = m3uUrl,
+                            onValueChange = { m3uUrl = it },
+                            label = { Text("رابط قائمة التشغيل M3U / M3U8") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                    "STALKER" -> {
+                        OutlinedTextField(value = host, onValueChange = { host = it }, label = { Text("رابط البورتال (http://portal.com/c)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                        OutlinedTextField(value = macAddress, onValueChange = { macAddress = it }, label = { Text("عنوان MAC (00:1A:79:...)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                colors = ButtonDefaults.buttonColors(containerColor = gold),
+                onClick = {
+                    val sub = when (selectedMode) {
+                        "XTREAM" -> SavedSubscription("XTREAM", host.trim(), username.trim(), password.trim())
+                        "M3U" -> SavedSubscription("M3U", m3uUrl.trim(), m3uUrl = m3uUrl.trim())
+                        else -> SavedSubscription("STALKER", host.trim(), macAddress = macAddress.trim())
+                    }
+                    onSaveAndConnect(sub)
+                }
+            ) {
+                Text("حفظ واتصال", color = Color.Black, fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("إلغاء", color = Color.Gray) }
+        }
+    )
 }
