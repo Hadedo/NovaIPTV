@@ -3,6 +3,7 @@ package com.hadedo.novaiptv
 import android.content.Context
 import android.content.SharedPreferences
 import android.net.Uri
+import android.util.Base64
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.security.crypto.EncryptedSharedPreferences
@@ -23,7 +24,7 @@ import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 // ============================================================================
-// نماذج البيانات الموحدة (اشتراك + قنوات + أفلام + مسلسلات + مباريات حقيقية)
+// نماذج البيانات الموحدة (v5.0 - Smart Catalog + Hybrid EPG + Sports Matcher)
 // ============================================================================
 data class SavedSubscription(
     val type: String, // "XTREAM", "M3U", "STALKER"
@@ -50,8 +51,10 @@ data class MediaItemModel(
     val contentType: String = "LIVE", // "LIVE", "MOVIE", "SERIES"
     val rating: String = "",
     val year: String = "",
-    val originTag: String = "أجنبي", // "عربي", "كوري", "هندي", "أجنبي"
-    val genreTag: String = "دراما"   // "تاريخي", "أكشن", "دراما", "كوميدي"
+    val originTag: String = "أجنبي",
+    val genreTag: String = "دراما",
+    val addedTimestamp: Long = 0L,
+    val is4k: Boolean = false
 )
 
 data class VodDetailedInfo(
@@ -90,8 +93,16 @@ data class RealSportsMatch(
     val awayTeam: String,
     val league: String,
     val matchTime: String,
-    val status: String
+    val status: String,
+    val suggestedBroadcaster: String = "beIN SPORTS"
 )
+
+enum class AutoSyncInterval(val days: Int, val labelAr: String, val labelEn: String) {
+    DAILY(1, "كل يوم (24 ساعة)", "Every Day (24h)"),
+    WEEKLY(7, "كل أسبوع (7 أيام)", "Every Week (7d)"),
+    MONTHLY(30, "كل شهر (30 يوماً)", "Every Month (30d)"),
+    MANUAL(0, "يدوي فقط", "Manual Only")
+}
 
 enum class EngineType(val labelAr: String, val labelEn: String, val labelDe: String, val labelTr: String) {
     AUTO_HYBRID("تلقائي هجين (Media3 + LibVLC)", "Auto Hybrid (Media3 + VLC)", "Auto-Hybrid (Media3 + LibVLC)", "Otomatik Hibrit (Media3 + LibVLC)"),
@@ -110,7 +121,7 @@ data class StreamDiagnostics(
 )
 
 // ============================================================================
-// 1. طبقة الأمان والتخزين المشفر + التخزين المحلي الفوري (0.1s Instant Cache)
+// 1. طبقة الأمان والتخزين المشفر + جدولة المزامنة التلقائية
 // ============================================================================
 object DevkanVault {
     private fun getSecurePrefs(context: Context): SharedPreferences {
@@ -120,13 +131,13 @@ object DevkanVault {
                 .build()
             EncryptedSharedPreferences.create(
                 context,
-                "devkan_secure_vault_v4",
+                "devkan_secure_vault_v5",
                 masterKey,
                 EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
                 EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
             )
         } catch (e: Exception) {
-            context.getSharedPreferences("devkan_fallback_prefs_v4", Context.MODE_PRIVATE)
+            context.getSharedPreferences("devkan_fallback_prefs_v5", Context.MODE_PRIVATE)
         }
     }
 
@@ -147,7 +158,7 @@ object DevkanVault {
     fun getAppLockPin(context: Context): String =
         getSecurePrefs(context).getString("app_lock_pin", "") ?: ""
 
-    fun setAppLockPin(context: Context, pin: String) {
+    fun setAppLockPin(context, pin: String) {
         getSecurePrefs(context).edit().putString("app_lock_pin", pin).apply()
     }
 
@@ -170,6 +181,33 @@ object DevkanVault {
 
     fun setAutoResumeEnabled(context: Context, enabled: Boolean) {
         getSecurePrefs(context).edit().putBoolean("auto_resume_last", enabled).apply()
+    }
+
+    // جدولة التحديث التلقائي الصامت (يومي / أسبوعي / شهري / يدوي)
+    fun getAutoSyncInterval(context: Context): AutoSyncInterval {
+        val raw = getSecurePrefs(context).getString("auto_sync_interval", AutoSyncInterval.DAILY.name)
+        return try {
+            AutoSyncInterval.valueOf(raw ?: AutoSyncInterval.DAILY.name)
+        } catch (_: Exception) {
+            AutoSyncInterval.DAILY
+        }
+    }
+
+    fun setAutoSyncInterval(context: Context, interval: AutoSyncInterval) {
+        getSecurePrefs(context).edit().putString("auto_sync_interval", interval.name).apply()
+    }
+
+    fun shouldRunBackgroundSync(context: Context): Boolean {
+        val interval = getAutoSyncInterval(context)
+        if (interval == AutoSyncInterval.MANUAL || interval.days <= 0) return false
+        val lastSync = getSecurePrefs(context).getLong("last_catalog_sync_ms", 0L)
+        val elapsedMs = System.currentTimeMillis() - lastSync
+        val thresholdMs = interval.days * 24L * 60L * 60L * 1000L
+        return elapsedMs >= thresholdMs
+    }
+
+    fun markCatalogSyncedNow(context: Context) {
+        getSecurePrefs(context).edit().putLong("last_catalog_sync_ms", System.currentTimeMillis()).apply()
     }
 
     fun saveSubscription(context: Context, sub: SavedSubscription) {
@@ -216,7 +254,7 @@ object DevkanVault {
             .remove("sub_mac")
             .apply()
         try {
-            File(context.filesDir, "devkan_cached_playlist_v4.json").delete()
+            File(context.filesDir, "devkan_cached_playlist_v5.json").delete()
         } catch (_: Exception) { }
     }
 
@@ -234,7 +272,6 @@ object DevkanVault {
         return url to title
     }
 
-    // حفظ موضع المشاهدة ونسبتها المئوية لكل فيلم وحلقة مسلسل
     fun saveVodProgress(context: Context, streamId: String, positionMs: Long, durationMs: Long) {
         val progressFraction = if (durationMs > 0L) (positionMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f) else 0f
         getSecurePrefs(context).edit()
@@ -279,15 +316,18 @@ object DevkanVault {
                 obj.put("year", item.year)
                 obj.put("originTag", item.originTag)
                 obj.put("genreTag", item.genreTag)
+                obj.put("addedTimestamp", item.addedTimestamp)
+                obj.put("is4k", item.is4k)
                 arr.put(obj)
             }
-            File(context.filesDir, "devkan_cached_playlist_v4.json").writeText(arr.toString())
+            File(context.filesDir, "devkan_cached_playlist_v5.json").writeText(arr.toString())
+            markCatalogSyncedNow(context)
         } catch (_: Exception) { }
     }
 
     fun getCachedItems(context: Context): List<MediaItemModel> {
         return try {
-            val file = File(context.filesDir, "devkan_cached_playlist_v4.json")
+            val file = File(context.filesDir, "devkan_cached_playlist_v5.json")
             if (!file.exists()) return emptyList()
             val arr = JSONArray(file.readText())
             val list = ArrayList<MediaItemModel>(arr.length())
@@ -306,7 +346,9 @@ object DevkanVault {
                         rating = obj.optString("rating"),
                         year = obj.optString("year"),
                         originTag = obj.optString("originTag", "أجنبي"),
-                        genreTag = obj.optString("genreTag", "دراما")
+                        genreTag = obj.optString("genreTag", "دراما"),
+                        addedTimestamp = obj.optLong("addedTimestamp", 0L),
+                        is4k = obj.optBoolean("is4k", false)
                     )
                 )
             }
@@ -383,7 +425,7 @@ object EngineCoordinator {
 }
 
 // ============================================================================
-// 3. مستورد الاشتراكات + جلب تفاصيل الأفلام والمسلسلات + التصنيف الذكي
+// 3. مستورد الاشتراكات الذكي + الدليل الهجين (Hybrid EPG) + دمج القنوات المكررة
 // ============================================================================
 object DevkanPlaylistRepository {
     private fun buildClient(geoBypass: Boolean): OkHttpClient {
@@ -422,6 +464,61 @@ object DevkanPlaylistRepository {
         }
     }
 
+    private fun checkIs4K(group: String, title: String): Boolean {
+        val text = "$group $title".uppercase()
+        return text.contains("4K") || text.contains("UHD") || text.contains("2160P")
+    }
+
+    // تنظيف أسماء القنوات الرياضية المكررة (دمج FHD / HD / SD / LOW في بطاقة نظيفة واحدة)
+    fun deduplicateSportChannels(channels: List<MediaItemModel>): List<MediaItemModel> {
+        val seenNormalized = mutableSetOf<String>()
+        val result = mutableListOf<MediaItemModel>()
+        // ترتيب بحيث نعطي الأولوية لنسخة FHD أو HD أولاً
+        val sorted = channels.sortedByDescending { ch ->
+            val t = ch.title.uppercase()
+            when {
+                t.contains("4K") || t.contains("UHD") -> 4
+                t.contains("FHD") || t.contains("1080") -> 3
+                t.contains("HD") -> 2
+                else -> 1
+            }
+        }
+        for (ch in sorted) {
+            val cleanKey = ch.title.uppercase()
+                .replace(Regex("\\b(4K|UHD|FHD|HD|SD|LOW|HEVC|H265|VIP|BACKUP|BK|1080P|720P)\\b"), "")
+                .replace(Regex("[^A-Z0-9\\u0600-\\u06FF]"), "")
+                .trim()
+            if (cleanKey.isNotEmpty() && !seenNormalized.contains(cleanKey)) {
+                seenNormalized.add(cleanKey)
+                result.add(ch)
+            }
+        }
+        return result
+    }
+
+    // استدعاء الدليل الفوري الخفيف للقناة من نفس سيرفر Xtream (get_short_epg)
+    suspend fun fetchChannelShortEpg(sub: SavedSubscription, streamRawId: String): Pair<String, String> = withContext(Dispatchers.IO) {
+        if (sub.type != "XTREAM" || streamRawId.isEmpty()) return@withContext ("البث المباشر المستمر" to "البرنامج التالي")
+        val client = buildClient(true)
+        try {
+            val cleanHost = sub.host.trimEnd('/')
+            val url = "$cleanHost/player_api.php?username=${URLEncoder.encode(sub.username, "UTF-8")}&password=${URLEncoder.encode(sub.password, "UTF-8")}&action=get_short_epg&stream_id=$streamRawId&limit=2"
+            client.newCall(Request.Builder().url(url).build()).execute().use { resp ->
+                val listings = JSONObject(resp.body?.string() ?: "{}").optJSONArray("epg_listings") ?: JSONArray()
+                if (listings.length() > 0) {
+                    val nowRaw = listings.getJSONObject(0).optString("title", "")
+                    val nowTitle = try { String(Base64.decode(nowRaw, Base64.DEFAULT)) } catch (_: Exception) { nowRaw }
+                    val nextRaw = if (listings.length() > 1) listings.getJSONObject(1).optString("title", "") else ""
+                    val nextTitle = try { String(Base64.decode(nextRaw, Base64.DEFAULT)) } catch (_: Exception) { nextRaw }
+                    if (nowTitle.isNotBlank()) {
+                        return@withContext (nowTitle.trim() to nextTitle.trim().ifEmpty { "البث المستمر" })
+                    }
+                }
+            }
+        } catch (_: Exception) { }
+        "البث المباشر المستمر" to "البرنامج التالي على الجدول"
+    }
+
     suspend fun loadSubscriptionContent(
         sub: SavedSubscription,
         geoBypass: Boolean = true
@@ -438,7 +535,6 @@ object DevkanPlaylistRepository {
                     val p = URLEncoder.encode(sub.password, "UTF-8")
                     val baseApi = "$cleanHost/player_api.php?username=$u&password=$p"
 
-                    // 1. بيانات الاشتراك
                     try {
                         client.newCall(Request.Builder().url(baseApi).build()).execute().use { resp ->
                             val root = JSONObject(resp.body?.string() ?: "{}")
@@ -463,7 +559,7 @@ object DevkanPlaylistRepository {
                         }
                     } catch (_: Exception) { }
 
-                    // 2. البث المباشر + أسماء الباقات الحقيقية
+                    // 1. البث المباشر
                     val liveCategories = mutableMapOf<String, String>()
                     try {
                         client.newCall(Request.Builder().url("$baseApi&action=get_live_categories").build()).execute().use { resp ->
@@ -488,7 +584,7 @@ object DevkanPlaylistRepository {
                         }
                     } catch (_: Exception) { }
 
-                    // 3. قسم الأفلام (Movies) + تصنيف كوري/عربي/هندي
+                    // 2. الأفلام مع قراءة حقل الإضافة الفعلي (added) وسنة الإنتاج الحقيقية ووسم 4K الصارم
                     val vodCategories = mutableMapOf<String, String>()
                     try {
                         client.newCall(Request.Builder().url("$baseApi&action=get_vod_categories").build()).execute().use { resp ->
@@ -500,12 +596,13 @@ object DevkanPlaylistRepository {
                         }
                         client.newCall(Request.Builder().url("$baseApi&action=get_vod_streams").build()).execute().use { resp ->
                             val arr = JSONArray(resp.body?.string() ?: "[]")
-                            for (i in 0 until minOf(arr.length(), 1500)) {
+                            for (i in 0 until minOf(arr.length(), 1800)) {
                                 val obj = arr.getJSONObject(i)
                                 val id = obj.optString("stream_id")
                                 val name = obj.optString("name", "Movie $i")
                                 val icon = obj.optString("stream_icon", "")
                                 val rating = obj.optString("rating", "")
+                                val addedTs = obj.optString("added", "0").toLongOrNull() ?: 0L
                                 val ext = obj.optString("container_extension", "mp4").ifEmpty { "mp4" }
                                 val catName = vodCategories[obj.optString("category_id")] ?: "Movies"
                                 val movieUrl = "$cleanHost/movie/${sub.username}/${sub.password}/$id.$ext"
@@ -522,14 +619,16 @@ object DevkanPlaylistRepository {
                                         rating = rating,
                                         year = yearMatch,
                                         originTag = detectOriginTag(catName, name),
-                                        genreTag = detectGenreTag(catName, name)
+                                        genreTag = detectGenreTag(catName, name),
+                                        addedTimestamp = addedTs,
+                                        is4k = checkIs4K(catName, name)
                                     )
                                 )
                             }
                         }
                     } catch (_: Exception) { }
 
-                    // 4. قسم المسلسلات المستقل (Series) + تصنيف كوري/عربي/هندي
+                    // 3. المسلسلات مع تاريخ التحديث الفعلي (last_modified) وسنة الإصدار
                     val seriesCategories = mutableMapOf<String, String>()
                     try {
                         client.newCall(Request.Builder().url("$baseApi&action=get_series_categories").build()).execute().use { resp ->
@@ -541,13 +640,16 @@ object DevkanPlaylistRepository {
                         }
                         client.newCall(Request.Builder().url("$baseApi&action=get_series").build()).execute().use { resp ->
                             val arr = JSONArray(resp.body?.string() ?: "[]")
-                            for (i in 0 until minOf(arr.length(), 1500)) {
+                            for (i in 0 until minOf(arr.length(), 1800)) {
                                 val obj = arr.getJSONObject(i)
                                 val id = obj.optString("series_id")
                                 val name = obj.optString("name", "Series $i")
                                 val cover = obj.optString("cover", "")
                                 val rating = obj.optString("rating", "")
-                                val release = obj.optString("releaseDate", "").take(4)
+                                val lastMod = obj.optString("last_modified", "0").toLongOrNull() ?: 0L
+                                val release = obj.optString("releaseDate", "").take(4).ifEmpty {
+                                    Regex("(19|20)\\d{2}").find(name)?.value ?: ""
+                                }
                                 val catName = seriesCategories[obj.optString("category_id")] ?: "Series"
                                 items.add(
                                     MediaItemModel(
@@ -561,7 +663,9 @@ object DevkanPlaylistRepository {
                                         rating = rating,
                                         year = release,
                                         originTag = detectOriginTag(catName, name),
-                                        genreTag = detectGenreTag(catName, name)
+                                        genreTag = detectGenreTag(catName, name),
+                                        addedTimestamp = lastMod,
+                                        is4k = checkIs4K(catName, name)
                                     )
                                 )
                             }
@@ -614,7 +718,6 @@ object DevkanPlaylistRepository {
         updatedSub to items
     }
 
-    // جلب تفاصيل الفيلم الحقيقية (التقييم، القصة، سنة الإنتاج، الممثلين، المدة) قبل التشغيل
     suspend fun fetchVodDetails(sub: SavedSubscription, vodRawId: String, fallbackTitle: String, fallbackPoster: String): VodDetailedInfo = withContext(Dispatchers.IO) {
         val client = buildClient(true)
         try {
@@ -641,7 +744,6 @@ object DevkanPlaylistRepository {
         VodDetailedInfo(fallbackTitle, "جاهز للمشاهدة بجودة عالية.", "غير متوفر", "غير متوفر", "2025", "HD", "8.0", fallbackPoster)
     }
 
-    // جلب تفاصيل المسلسل والمواسم والحلقات المرقمة
     suspend fun fetchSeriesDetails(sub: SavedSubscription, seriesRawId: String, fallbackTitle: String, fallbackPoster: String): SeriesDetailedInfo = withContext(Dispatchers.IO) {
         val client = buildClient(true)
         val seasonsMap = sortedMapOf<Int, MutableList<SeriesEpisodeModel>>()
@@ -710,7 +812,8 @@ object DevkanPlaylistRepository {
                         logo = logo,
                         contentType = if (isMovie) "MOVIE" else "LIVE",
                         originTag = detectOriginTag(group, name),
-                        genreTag = detectGenreTag(group, name)
+                        genreTag = detectGenreTag(group, name),
+                        is4k = checkIs4K(group, name)
                     )
                 )
             }
@@ -729,9 +832,20 @@ object DevkanPlaylistRepository {
 }
 
 // ============================================================================
-// 4. مصدر رياضي حقيقي لجدول المباريات اليومية (TheSportsDB Live API)
+// 4. مصدر رياضي حقيقي لجدول المباريات + خوارزمية تحديد القناة الناقلة الفعلية
 // ============================================================================
 object RealSportsDataSource {
+    private fun mapLeagueToBroadcaster(league: String): String {
+        val l = league.lowercase()
+        return when {
+            l.contains("saudi") || l.contains("roshn") -> "SSC Sports"
+            l.contains("iraq") || l.contains("afc") || l.contains("asian") -> "الرابعة الرياضية / الكأس"
+            l.contains("serie a") || l.contains("italian") -> "AD SPORTS Premium"
+            l.contains("premier") || l.contains("champions") || l.contains("liga") || l.contains("bundesliga") || l.contains("ligue 1") -> "beIN SPORTS"
+            else -> "beIN SPORTS / القنوات الرياضية"
+        }
+    }
+
     suspend fun fetchTodayRealMatches(): List<RealSportsMatch> = withContext(Dispatchers.IO) {
         val client = OkHttpClient.Builder()
             .connectTimeout(8, TimeUnit.SECONDS)
@@ -753,7 +867,17 @@ object RealSportsDataSource {
                     val time = ev.optString("strTime", "20:00").take(5)
                     val status = ev.optString("strStatus", "Scheduled").ifEmpty { "اليوم" }
                     if (home.isNotEmpty() && away.isNotEmpty()) {
-                        matches.add(RealSportsMatch(id, home, away, league, time, status))
+                        matches.add(
+                            RealSportsMatch(
+                                id = id,
+                                homeTeam = home,
+                                awayTeam = away,
+                                league = league,
+                                matchTime = time,
+                                status = status,
+                                suggestedBroadcaster = mapLeagueToBroadcaster(league)
+                            )
+                        )
                     }
                 }
             }
