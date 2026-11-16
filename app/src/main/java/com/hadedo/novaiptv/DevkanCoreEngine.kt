@@ -127,7 +127,6 @@ object EngineCoordinator {
     fun selectInitialEngine(url: String, preferred: EngineType): EngineType {
         if (preferred != EngineType.AUTO_HYBRID) return preferred
         val lower = url.lowercase()
-        // التوجيه الذكي: صيغ TS/MKV/AVI أو روابط البث الخام تُحوّل تلقائياً إلى LibVLC عند الحاجة
         return if (lower.endsWith(".avi") || lower.contains("mpegts") || lower.contains("rtsp://")) {
             EngineType.LIBVLC_ONLY
         } else {
@@ -136,11 +135,10 @@ object EngineCoordinator {
     }
 
     fun getAdaptiveBufferMs(pingMs: Long): Triple<Int, Int, Int> {
-        // (minBufferMs, maxBufferMs, bufferForPlaybackMs) -> لتحقيق Fast Zapping بدون تقطيع
         return when {
-            pingMs in 1..70 -> Triple(4000, 15000, 800)      // إنترنت سريع: فتح القناة في 0.8 ثانية
-            pingMs in 71..180 -> Triple(8000, 25000, 1500)   // إنترنت متوسط
-            else -> Triple(15000, 45000, 2500)               // إنترنت ضعيف: تخزين مؤقت أكبر لمنع التقطيع
+            pingMs in 1..70 -> Triple(4000, 15000, 800)
+            pingMs in 71..180 -> Triple(8000, 25000, 1500)
+            else -> Triple(15000, 45000, 2500)
         }
     }
 
@@ -156,14 +154,13 @@ object EngineCoordinator {
             client.newCall(req).execute().use { }
             val ping = (System.currentTimeMillis() - startPing).coerceAtLeast(12L)
 
-            // قياس سرعة الاستجابة التقريبية بالميجابت/ثانية
             val startDl = System.currentTimeMillis()
             val dlReq = Request.Builder().url(cleanUrl).get().build()
             var bytesRead = 0L
             client.newCall(dlReq).execute().use { resp ->
                 val stream = resp.body?.byteStream()
                 val buf = ByteArray(8192)
-                var read: Int
+                var read = 0
                 while (stream != null && stream.read(buf).also { read = it } != -1 && bytesRead < 250_000) {
                     bytesRead += read
                 }
@@ -205,7 +202,7 @@ object LocalPlaylistImporter {
                 var currentName = "Channel"
                 var currentGroup = "Local Playlist"
                 var currentLogo = ""
-                var line: String?
+                var line: String? = null
                 while (reader.readLine().also { line = it } != null) {
                     val trimmed = line!!.trim()
                     if (trimmed.startsWith("#EXTINF:")) {
