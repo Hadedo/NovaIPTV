@@ -11,6 +11,7 @@ import android.os.Build
 import android.util.Rational
 import android.view.ViewGroup
 import android.widget.FrameLayout
+import androidx.activity.compose.BackHandler
 import androidx.annotation.OptIn
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
@@ -60,6 +61,7 @@ import org.videolan.libvlc.LibVLC
 import org.videolan.libvlc.Media
 import org.videolan.libvlc.MediaPlayer
 import org.videolan.libvlc.util.VLCVideoLayout
+import java.util.Locale
 
 fun Context.findActivity(): Activity? {
     var ctx = this
@@ -68,6 +70,16 @@ fun Context.findActivity(): Activity? {
         ctx = ctx.baseContext
     }
     return null
+}
+
+private fun formatDurationMs(ms: Long): String {
+    if (ms <= 0L) return "00:00"
+    val totalSec = ms / 1000
+    val hours = totalSec / 3600
+    val minutes = (totalSec % 3600) / 60
+    val seconds = totalSec % 60
+    return if (hours > 0) String.format(Locale.US, "%d:%02d:%02d", hours, minutes, seconds)
+    else String.format(Locale.US, "%02d:%02d", minutes, seconds)
 }
 
 @Composable
@@ -193,15 +205,34 @@ fun DevkanHybridPlayerScreen(
 
     var controlsVisible by remember { mutableStateOf(true) }
     var isLocked by remember { mutableStateOf(false) }
-    var scaleIndex by remember { mutableIntStateOf(1) }
+    var isPaused by remember { mutableStateOf(false) }
+    var currentPosMs by remember { mutableLongStateOf(0L) }
+    var totalDurMs by remember { mutableLongStateOf(0L) }
+
+    // 0 = Fit (أبعاد طبيعية في الوضع الطولي بدون تشويه), 1 = Fill (ملء الشاشة بالعرض), 2 = Zoom, 3 = 16:9
+    var scaleIndex by remember { mutableIntStateOf(if (isLandscape) 1 else 0) }
     var playbackSpeed by remember { mutableFloatStateOf(1.0f) }
     var reconnectAttempts by remember { mutableIntStateOf(0) }
     var isReconnecting by remember { mutableStateOf(false) }
     var showDiagnostics by remember { mutableStateOf(false) }
     var seekFeedbackText by remember { mutableStateOf<String?>(null) }
+    var vlcPlayerRef by remember { mutableStateOf<MediaPlayer?>(null) }
 
     val startTimestamp = remember { System.currentTimeMillis() }
     var startupMs by remember { mutableLongStateOf(0L) }
+
+    // التبديل الذكي للأبعاد: Fit في الطول لمنع التشويه، و Fill في العرض لملء الشاشة
+    LaunchedEffect(isLandscape) {
+        scaleIndex = if (isLandscape) 1 else 0
+    }
+
+    // زر الرجوع في الهاتف يعيدك للشاشة السابقة بأمان
+    BackHandler {
+        try {
+            activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        } catch (_: Exception) { }
+        onBack()
+    }
 
     DisposableEffect(activity) {
         val window = activity?.window
@@ -228,8 +259,8 @@ fun DevkanHybridPlayerScreen(
         }
     }
 
-    LaunchedEffect(controlsVisible, isLocked) {
-        if (controlsVisible && !isLocked) {
+    LaunchedEffect(controlsVisible, isLocked, isPaused) {
+        if (controlsVisible && !isLocked && !isPaused) {
             delay(5000)
             controlsVisible = false
         }
@@ -274,18 +305,27 @@ fun DevkanHybridPlayerScreen(
         } else null
     }
 
-    LaunchedEffect(exoPlayer, isVodOrSeries, streamId) {
-        if (isVodOrSeries && streamId.isNotEmpty() && exoPlayer != null) {
-            while (true) {
-                delay(4000)
-                try {
-                    val pos = exoPlayer.currentPosition
-                    val dur = exoPlayer.duration
-                    if (pos > 2000L && dur > 0L) {
-                        DevkanVault.saveVodProgress(context, streamId, pos, dur)
+    // تحديث شريط الوقت وحفظ نسبة المشاهدة للأفلام والمسلسلات
+    LaunchedEffect(exoPlayer, vlcPlayerRef, isVodOrSeries, streamId) {
+        while (true) {
+            delay(1000)
+            try {
+                if (exoPlayer != null) {
+                    currentPosMs = exoPlayer.currentPosition.coerceAtLeast(0L)
+                    totalDurMs = exoPlayer.duration.coerceAtLeast(0L)
+                    isPaused = !exoPlayer.isPlaying && exoPlayer.playbackState == Player.STATE_READY
+                    if (isVodOrSeries && streamId.isNotEmpty() && currentPosMs > 2000L && totalDurMs > 0L) {
+                        DevkanVault.saveVodProgress(context, streamId, currentPosMs, totalDurMs)
                     }
-                } catch (_: Exception) { }
-            }
+                } else if (vlcPlayerRef != null && vlcPlayerRef?.isReleased == false) {
+                    currentPosMs = vlcPlayerRef?.time?.coerceAtLeast(0L) ?: 0L
+                    totalDurMs = vlcPlayerRef?.length?.coerceAtLeast(0L) ?: 0L
+                    isPaused = vlcPlayerRef?.isPlaying == false
+                    if (isVodOrSeries && streamId.isNotEmpty() && currentPosMs > 2000L && totalDurMs > 0L) {
+                        DevkanVault.saveVodProgress(context, streamId, currentPosMs, totalDurMs)
+                    }
+                }
+            } catch (_: Exception) { }
         }
     }
 
@@ -344,6 +384,38 @@ fun DevkanHybridPlayerScreen(
         }
     }
 
+    fun togglePlayPause() {
+        try {
+            if (exoPlayer != null) {
+                if (exoPlayer.isPlaying) {
+                    exoPlayer.pause()
+                    isPaused = true
+                } else {
+                    exoPlayer.play()
+                    isPaused = false
+                }
+            } else if (vlcPlayerRef != null && vlcPlayerRef?.isReleased == false) {
+                if (vlcPlayerRef?.isPlaying == true) {
+                    vlcPlayerRef?.pause()
+                    isPaused = true
+                } else {
+                    vlcPlayerRef?.play()
+                    isPaused = false
+                }
+            }
+        } catch (_: Exception) { }
+    }
+
+    fun seekByDelta(deltaMs: Long) {
+        try {
+            if (exoPlayer != null) {
+                exoPlayer.seekTo((exoPlayer.currentPosition + deltaMs).coerceAtLeast(0L))
+            } else if (vlcPlayerRef != null && vlcPlayerRef?.isReleased == false) {
+                vlcPlayerRef?.time = ((vlcPlayerRef?.time ?: 0L) + deltaMs).coerceAtLeast(0L)
+            }
+        } catch (_: Exception) { }
+    }
+
     val exoResizeMode = when (scaleIndex) {
         1 -> AspectRatioFrameLayout.RESIZE_MODE_FILL
         2 -> AspectRatioFrameLayout.RESIZE_MODE_ZOOM
@@ -366,10 +438,10 @@ fun DevkanHybridPlayerScreen(
                 detectTapGestures(
                     onTap = { controlsVisible = !controlsVisible },
                     onDoubleTap = { offset ->
-                        if (!isLocked && exoPlayer != null) {
+                        if (!isLocked) {
                             val isRightSide = offset.x > size.width / 2f
                             val delta = if (isRightSide) 10_000L else -10_000L
-                            exoPlayer.seekTo((exoPlayer.currentPosition + delta).coerceAtLeast(0L))
+                            seekByDelta(delta)
                             seekFeedbackText = if (isRightSide) "+10s ⏩" else "⏪ -10s"
                         }
                     }
@@ -421,7 +493,10 @@ fun DevkanHybridPlayerScreen(
                             setMedia(media)
                             media.release()
                             play()
+                            val savedPos = if (isVodOrSeries && streamId.isNotEmpty()) DevkanVault.getVodPosition(ctx, streamId) else 0L
+                            if (savedPos > 5000L) time = savedPos
                         }
+                        vlcPlayerRef = mediaPlayer
                         vlcLayout.tag = Pair(libVlc, mediaPlayer)
                     } catch (_: Exception) { }
                     vlcLayout
@@ -447,6 +522,7 @@ fun DevkanHybridPlayerScreen(
                             mp.release()
                         }
                         vlc?.release()
+                        vlcPlayerRef = null
                     } catch (_: Exception) { }
                 },
                 modifier = Modifier.fillMaxSize()
@@ -502,12 +578,13 @@ fun DevkanHybridPlayerScreen(
                             colors = listOf(
                                 Color.Black.copy(alpha = 0.78f),
                                 Color.Transparent,
-                                Color.Black.copy(alpha = 0.85f)
+                                Color.Black.copy(alpha = 0.88f)
                             )
                         )
                     )
                     .padding(16.dp)
             ) {
+                // الشريط العلوي
                 Row(
                     modifier = Modifier.align(Alignment.TopCenter).fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
@@ -578,6 +655,45 @@ fun DevkanHybridPlayerScreen(
                     }
                 }
 
+                // أزرار المنتصف المريحة: إرجاع 10ث | إيقاف مؤقت / تشغيل كبير | تقديم 10ث
+                Row(
+                    modifier = Modifier.align(Alignment.Center),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(28.dp)
+                ) {
+                    if (isVodOrSeries) {
+                        IconButton(
+                            onClick = { seekByDelta(-10_000L) },
+                            modifier = Modifier.size(48.dp).background(Color.Black.copy(alpha = 0.55f), CircleShape)
+                        ) {
+                            Icon(Icons.Default.Replay10, contentDescription = "-10s", tint = Color.White, modifier = Modifier.size(28.dp))
+                        }
+                    }
+
+                    IconButton(
+                        onClick = { togglePlayPause() },
+                        modifier = Modifier
+                            .size(66.dp)
+                            .background(gold.copy(alpha = 0.92f), CircleShape)
+                    ) {
+                        Icon(
+                            imageVector = if (isPaused) Icons.Default.PlayArrow else Icons.Default.Pause,
+                            contentDescription = "Play/Pause",
+                            tint = Color.Black,
+                            modifier = Modifier.size(38.dp)
+                        )
+                    }
+
+                    if (isVodOrSeries) {
+                        IconButton(
+                            onClick = { seekByDelta(10_000L) },
+                            modifier = Modifier.size(48.dp).background(Color.Black.copy(alpha = 0.55f), CircleShape)
+                        ) {
+                            Icon(Icons.Default.Forward10, contentDescription = "+10s", tint = Color.White, modifier = Modifier.size(28.dp))
+                        }
+                    }
+                }
+
                 if (showDiagnostics) {
                     val diag = EngineCoordinator.currentDiagnostics.value
                     Column(
@@ -599,66 +715,100 @@ fun DevkanHybridPlayerScreen(
                     }
                 }
 
-                Row(
+                // الشريط السفلي + شريط الوقت التفاعلي للأفلام والمسلسلات
+                Column(
                     modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceEvenly
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    TextButton(onClick = {
-                        try {
-                            activity?.requestedOrientation = if (isLandscape) {
-                                ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
-                            } else {
-                                ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
-                            }
-                        } catch (_: Exception) { }
-                    }) {
-                        Icon(Icons.Default.ScreenRotation, contentDescription = "Rotate", tint = gold, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text(if (isLandscape) "طولي" else "عرضي", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                    }
-
-                    TextButton(onClick = { scaleIndex = (scaleIndex + 1) % 4 }) {
-                        Icon(Icons.Default.AspectRatio, contentDescription = null, tint = gold, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(4.dp))
-                        val modeName = when (scaleIndex) {
-                            1 -> "Fill"
-                            2 -> "Zoom"
-                            3 -> "16:9"
-                            else -> "Fit"
-                        }
-                        Text(modeName, color = gold, fontWeight = FontWeight.Bold, fontSize = 11.sp)
-                    }
-
-                    if (isVodOrSeries && exoPlayer != null) {
-                        Button(
-                            onClick = {
-                                exoPlayer.seekTo(exoPlayer.currentPosition + 85_000L)
-                                seekFeedbackText = "تخطي المقدمة +85s ⏭️"
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = gold.copy(alpha = 0.28f)),
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                            shape = RoundedCornerShape(8.dp)
+                    if (isVodOrSeries && totalDurMs > 0L) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Text("تخطي الانترو", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            Text(formatDurationMs(currentPosMs), color = Color.White, fontSize = 11.sp)
+                            Slider(
+                                value = (currentPosMs.toFloat() / totalDurMs.toFloat()).coerceIn(0f, 1f),
+                                onValueChange = { fraction ->
+                                    val target = (fraction * totalDurMs).toLong()
+                                    currentPosMs = target
+                                    try {
+                                        exoPlayer?.seekTo(target)
+                                        if (vlcPlayerRef != null && vlcPlayerRef?.isReleased == false) {
+                                            vlcPlayerRef?.time = target
+                                        }
+                                    } catch (_: Exception) { }
+                                },
+                                colors = SliderDefaults.colors(thumbColor = gold, activeTrackColor = gold),
+                                modifier = Modifier.weight(1f)
+                            )
+                            Text(formatDurationMs(totalDurMs), color = Color.White, fontSize = 11.sp)
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceEvenly
+                    ) {
+                        TextButton(onClick = {
+                            try {
+                                activity?.requestedOrientation = if (isLandscape) {
+                                    ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+                                } else {
+                                    ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+                                }
+                            } catch (_: Exception) { }
+                        }) {
+                            Icon(Icons.Default.ScreenRotation, contentDescription = "Rotate", tint = gold, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text(if (isLandscape) "طولي" else "عرضي", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                         }
 
-                        TextButton(onClick = {
-                            playbackSpeed = when (playbackSpeed) {
-                                1.0f -> 1.25f
-                                1.25f -> 1.5f
-                                1.5f -> 2.0f
-                                else -> 1.0f
-                            }
-                            exoPlayer.playbackParameters = PlaybackParameters(playbackSpeed)
-                        }) {
-                            Text("${playbackSpeed}x", color = gold, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                        }
-                    } else {
-                        TextButton(onClick = { isLocked = true }) {
-                            Icon(Icons.Default.Lock, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                        TextButton(onClick = { scaleIndex = (scaleIndex + 1) % 4 }) {
+                            Icon(Icons.Default.AspectRatio, contentDescription = null, tint = gold, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(4.dp))
-                            Text("قفل", color = Color.White, fontSize = 11.sp)
+                            val modeName = when (scaleIndex) {
+                                1 -> "Fill"
+                                2 -> "Zoom"
+                                3 -> "16:9"
+                                else -> "Fit"
+                            }
+                            Text(modeName, color = gold, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                        }
+
+                        if (isVodOrSeries) {
+                            Button(
+                                onClick = {
+                                    seekByDelta(85_000L)
+                                    seekFeedbackText = "تخطي المقدمة +85s ⏭️"
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = gold.copy(alpha = 0.28f)),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Text("تخطي الانترو", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
+
+                            if (exoPlayer != null) {
+                                TextButton(onClick = {
+                                    playbackSpeed = when (playbackSpeed) {
+                                        1.0f -> 1.25f
+                                        1.25f -> 1.5f
+                                        1.5f -> 2.0f
+                                        else -> 1.0f
+                                    }
+                                    exoPlayer.playbackParameters = PlaybackParameters(playbackSpeed)
+                                }) {
+                                    Text("${playbackSpeed}x", color = gold, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                }
+                            }
+                        } else {
+                            TextButton(onClick = { isLocked = true }) {
+                                Icon(Icons.Default.Lock, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text("قفل", color = Color.White, fontSize = 11.sp)
+                            }
                         }
                     }
                 }
@@ -674,6 +824,7 @@ fun EpgTimelineGridSheet(
     onPlayChannel: (String) -> Unit,
     onClose: () -> Unit
 ) {
+    BackHandler { onClose() }
     var searchQuery by remember { mutableStateOf("") }
     val filtered = remember(slots, searchQuery) {
         if (searchQuery.isBlank()) slots
