@@ -11,7 +11,6 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -24,6 +23,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -57,7 +57,7 @@ class MainActivity : ComponentActivity() {
 }
 
 // ============================================================================
-// الترجمة متعددة اللغات (عربي + إنجليزي + ألماني + تركي + فرنسي + كردي)
+// الترجمة متعددة اللغات
 // ============================================================================
 data class AppStrings(
     val home: String,
@@ -66,9 +66,11 @@ data class AppStrings(
     val cinema: String,
     val settings: String,
     val continueWatching: String,
-    val recentlyWatched: String,
+    val recommendedForYou: String,
     val searchHint: String,
     val all: String,
+    val moviesTab: String,
+    val seriesTab: String,
     val addConnection: String,
     val importFile: String,
     val epgGuide: String,
@@ -86,12 +88,12 @@ data class AppStrings(
 )
 
 fun getStrings(lang: String): AppStrings = when (lang) {
-    "en" -> AppStrings("Home", "Live TV", "Sports", "Cinema", "Settings", "Continue Watching", "Featured Channels", "Search channels or movies...", "All", "Add Connection", "Import M3U File", "EPG Grid", "Server Speed & Ping", "Playback Engine", "App Lock PIN", "Subscription Details", "Status", "Expires", "Allowed Region", "Connections", "Ultra-Low Latency (Satellite Sync)", "Smart Geo-Bypass Headers", "Auto-Resume Last Channel")
-    "de" -> AppStrings("Start", "Live-TV", "Sport", "Kino", "Optionen", "Weiterschauen", "Empfohlene Kanäle", "Kanäle oder Filme suchen...", "Alle", "Verbindung hinzufügen", "M3U-Datei laden", "EPG-Plan", "Server-Speedtest", "Wiedergabe-Engine", "App-PIN-Sperre", "Abonnement-Details", "Status", "Ablaufdatum", "Region / Land", "Verbindungen", "Geringe Latenz (Satelliten-Sync)", "Geo-Bypass-Header", "Letzten Kanal fortsetzen")
-    "tr" -> AppStrings("Ana Sayfa", "Canlı", "Spor", "Sinema", "Ayarlar", "Devam Et", "Öne Çıkan Kanallar", "Kanal veya film ara...", "Tümü", "Bağlantı Ekle", "M3U Dosyası", "EPG Rehberi", "Sunucu Hız Testi", "Oynatıcı Motoru", "Uygulama PIN", "Abonelik Bilgileri", "Durum", "Bitiş Tarihi", "Ülke / Bölge", "Bağlantılar", "Düşük Gecikme Modu", "Bölge Kısıtlama Aşımı", "Son Kanalı Otomatik Aç")
-    "fr" -> AppStrings("Accueil", "Direct", "Sports", "Cinéma", "Réglages", "Reprendre", "Chaînes", "Rechercher...", "Tout", "Ajouter Connexion", "Fichier M3U", "Guide EPG", "Test Serveur", "Moteur Vidéo", "Code PIN App", "Abonnement", "Statut", "Expiration", "Pays Autorisé", "Connexions", "Faible Latence", "Contournement Géo", "Reprise Auto")
-    "ku" -> AppStrings("سەرەکی", "ڕاستەوخۆ", "وەرزش", "سینەما", "ڕێکخستن", "بەردەوامبە", "کەناڵەکان", "گەڕان...", "هەموو", "زیادکردنی بەشداری", "فایلی M3U", "خشتەی EPG", "پشکنینی خێرایی", "بزوێنەری کارپێکردن", "قفڵی بەرنامە", "زانیاری بەشداری", "دۆخ", "بەرواری بەسەرچوون", "وڵات", "پەیوەندییەکان", "کەمکردنەوەی دواکەوتن", "کردنەوەی بلۆکی وڵات", "کردنەوەی دوایین کەناڵ")
-    else -> AppStrings("الرئيسية", "مباشر", "الرياضة", "السينما", "الإعدادات", "واصل المشاهدة", "قنوات مختارة", "ابحث عن قناة أو فيلم...", "الكل", "إضافة اتصال", "استيراد ملف M3U", "جدول EPG", "فحص سرعة السيرفر", "محرك التشغيل", "قفل التطبيق PIN", "بطاقة الاشتراك", "الحالة", "تاريخ الانتهاء", "الدولة / النطاق", "الاتصالات", "تقليل تأخير البث عن الستلايت", "تجاوز قيود السيرفر والدولة", "فتح آخر قناة تلقائياً عند التشغيل")
+    "en" -> AppStrings("Home", "Live TV", "Sports", "Cinema", "Settings", "Continue Watching", "Recommended For You", "Search channels, movies, series...", "All", "Movies", "Series", "Add Connection", "Import M3U File", "EPG Grid", "Server Speed & Ping", "Playback Engine", "App Lock PIN", "Subscription Details", "Status", "Expires", "Allowed Region", "Connections", "Ultra-Low Latency (Satellite Sync)", "Smart Geo-Bypass Headers", "Auto-Resume Last Channel")
+    "de" -> AppStrings("Start", "Live-TV", "Sport", "Kino", "Optionen", "Weiterschauen", "Empfohlen für dich", "Kanäle, Filme, Serien suchen...", "Alle", "Filme", "Serien", "Verbindung hinzufügen", "M3U-Datei laden", "EPG-Plan", "Server-Speedtest", "Wiedergabe-Engine", "App-PIN-Sperre", "Abonnement-Details", "Status", "Ablaufdatum", "Region / Land", "Verbindungen", "Geringe Latenz (Satelliten-Sync)", "Geo-Bypass-Header", "Letzten Kanal fortsetzen")
+    "tr" -> AppStrings("Ana Sayfa", "Canlı", "Spor", "Sinema", "Ayarlar", "Devam Et", "Sizin İçin Önerilenler", "Kanal, film, dizi ara...", "Tümü", "Filmler", "Diziler", "Bağlantı Ekle", "M3U Dosyası", "EPG Rehberi", "Sunucu Hız Testi", "Oynatıcı Motoru", "Uygulama PIN", "Abonelik Bilgileri", "Durum", "Bitiş Tarihi", "Ülke / Bölge", "Bağlantılar", "Düşük Gecikme Modu", "Bölge Kısıtlama Aşımı", "Son Kanalı Otomatik Aç")
+    "fr" -> AppStrings("Accueil", "Direct", "Sports", "Cinéma", "Réglages", "Reprendre", "Recommandé", "Rechercher...", "Tout", "Films", "Séries", "Ajouter Connexion", "Fichier M3U", "Guide EPG", "Test Serveur", "Moteur Vidéo", "Code PIN App", "Abonnement", "Statut", "Expiration", "Pays Autorisé", "Connexions", "Faible Latence", "Contournement Géo", "Reprise Auto")
+    "ku" -> AppStrings("سەرەکی", "ڕاستەوخۆ", "وەرزش", "سینەما", "ڕێکخستن", "بەردەوامبە", "پێشنیارکراو", "گەڕان...", "هەموو", "فیلم", "زنجیرە", "زیادکردنی بەشداری", "فایلی M3U", "خشتەی EPG", "پشکنینی خێرایی", "بزوێنەری کارپێکردن", "قفڵی بەرنامە", "زانیاری بەشداری", "دۆخ", "بەرواری بەسەرچوون", "وڵات", "پەیوەندییەکان", "کەمکردنەوەی دواکەوتن", "کردنەوەی بلۆکی وڵات", "کردنەوەی دوایین کەناڵ")
+    else -> AppStrings("الرئيسية", "مباشر", "الرياضة", "السينما", "الإعدادات", "واصل المشاهدة", "ننصحك بمشاهدته اليوم", "ابحث عن قناة أو فيلم أو مسلسل...", "الكل", "الأفلام", "المسلسلات", "إضافة اتصال", "استيراد ملف M3U", "جدول EPG", "فحص سرعة السيرفر", "محرك التشغيل", "قفل التطبيق PIN", "بطاقة الاشتراك", "الحالة", "تاريخ الانتهاء", "الدولة / النطاق", "الاتصالات", "تقليل تأخير البث عن الستلايت", "تجاوز قيود السيرفر والدولة", "فتح آخر قناة تلقائياً عند التشغيل")
 }
 
 // ============================================================================
@@ -204,7 +206,7 @@ fun DevkanBrandHeader(onAddClick: () -> Unit, onImportClick: () -> Unit, strings
 }
 
 // ============================================================================
-// اللوحة الرئيسية للتطبيق (استعادة الاشتراك تلقائياً + كل الأقسام)
+// اللوحة الرئيسية للتطبيق
 // ============================================================================
 @Composable
 fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
@@ -212,38 +214,59 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
     val scope = rememberCoroutineScope()
     val strings = remember(lang) { getStrings(lang) }
     val gold = Color(0xFFD4AF37)
+    val goldLight = Color(0xFFFDE047)
 
     var selectedTab by remember { mutableIntStateOf(0) }
     var activeStream by remember { mutableStateOf<MediaItemModel?>(null) }
+    var selectedMovieForDetails by remember { mutableStateOf<MediaItemModel?>(null) }
+    var selectedSeriesForDetails by remember { mutableStateOf<MediaItemModel?>(null) }
+
     var showAddDialog by remember { mutableStateOf(false) }
     var showEpgSheet by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
-    var selectedCategory by remember { mutableStateOf("ALL") }
+    var selectedLiveCategory by remember { mutableStateOf("ALL") }
     var isSyncing by remember { mutableStateOf(false) }
 
     var currentSub by remember { mutableStateOf(DevkanVault.getSavedSubscription(context)) }
     val allItems = remember { mutableStateListOf<MediaItemModel>() }
+    val todayRealMatches = remember { mutableStateListOf<RealSportsMatch>() }
 
-    // تحميل الاشتراك المحفوظ تلقائياً عند فتح التطبيق + فتح آخر قناة إذا كان مفعلاً
+    // تحميل فوري من الذاكرة المحلية في 0.1 ثانية + جلب جدول المباريات الحقيقي لليوم
     LaunchedEffect(Unit) {
-        val saved = DevkanVault.getSavedSubscription(context)
-        if (saved != null) {
-            isSyncing = true
-            val geoBypass = DevkanVault.isGeoBypassEnabled(context)
-            val (updatedSub, loadedItems) = DevkanPlaylistRepository.loadSubscriptionContent(saved, geoBypass)
-            currentSub = updatedSub
-            DevkanVault.saveSubscription(context, updatedSub)
-            if (loadedItems.isNotEmpty()) {
-                allItems.clear()
-                allItems.addAll(loadedItems)
+        val cached = DevkanVault.getCachedItems(context)
+        if (cached.isNotEmpty()) {
+            allItems.clear()
+            allItems.addAll(cached)
+        } else {
+            val saved = DevkanVault.getSavedSubscription(context)
+            if (saved != null) {
+                isSyncing = true
+                val geoBypass = DevkanVault.isGeoBypassEnabled(context)
+                val (updatedSub, loadedItems) = DevkanPlaylistRepository.loadSubscriptionContent(saved, geoBypass)
+                currentSub = updatedSub
+                DevkanVault.saveSubscription(context, updatedSub)
+                if (loadedItems.isNotEmpty()) {
+                    allItems.clear()
+                    allItems.addAll(loadedItems)
+                    DevkanVault.saveCachedItems(context, loadedItems)
+                }
+                isSyncing = false
             }
-            isSyncing = false
+        }
+
+        // جلب مباريات اليوم الحقيقية من المصدر الرياضي
+        launch {
+            val realMatches = RealSportsDataSource.fetchTodayRealMatches()
+            if (realMatches.isNotEmpty()) {
+                todayRealMatches.clear()
+                todayRealMatches.addAll(realMatches)
+            }
         }
 
         if (DevkanVault.isAutoResumeEnabled(context)) {
             val last = DevkanVault.getLastChannel(context)
             if (last != null) {
-                activeStream = MediaItemModel("resume", last.second, last.first, "", "Live", "", "LIVE")
+                activeStream = MediaItemModel("resume", "0", last.second, last.first, "", "Live", "", "LIVE")
             }
         }
     }
@@ -255,12 +278,14 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
                 if (imported.isNotEmpty()) {
                     allItems.clear()
                     allItems.addAll(imported)
-                    Toast.makeText(context, "تم استيراد ${imported.size} عنصر بنجاح!", Toast.LENGTH_SHORT).show()
+                    DevkanVault.saveCachedItems(context, imported)
+                    Toast.makeText(context, "تم استيراد وحفظ ${imported.size} عنصر!", Toast.LENGTH_SHORT).show()
                 }
             }
         }
     }
 
+    // 1. المشغل بملء الشاشة
     if (activeStream != null) {
         DevkanHybridPlayerScreen(
             streamUrl = activeStream!!.url,
@@ -274,6 +299,34 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
         return
     }
 
+    // 2. صفحة تفاصيل الفيلم قبل التشغيل (التقييم + سنة الإنتاج + القصة + الممثلين)
+    if (selectedMovieForDetails != null) {
+        MovieDetailsScreen(
+            movie = selectedMovieForDetails!!,
+            subscription = currentSub,
+            onPlayMovie = { item ->
+                selectedMovieForDetails = null
+                activeStream = item
+            },
+            onBack = { selectedMovieForDetails = null }
+        )
+        return
+    }
+
+    // 3. صفحة تفاصيل المسلسل (المواسم + الحلقات + خط تقدم المشاهدة الذهبي)
+    if (selectedSeriesForDetails != null) {
+        SeriesDetailsScreen(
+            series = selectedSeriesForDetails!!,
+            subscription = currentSub,
+            onPlayEpisode = { epItem ->
+                activeStream = epItem
+            },
+            onBack = { selectedSeriesForDetails = null }
+        )
+        return
+    }
+
+    // 4. دليل البرامج الزمني EPG
     if (showEpgSheet) {
         val sampleEpg = allItems.filter { it.contentType == "LIVE" }.take(120).mapIndexed { idx, ch ->
             EpgSlot(
@@ -351,7 +404,7 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
             }
 
             when (selectedTab) {
-                // 0: الرئيسية
+                // 0: الشاشة الرئيسية الذكية (تنبيهات المباريات الحقيقية + ترشيحات الأفلام والمسلسلات)
                 0 -> {
                     val lastCh = remember { DevkanVault.getLastChannel(context) }
                     Column(
@@ -361,15 +414,50 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
                             .padding(14.dp),
                         verticalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
+                        // بطاقة تنبيه المباريات الحية القادمة من المصدر الرياضي الحقيقي
+                        if (todayRealMatches.isNotEmpty()) {
+                            val topMatch = todayRealMatches.first()
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(16.dp))
+                                    .background(Brush.horizontalGradient(listOf(Color(0xFF1A1429), Color(0xFF0F172A))))
+                                    .border(1.dp, gold.copy(alpha = 0.5f), RoundedCornerShape(16.dp))
+                                    .clickable { selectedTab = 2 }
+                                    .padding(14.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        Icon(Icons.Default.NotificationsActive, contentDescription = null, tint = goldLight, modifier = Modifier.size(18.dp))
+                                        Text("تنبيه مباراة هامة اليوم • ${topMatch.league}", color = goldLight, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                    Text(topMatch.matchTime, color = Color(0xFF4ADE80), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                }
+                                Text(
+                                    text = "${topMatch.homeTeam}  🆚  ${topMatch.awayTeam}",
+                                    color = Color.White,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontSize = 15.sp
+                                )
+                                Text("اضغط هنا للانتقال لجدول المباريات وقنوات البث المباشر ←", color = Color(0xFF9CA3AF), fontSize = 11.sp)
+                            }
+                        }
+
+                        // بطاقة الاستئناف الفوري لآخر قناة
                         if (lastCh != null) {
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clip(RoundedCornerShape(16.dp))
                                     .background(Brush.horizontalGradient(listOf(Color(0xFF1F1A0D), Color(0xFF14141C))))
-                                    .border(1.dp, gold.copy(alpha = 0.5f), RoundedCornerShape(16.dp))
+                                    .border(1.dp, gold.copy(alpha = 0.4f), RoundedCornerShape(16.dp))
                                     .clickable {
-                                        activeStream = MediaItemModel("last", lastCh.second, lastCh.first, "", "Live", "", "LIVE")
+                                        activeStream = MediaItemModel("last", "0", lastCh.second, lastCh.first, "", "Live", "", "LIVE")
                                     }
                                     .padding(14.dp),
                                 verticalAlignment = Alignment.CenterVertically,
@@ -377,9 +465,9 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
                             ) {
                                 Column {
                                     Text(strings.continueWatching, color = gold, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                                    Text(lastCh.second, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                                    Text(lastCh.second, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                                 }
-                                Icon(Icons.Default.PlayCircleFilled, contentDescription = null, tint = gold, modifier = Modifier.size(36.dp))
+                                Icon(Icons.Default.PlayCircleFilled, contentDescription = null, tint = gold, modifier = Modifier.size(34.dp))
                             }
                         }
 
@@ -396,7 +484,6 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
                             ) {
                                 Icon(Icons.Default.AddLink, contentDescription = null, tint = gold, modifier = Modifier.size(44.dp))
                                 Text("أضف اشتراكك للبدء", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                                Text("يدعم Xtream Codes وروابط M3U و Stalker Portal MAC مع الحفظ التلقائي", color = Color.Gray, fontSize = 12.sp)
                                 Button(
                                     onClick = { showAddDialog = true },
                                     colors = ButtonDefaults.buttonColors(containerColor = gold)
@@ -415,29 +502,48 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
                                 shape = RoundedCornerShape(14.dp)
                             )
 
-                            val filtered = remember(allItems.size, searchQuery) {
-                                allItems.filter { it.title.contains(searchQuery, ignoreCase = true) }.take(40)
+                            // ترشيحات ذكية من الأفلام والمسلسلات مع تصنيف النوع (مسلسل تاريخي / دراما كورية / فيلم أكشن)
+                            val recommendedVod = remember(allItems.size, searchQuery) {
+                                allItems.filter {
+                                    it.contentType != "LIVE" &&
+                                        (searchQuery.isBlank() || it.title.contains(searchQuery, ignoreCase = true))
+                                }.take(20)
                             }
-                            Text("${strings.recentlyWatched} (${allItems.size})", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                            LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                items(filtered) { item ->
-                                    Column(
-                                        modifier = Modifier
-                                            .width(145.dp)
-                                            .clip(RoundedCornerShape(14.dp))
-                                            .background(Color(0xFF13131B))
-                                            .border(1.dp, Color(0xFF232332), RoundedCornerShape(14.dp))
-                                            .clickable { activeStream = item }
-                                            .padding(12.dp),
-                                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                                    ) {
-                                        if (item.logo.isNotEmpty()) {
-                                            AsyncImage(model = item.logo, contentDescription = null, modifier = Modifier.size(34.dp).clip(RoundedCornerShape(8.dp)))
-                                        } else {
-                                            Icon(if (item.contentType == "LIVE") Icons.Default.LiveTv else Icons.Default.Movie, contentDescription = null, tint = gold)
+                            if (recommendedVod.isNotEmpty()) {
+                                Text(strings.recommendedForYou, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                                LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    items(recommendedVod, key = { it.id }) { item ->
+                                        val typeLabel = if (item.contentType == "SERIES") "مسلسل ${item.genreTag} • ${item.originTag}" else "فيلم ${item.genreTag} • ${item.originTag}"
+                                        Column(
+                                            modifier = Modifier
+                                                .width(155.dp)
+                                                .clip(RoundedCornerShape(14.dp))
+                                                .background(Color(0xFF13131B))
+                                                .border(1.dp, Color(0xFF232332), RoundedCornerShape(14.dp))
+                                                .clickable {
+                                                    if (item.contentType == "SERIES") selectedSeriesForDetails = item
+                                                    else selectedMovieForDetails = item
+                                                }
+                                                .padding(10.dp),
+                                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                                        ) {
+                                            if (item.logo.isNotEmpty()) {
+                                                AsyncImage(
+                                                    model = item.logo,
+                                                    contentDescription = item.title,
+                                                    contentScale = ContentScale.Crop,
+                                                    modifier = Modifier.fillMaxWidth().height(125.dp).clip(RoundedCornerShape(10.dp))
+                                                )
+                                            }
+                                            Box(
+                                                modifier = Modifier
+                                                    .background(gold.copy(alpha = 0.2f), RoundedCornerShape(6.dp))
+                                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                                            ) {
+                                                Text(typeLabel, color = goldLight, fontSize = 10.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                                            }
+                                            Text(item.title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                         }
-                                        Text(item.title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                        Text(item.group, color = Color(0xFF8E929F), fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                     }
                                 }
                             }
@@ -445,7 +551,7 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
                     }
                 }
 
-                // 1: البث المباشر مع الباقات الحقيقية ودليل البرامج
+                // 1: البث المباشر
                 1 -> {
                     val liveChannels = remember(allItems.size) { allItems.filter { it.contentType == "LIVE" } }
                     val groups = remember(liveChannels.size) { listOf("ALL") + liveChannels.map { it.group }.distinct() }
@@ -471,15 +577,15 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
                         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             items(groups) { grp ->
                                 FilterChip(
-                                    selected = selectedCategory == grp,
-                                    onClick = { selectedCategory = grp },
+                                    selected = selectedLiveCategory == grp,
+                                    onClick = { selectedLiveCategory = grp },
                                     label = { Text(if (grp == "ALL") strings.all else grp, fontSize = 12.sp) }
                                 )
                             }
                         }
 
-                        val filteredLive = remember(liveChannels.size, selectedCategory) {
-                            if (selectedCategory == "ALL") liveChannels else liveChannels.filter { it.group == selectedCategory }
+                        val filteredLive = remember(liveChannels.size, selectedLiveCategory) {
+                            if (selectedLiveCategory == "ALL") liveChannels else liveChannels.filter { it.group == selectedLiveCategory }
                         }
 
                         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -516,7 +622,7 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
                     }
                 }
 
-                // 2: الرياضة (فلترة ذكية للقنوات الرياضية فقط + تذكير المباريات)
+                // 2: الرياضة (جدول المباريات الحقيقي اليوم + القنوات الرياضية)
                 2 -> {
                     val sportChannels = remember(allItems.size) {
                         allItems.filter {
@@ -533,11 +639,51 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
                         modifier = Modifier.fillMaxSize().padding(14.dp),
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
+                        if (todayRealMatches.isNotEmpty()) {
+                            item {
+                                Text("مباريات اليوم المباشرة (تحديث حي)", color = goldLight, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                            }
+                            items(todayRealMatches, key = { it.id }) { match ->
+                                val title = "${match.homeTeam} vs ${match.awayTeam}"
+                                val isReminded = MatchReminderManager.remindedMatches.contains(title)
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(14.dp))
+                                        .background(Color(0xFF151522))
+                                        .border(1.dp, Color(0xFF28283E), RoundedCornerShape(14.dp))
+                                        .clickable {
+                                            val firstSport = sportChannels.firstOrNull()
+                                            if (firstSport != null) {
+                                                activeStream = firstSport.copy(title = "$title (${firstSport.title})")
+                                            }
+                                        }
+                                        .padding(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                        Text(title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                        Text("${match.league}  •  ${match.matchTime}", color = gold, fontSize = 11.sp)
+                                    }
+                                    IconButton(onClick = {
+                                        val added = MatchReminderManager.toggleReminder(title)
+                                        Toast.makeText(context, if (added) "تم تفعيل إشعار المباراة 🔔" else "تم إلغاء التذكير", Toast.LENGTH_SHORT).show()
+                                    }) {
+                                        Icon(
+                                            imageVector = if (isReminded) Icons.Default.NotificationsActive else Icons.Default.NotificationsNone,
+                                            contentDescription = "Reminder",
+                                            tint = if (isReminded) gold else Color.Gray
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
                         item {
-                            Text("${strings.sports} (${sportChannels.size})", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                            Text("القنوات الرياضية (${sportChannels.size})", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
                         }
                         items(sportChannels, key = { it.id }) { ch ->
-                            val isReminded = MatchReminderManager.remindedMatches.contains(ch.title)
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -548,79 +694,136 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
-                                Row(
-                                    modifier = Modifier.weight(1f),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                                ) {
-                                    if (ch.logo.isNotEmpty()) {
-                                        AsyncImage(model = ch.logo, contentDescription = null, modifier = Modifier.size(36.dp).clip(RoundedCornerShape(8.dp)))
-                                    } else {
-                                        Icon(Icons.Default.SportsSoccer, contentDescription = null, tint = gold)
-                                    }
-                                    Column {
-                                        Text(ch.title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp, maxLines = 1)
-                                        Text(ch.group, color = gold, fontSize = 11.sp)
-                                    }
-                                }
-                                IconButton(onClick = {
-                                    val added = MatchReminderManager.toggleReminder(ch.title)
-                                    Toast.makeText(context, if (added) "تم تفعيل التذكير 🔔" else "تم إلغاء التذكير", Toast.LENGTH_SHORT).show()
-                                }) {
-                                    Icon(
-                                        imageVector = if (isReminded) Icons.Default.NotificationsActive else Icons.Default.NotificationsNone,
-                                        contentDescription = "Reminder",
-                                        tint = if (isReminded) gold else Color.Gray
-                                    )
-                                }
+                                Text(ch.title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                Icon(Icons.Default.PlayArrow, contentDescription = null, tint = gold)
                             }
                         }
                     }
                 }
 
-                // 3: السينما (الأفلام الحقيقية من سيرفرك)
+                // 3: السينما (قسم الأفلام + قسم المسلسلات + تصنيف عربي / كوري / هندي / أجنبي)
                 3 -> {
-                    val vodItems = remember(allItems.size) { allItems.filter { it.contentType != "LIVE" } }
-                    LazyVerticalGrid(
-                        columns = GridCells.Fixed(2),
-                        contentPadding = PaddingValues(14.dp),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp),
-                        modifier = Modifier.fillMaxSize()
-                    ) {
-                        items(vodItems, key = { it.id }) { item ->
-                            Column(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(16.dp))
-                                    .background(Color(0xFF13131B))
-                                    .border(1.dp, Color(0xFF232332), RoundedCornerShape(16.dp))
-                                    .clickable { activeStream = item }
-                                    .padding(10.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                if (item.logo.isNotEmpty()) {
-                                    AsyncImage(
-                                        model = item.logo,
-                                        contentDescription = item.title,
-                                        contentScale = ContentScale.Crop,
-                                        modifier = Modifier.fillMaxWidth().height(145.dp).clip(RoundedCornerShape(12.dp))
-                                    )
-                                } else {
-                                    Box(
-                                        modifier = Modifier.fillMaxWidth().height(120.dp).background(Color(0xFF1D1D29), RoundedCornerShape(12.dp)),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Icon(Icons.Default.MovieFilter, contentDescription = null, tint = gold, modifier = Modifier.size(36.dp))
-                                    }
+                    var cinemaSubTab by remember { mutableStateOf("MOVIE") } // "MOVIE" or "SERIES"
+                    var selectedOrigin by remember { mutableStateOf("ALL") } // "ALL", "عربي", "كوري", "هندي", "أجنبي"
+
+                    val cinemaItems = remember(allItems.size, cinemaSubTab, selectedOrigin) {
+                        allItems.filter {
+                            it.contentType == cinemaSubTab &&
+                                (selectedOrigin == "ALL" || it.originTag == selectedOrigin)
+                        }
+                    }
+
+                    Column(modifier = Modifier.fillMaxSize().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        // أزرار التبديل بين قسم الأفلام وقسم المسلسلات
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            listOf("MOVIE" to strings.moviesTab, "SERIES" to strings.seriesTab).forEach { (type, label) ->
+                                val active = cinemaSubTab == type
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(if (active) gold else Color(0xFF14141E))
+                                        .clickable { cinemaSubTab = type }
+                                        .padding(vertical = 10.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(label, color = if (active) Color.Black else Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                                 }
-                                Text(item.title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                Text(item.group, color = Color(0xFF8E929F), fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
+                        }
+
+                        // فلاتر التصنيف: الكل / عربي / كوري / هندي / أجنبي
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            items(listOf("ALL" to strings.all, "عربي" to "عربي", "كوري" to "كوري", "هندي" to "هندي", "أجنبي" to "أجنبي")) { (tag, label) ->
+                                FilterChip(
+                                    selected = selectedOrigin == tag,
+                                    onClick = { selectedOrigin = tag },
+                                    label = { Text(label, fontSize = 12.sp) }
+                                )
+                            }
+                        }
+
+                        LazyVerticalGrid(
+                            columns = GridCells.Fixed(2),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                            modifier = Modifier.fillMaxSize()
+                        ) {
+                            items(cinemaItems, key = { it.id }) { item ->
+                                val progress = remember(item.id) { DevkanVault.getVodProgressFraction(context, item.id) }
+                                Column(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(16.dp))
+                                        .background(Color(0xFF13131B))
+                                        .border(1.dp, Color(0xFF232332), RoundedCornerShape(16.dp))
+                                        .clickable {
+                                            if (item.contentType == "SERIES") selectedSeriesForDetails = item
+                                            else selectedMovieForDetails = item
+                                        }
+                                        .padding(8.dp),
+                                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Box {
+                                        if (item.logo.isNotEmpty()) {
+                                            AsyncImage(
+                                                model = item.logo,
+                                                contentDescription = item.title,
+                                                contentScale = ContentScale.Crop,
+                                                modifier = Modifier.fillMaxWidth().height(155.dp).clip(RoundedCornerShape(12.dp))
+                                            )
+                                        } else {
+                                            Box(
+                                                modifier = Modifier.fillMaxWidth().height(145.dp).background(Color(0xFF1D1D29), RoundedCornerShape(12.dp)),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Icon(Icons.Default.MovieFilter, contentDescription = null, tint = gold, modifier = Modifier.size(36.dp))
+                                            }
+                                        }
+                                        // شارة التصنيف (كوري / عربي / هندي) + التقييم
+                                        Row(
+                                            modifier = Modifier.align(Alignment.TopStart).padding(6.dp),
+                                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                        ) {
+                                            Box(
+                                                modifier = Modifier.background(Color.Black.copy(alpha = 0.75f), RoundedCornerShape(6.dp)).padding(horizontal = 6.dp, vertical = 2.dp)
+                                            ) {
+                                                Text(item.originTag, color = goldLight, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                            }
+                                            if (item.rating.isNotEmpty() && item.rating != "0") {
+                                                Box(
+                                                    modifier = Modifier.background(Color.Black.copy(alpha = 0.75f), RoundedCornerShape(6.dp)).padding(horizontal = 6.dp, vertical = 2.dp)
+                                                ) {
+                                                    Text("⭐ ${item.rating}", color = Color.White, fontSize = 10.sp)
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    // خط تقدم المشاهدة الذهبي إذا سبق وبدأت بمشاهدته
+                                    if (progress > 0.02f) {
+                                        LinearProgressIndicator(
+                                            progress = { progress },
+                                            color = gold,
+                                            trackColor = Color(0xFF2B2B3C),
+                                            modifier = Modifier.fillMaxWidth().height(4.dp).clip(CircleShape)
+                                        )
+                                    }
+
+                                    Text(item.title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    Text(
+                                        text = if (item.year.isNotEmpty()) "${item.year} • ${item.group}" else item.group,
+                                        color = Color(0xFF8E929F),
+                                        fontSize = 11.sp,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
                             }
                         }
                     }
                 }
 
-                // 4: الإعدادات الاحترافية (بطاقة الاشتراك + قائمة اللغات المنسدلة + خيارات الأداء)
+                // 4: الإعدادات
                 4 -> {
                     DevkanSettingsScreen(
                         strings = strings,
@@ -637,9 +840,10 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
                                 if (items.isNotEmpty()) {
                                     allItems.clear()
                                     allItems.addAll(items)
+                                    DevkanVault.saveCachedItems(context, items)
                                 }
                                 isSyncing = false
-                                Toast.makeText(context, "تم تحديث بيانات الاشتراك والقنوات!", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, "تم تحديث البيانات وحفظها محلياً!", Toast.LENGTH_SHORT).show()
                             }
                         },
                         onDeleteSub = {
@@ -656,7 +860,6 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
         }
     }
 
-    // نافذة إضافة اتصال ذكية (Xtream + M3U + Stalker MAC مع التعبئة التلقائية الفورية)
     if (showAddDialog) {
         SmartAddConnectionDialog(
             strings = strings,
@@ -674,10 +877,11 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
                     if (loadedItems.isNotEmpty()) {
                         allItems.clear()
                         allItems.addAll(loadedItems)
-                        Toast.makeText(context, "تم الاتصال وحفظ ${loadedItems.size} قناة وفيلم!", Toast.LENGTH_SHORT).show()
+                        DevkanVault.saveCachedItems(context, loadedItems)
+                        Toast.makeText(context, "تم الاتصال وحفظ ${loadedItems.size} قناة وفيلم ومسلسل!", Toast.LENGTH_SHORT).show()
                         showAddDialog = false
                     } else {
-                        Toast.makeText(context, "تم حفظ الاشتراك، لكن السيرفر لم يُرجع قنوات — تأكد من البيانات", Toast.LENGTH_LONG).show()
+                        Toast.makeText(context, "تعذر جلب القنوات، تأكد من البيانات", Toast.LENGTH_LONG).show()
                     }
                     isSyncing = false
                 }
@@ -687,7 +891,262 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
 }
 
 // ============================================================================
-// شاشة الإعدادات المنظمة (بطاقة الاشتراك الملكية + قوائم منسدلة أنيقة)
+// صفحة تفاصيل الفيلم الاحترافية قبل التشغيل (التقييم + سنة الإنتاج + القصة + الممثلين)
+// ============================================================================
+@Composable
+fun MovieDetailsScreen(
+    movie: MediaItemModel,
+    subscription: SavedSubscription?,
+    onPlayMovie: (MediaItemModel) -> Unit,
+    onBack: () -> Unit
+) {
+    val context = LocalContext.current
+    val gold = Color(0xFFD4AF37)
+    val goldLight = Color(0xFFFDE047)
+    var details by remember { mutableStateOf<VodDetailedInfo?>(null) }
+    val savedProgress = remember { DevkanVault.getVodProgressFraction(context, movie.id) }
+
+    LaunchedEffect(movie.id) {
+        if (subscription != null && subscription.type == "XTREAM" && movie.rawId.isNotEmpty()) {
+            details = DevkanPlaylistRepository.fetchVodDetails(subscription, movie.rawId, movie.title, movie.logo)
+        } else {
+            details = VodDetailedInfo(movie.title, "جاهز للمشاهدة الفورية بجودة عالية.", "غير متوفر", "غير متوفر", movie.year.ifEmpty { "2025" }, "HD", movie.rating.ifEmpty { "8.0" }, movie.logo)
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFF07070A))
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        IconButton(onClick = onBack) {
+            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.White)
+        }
+
+        val info = details
+        if (info == null) {
+            Box(modifier = Modifier.fillMaxWidth().height(220.dp), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = gold)
+            }
+        } else {
+            if (info.backdropUrl.isNotEmpty()) {
+                AsyncImage(
+                    model = info.backdropUrl,
+                    contentDescription = info.title,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxWidth().height(230.dp).clip(RoundedCornerShape(18.dp))
+                )
+            }
+
+            Text(info.title, color = Color.White, fontWeight = FontWeight.Black, fontSize = 20.sp)
+
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                Box(modifier = Modifier.background(gold.copy(alpha = 0.2f), RoundedCornerShape(8.dp)).padding(horizontal = 8.dp, vertical = 4.dp)) {
+                    Text("⭐ ${info.rating}", color = goldLight, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                }
+                Text("سنة الإنتاج: ${info.releaseDate}", color = Color(0xFFB0B5C0), fontSize = 12.sp)
+                Text("المدة: ${info.duration}", color = Color(0xFFB0B5C0), fontSize = 12.sp)
+            }
+
+            if (savedProgress > 0.02f) {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("وصلت إلى ${(savedProgress * 100).toInt()}% من الفيلم", color = goldLight, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    LinearProgressIndicator(
+                        progress = { savedProgress },
+                        color = gold,
+                        trackColor = Color(0xFF252536),
+                        modifier = Modifier.fillMaxWidth().height(6.dp).clip(CircleShape)
+                    )
+                }
+            }
+
+            Button(
+                onClick = { onPlayMovie(movie) },
+                colors = ButtonDefaults.buttonColors(containerColor = gold),
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier.fillMaxWidth().height(50.dp)
+            ) {
+                Icon(Icons.Default.PlayArrow, contentDescription = null, tint = Color.Black)
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    text = if (savedProgress > 0.02f) "إكمال مشاهدة الفيلم" else "تشغيل الفيلم الآن",
+                    color = Color.Black,
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 15.sp
+                )
+            }
+
+            Text("القصة:", color = gold, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+            Text(info.plot, color = Color(0xFFD1D5DB), fontSize = 13.sp, lineHeight = 20.sp)
+
+            Text("الممثلون: ${info.cast}", color = Color(0xFF9CA3AF), fontSize = 12.sp)
+            Text("المخرج: ${info.director}", color = Color(0xFF9CA3AF), fontSize = 12.sp)
+        }
+    }
+}
+
+// ============================================================================
+// صفحة تفاصيل المسلسل (تبديل المواسم بسلاسة + قائمة الحلقات المرقمة + خط المشاهدة)
+// ============================================================================
+@Composable
+fun SeriesDetailsScreen(
+    series: MediaItemModel,
+    subscription: SavedSubscription?,
+    onPlayEpisode: (MediaItemModel) -> Unit,
+    onBack: () -> Unit
+) {
+    val context = LocalContext.current
+    val gold = Color(0xFFD4AF37)
+    val goldLight = Color(0xFFFDE047)
+
+    var details by remember { mutableStateOf<SeriesDetailedInfo?>(null) }
+    var selectedSeason by remember { mutableIntStateOf(1) }
+
+    LaunchedEffect(series.id) {
+        if (subscription != null && subscription.type == "XTREAM" && series.rawId.isNotEmpty()) {
+            val fetched = DevkanPlaylistRepository.fetchSeriesDetails(subscription, series.rawId, series.title, series.logo)
+            details = fetched
+            if (fetched.seasons.isNotEmpty()) {
+                selectedSeason = fetched.seasons.keys.first()
+            }
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFF07070A))
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.White)
+            }
+            Text(series.title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 17.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+
+        val info = details
+        if (info == null) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = gold)
+            }
+        } else {
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                if (info.backdropUrl.isNotEmpty()) {
+                    AsyncImage(
+                        model = info.backdropUrl,
+                        contentDescription = info.title,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.width(110.dp).height(155.dp).clip(RoundedCornerShape(14.dp))
+                    )
+                }
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("⭐ ${info.rating}  •  ${info.releaseDate}", color = goldLight, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    Text(info.plot, color = Color(0xFFD1D5DB), fontSize = 12.sp, maxLines = 4, overflow = TextOverflow.Ellipsis)
+                    Text("الممثلون: ${info.cast}", color = Color(0xFF9CA3AF), fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                }
+            }
+
+            // أزرار التبديل السلس بين المواسم (Season 1, Season 2...)
+            if (info.seasons.isNotEmpty()) {
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(info.seasons.keys.toList()) { seasonNum ->
+                        val active = selectedSeason == seasonNum
+                        FilterChip(
+                            selected = active,
+                            onClick = { selectedSeason = seasonNum },
+                            label = {
+                                Text(
+                                    text = "الموسم $seasonNum",
+                                    fontWeight = if (active) FontWeight.Bold else FontWeight.Normal
+                                )
+                            }
+                        )
+                    }
+                }
+            }
+
+            // قائمة الحلقات المرقمة مع شريط تقدم المشاهدة الواضح لكل حلقة
+            val episodes = info.seasons[selectedSeason] ?: emptyList()
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxSize()) {
+                items(episodes, key = { it.id }) { ep ->
+                    val progress = remember(ep.id) { DevkanVault.getVodProgressFraction(context, ep.id) }
+                    val statusText = when {
+                        progress >= 0.90f -> "مكتملة ✓"
+                        progress >= 0.45f -> "وصلت إلى منتصف الحلقة (${(progress * 100).toInt()}%)"
+                        progress >= 0.15f -> "وصلت إلى ربع الحلقة (${(progress * 100).toInt()}%)"
+                        progress > 0.02f -> "بدأت المشاهدة (${(progress * 100).toInt()}%)"
+                        else -> "لم تُشاهد بعد"
+                    }
+
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(Color(0xFF13131B))
+                            .border(1.dp, if (progress > 0.02f) gold.copy(alpha = 0.45f) else Color(0xFF232332), RoundedCornerShape(14.dp))
+                            .clickable {
+                                onPlayEpisode(
+                                    MediaItemModel(
+                                        id = ep.id,
+                                        rawId = ep.id,
+                                        title = "${series.title} - م${ep.seasonNum} ح${ep.episodeNum}",
+                                        url = ep.url,
+                                        group = series.group,
+                                        logo = series.logo,
+                                        contentType = "SERIES"
+                                    )
+                                )
+                            }
+                            .padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(
+                                modifier = Modifier.weight(1f),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier.size(32.dp).background(gold.copy(alpha = 0.2f), CircleShape),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text("${ep.episodeNum}", color = goldLight, fontWeight = FontWeight.Black, fontSize = 13.sp)
+                                }
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(ep.title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    Text(statusText, color = if (progress > 0.02f) goldLight else Color.Gray, fontSize = 11.sp)
+                                }
+                            }
+                            Icon(Icons.Default.PlayCircleOutline, contentDescription = null, tint = gold, modifier = Modifier.size(26.dp))
+                        }
+
+                        // خط تقدم المشاهدة الذهبي أسفل الحلقة
+                        if (progress > 0.02f) {
+                            LinearProgressIndicator(
+                                progress = { progress },
+                                color = gold,
+                                trackColor = Color(0xFF2B2B3C),
+                                modifier = Modifier.fillMaxWidth().height(4.dp).clip(CircleShape)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ============================================================================
+// شاشة الإعدادات المنظمة + نافذة إضافة الاتصال الذكية
 // ============================================================================
 @Composable
 fun DevkanSettingsScreen(
@@ -733,7 +1192,6 @@ fun DevkanSettingsScreen(
             .padding(14.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        // 1. بطاقة الاشتراك الملكية (تاريخ الانتهاء + الدولة + الحالة + الاتصالات)
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -743,20 +1201,14 @@ fun DevkanSettingsScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Icon(Icons.Default.WorkspacePremium, contentDescription = null, tint = goldLight)
                     Text(strings.subscriptionCard, color = goldLight, fontWeight = FontWeight.Bold, fontSize = 15.sp)
                 }
                 if (subscription != null) {
                     Box(
-                        modifier = Modifier
-                            .background(Color(0xFF16A34A).copy(alpha = 0.22f), RoundedCornerShape(8.dp))
-                            .padding(horizontal = 8.dp, vertical = 3.dp)
+                        modifier = Modifier.background(Color(0xFF16A34A).copy(alpha = 0.22f), RoundedCornerShape(8.dp)).padding(horizontal = 8.dp, vertical = 3.dp)
                     ) {
                         Text(subscription.status, color = Color(0xFF4ADE80), fontSize = 11.sp, fontWeight = FontWeight.Bold)
                     }
@@ -775,7 +1227,6 @@ fun DevkanSettingsScreen(
                     fontSize = 13.sp
                 )
                 HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
-
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text(strings.expiryLabel, color = Color.Gray, fontSize = 12.sp)
                     Text(subscription.expDateFormatted, color = goldLight, fontWeight = FontWeight.Bold, fontSize = 12.sp)
@@ -790,20 +1241,12 @@ fun DevkanSettingsScreen(
                 }
 
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(
-                        onClick = onRefreshSub,
-                        modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(10.dp)
-                    ) {
+                    OutlinedButton(onClick = onRefreshSub, modifier = Modifier.weight(1f), shape = RoundedCornerShape(10.dp)) {
                         Icon(Icons.Default.Refresh, contentDescription = null, tint = gold, modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(4.dp))
                         Text("تحديث", color = gold, fontSize = 12.sp)
                     }
-                    OutlinedButton(
-                        onClick = onDeleteSub,
-                        modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(10.dp)
-                    ) {
+                    OutlinedButton(onClick = onDeleteSub, modifier = Modifier.weight(1f), shape = RoundedCornerShape(10.dp)) {
                         Icon(Icons.Default.DeleteOutline, contentDescription = null, tint = Color(0xFFF87171), modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(4.dp))
                         Text("حذف", color = Color(0xFFF87171), fontSize = 12.sp)
@@ -811,17 +1254,12 @@ fun DevkanSettingsScreen(
                 }
             } else {
                 Text("لا يوجد اشتراك محفوظ حالياً", color = Color.Gray, fontSize = 12.sp)
-                Button(
-                    onClick = onOpenAddDialog,
-                    colors = ButtonDefaults.buttonColors(containerColor = gold),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
+                Button(onClick = onOpenAddDialog, colors = ButtonDefaults.buttonColors(containerColor = gold), modifier = Modifier.fillMaxWidth()) {
                     Text(strings.addConnection, color = Color.Black, fontWeight = FontWeight.Bold)
                 }
             }
         }
 
-        // 2. قائمة منسدلة نظيفة لاختيار اللغة (Language Dropdown)
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -830,11 +1268,7 @@ fun DevkanSettingsScreen(
                 .clickable { langMenuExpanded = true }
                 .padding(14.dp)
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     Icon(Icons.Default.Language, contentDescription = null, tint = gold)
                     Text("اللغة / Language / Sprache", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
@@ -845,10 +1279,7 @@ fun DevkanSettingsScreen(
                     Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = gold)
                 }
             }
-            DropdownMenu(
-                expanded = langMenuExpanded,
-                onDismissRequest = { langMenuExpanded = false }
-            ) {
+            DropdownMenu(expanded = langMenuExpanded, onDismissRequest = { langMenuExpanded = false }) {
                 languagesList.forEach { (code, title) ->
                     DropdownMenuItem(
                         text = { Text(title, fontWeight = if (lang == code) FontWeight.Bold else FontWeight.Normal) },
@@ -861,7 +1292,6 @@ fun DevkanSettingsScreen(
             }
         }
 
-        // 3. قائمة منسدلة نظيفة لاختيار محرك التشغيل (Playback Engine Dropdown)
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -870,11 +1300,7 @@ fun DevkanSettingsScreen(
                 .clickable { engineMenuExpanded = true }
                 .padding(14.dp)
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     Icon(Icons.Default.SettingsInputComponent, contentDescription = null, tint = gold)
                     Column {
@@ -890,10 +1316,7 @@ fun DevkanSettingsScreen(
                 }
                 Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = gold)
             }
-            DropdownMenu(
-                expanded = engineMenuExpanded,
-                onDismissRequest = { engineMenuExpanded = false }
-            ) {
+            DropdownMenu(expanded = engineMenuExpanded, onDismissRequest = { engineMenuExpanded = false }) {
                 EngineType.entries.forEach { eng ->
                     val label = when (lang) {
                         "en" -> eng.labelEn
@@ -913,7 +1336,6 @@ fun DevkanSettingsScreen(
             }
         }
 
-        // 4. مفاتيح التحكم الذكية (Low Latency + Geo-Bypass + Auto-Resume)
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -946,7 +1368,6 @@ fun DevkanSettingsScreen(
             }
         }
 
-        // 5. فحص سرعة السيرفر والـ Ping الفعلي
         Button(
             onClick = {
                 testingSpeed = true
@@ -966,7 +1387,6 @@ fun DevkanSettingsScreen(
             Text(it, color = Color(0xFF4ADE80), fontWeight = FontWeight.Bold, fontSize = 13.sp)
         }
 
-        // 6. قفل التطبيق برمز PIN
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -998,9 +1418,6 @@ fun DevkanSettingsScreen(
     }
 }
 
-// ============================================================================
-// نافذة إضافة اتصال الذكية (Xtream + M3U + Stalker MAC + تعبئة تلقائية من الرابط)
-// ============================================================================
 @Composable
 fun SmartAddConnectionDialog(
     strings: AppStrings,
@@ -1010,7 +1427,7 @@ fun SmartAddConnectionDialog(
     val clipboardManager = LocalClipboardManager.current
     val gold = Color(0xFFD4AF37)
 
-    var selectedMode by remember { mutableStateOf("XTREAM") } // "XTREAM", "M3U", "STALKER"
+    var selectedMode by remember { mutableStateOf("XTREAM") }
     var smartPasteInput by remember { mutableStateOf("") }
     var autoDetectedBanner by remember { mutableStateOf(false) }
 
@@ -1045,15 +1462,9 @@ fun SmartAddConnectionDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = Color(0xFF14141D),
-        title = {
-            Text(strings.addConnection, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
-        },
+        title = { Text(strings.addConnection, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp) },
         text = {
-            Column(
-                modifier = Modifier.verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                // أزرار التبديل الثلاثة: Xtream Codes | قائمة M3U | Stalker Portal
+            Column(modifier = Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     listOf("XTREAM" to "Xtream Codes", "M3U" to "قائمة M3U", "STALKER" to "Stalker MAC").forEach { (mode, label) ->
                         val active = selectedMode == mode
@@ -1066,18 +1477,11 @@ fun SmartAddConnectionDialog(
                                 .padding(vertical = 8.dp),
                             contentAlignment = Alignment.Center
                         ) {
-                            Text(
-                                text = label,
-                                color = if (active) Color.Black else Color.White,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 11.sp,
-                                maxLines = 1
-                            )
+                            Text(label, color = if (active) Color.Black else Color.White, fontWeight = FontWeight.Bold, fontSize = 11.sp, maxLines = 1)
                         }
                     }
                 }
 
-                // خانة اللصق الذكي للتعبئة التلقائية (كما في صورتك!)
                 OutlinedTextField(
                     value = smartPasteInput,
                     onValueChange = { parseSmartUrl(it) },
@@ -1120,13 +1524,7 @@ fun SmartAddConnectionDialog(
                         )
                     }
                     "M3U" -> {
-                        OutlinedTextField(
-                            value = m3uUrl,
-                            onValueChange = { m3uUrl = it },
-                            label = { Text("رابط قائمة التشغيل M3U / M3U8") },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth()
-                        )
+                        OutlinedTextField(value = m3uUrl, onValueChange = { m3uUrl = it }, label = { Text("رابط قائمة التشغيل M3U / M3U8") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                     }
                     "STALKER" -> {
                         OutlinedTextField(value = host, onValueChange = { host = it }, label = { Text("رابط البورتال (http://portal.com/c)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
