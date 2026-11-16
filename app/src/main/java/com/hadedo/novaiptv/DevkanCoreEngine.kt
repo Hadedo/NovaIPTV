@@ -158,7 +158,7 @@ object DevkanVault {
     fun getAppLockPin(context: Context): String =
         getSecurePrefs(context).getString("app_lock_pin", "") ?: ""
 
-    fun setAppLockPin(context, pin: String) {
+    fun setAppLockPin(context: Context, pin: String) {
         getSecurePrefs(context).edit().putString("app_lock_pin", pin).apply()
     }
 
@@ -183,7 +183,6 @@ object DevkanVault {
         getSecurePrefs(context).edit().putBoolean("auto_resume_last", enabled).apply()
     }
 
-    // جدولة التحديث التلقائي الصامت (يومي / أسبوعي / شهري / يدوي)
     fun getAutoSyncInterval(context: Context): AutoSyncInterval {
         val raw = getSecurePrefs(context).getString("auto_sync_interval", AutoSyncInterval.DAILY.name)
         return try {
@@ -469,11 +468,9 @@ object DevkanPlaylistRepository {
         return text.contains("4K") || text.contains("UHD") || text.contains("2160P")
     }
 
-    // تنظيف أسماء القنوات الرياضية المكررة (دمج FHD / HD / SD / LOW في بطاقة نظيفة واحدة)
     fun deduplicateSportChannels(channels: List<MediaItemModel>): List<MediaItemModel> {
         val seenNormalized = mutableSetOf<String>()
         val result = mutableListOf<MediaItemModel>()
-        // ترتيب بحيث نعطي الأولوية لنسخة FHD أو HD أولاً
         val sorted = channels.sortedByDescending { ch ->
             val t = ch.title.uppercase()
             when {
@@ -496,7 +493,6 @@ object DevkanPlaylistRepository {
         return result
     }
 
-    // استدعاء الدليل الفوري الخفيف للقناة من نفس سيرفر Xtream (get_short_epg)
     suspend fun fetchChannelShortEpg(sub: SavedSubscription, streamRawId: String): Pair<String, String> = withContext(Dispatchers.IO) {
         if (sub.type != "XTREAM" || streamRawId.isEmpty()) return@withContext ("البث المباشر المستمر" to "البرنامج التالي")
         val client = buildClient(true)
@@ -559,7 +555,6 @@ object DevkanPlaylistRepository {
                         }
                     } catch (_: Exception) { }
 
-                    // 1. البث المباشر
                     val liveCategories = mutableMapOf<String, String>()
                     try {
                         client.newCall(Request.Builder().url("$baseApi&action=get_live_categories").build()).execute().use { resp ->
@@ -584,7 +579,6 @@ object DevkanPlaylistRepository {
                         }
                     } catch (_: Exception) { }
 
-                    // 2. الأفلام مع قراءة حقل الإضافة الفعلي (added) وسنة الإنتاج الحقيقية ووسم 4K الصارم
                     val vodCategories = mutableMapOf<String, String>()
                     try {
                         client.newCall(Request.Builder().url("$baseApi&action=get_vod_categories").build()).execute().use { resp ->
@@ -628,7 +622,6 @@ object DevkanPlaylistRepository {
                         }
                     } catch (_: Exception) { }
 
-                    // 3. المسلسلات مع تاريخ التحديث الفعلي (last_modified) وسنة الإصدار
                     val seriesCategories = mutableMapOf<String, String>()
                     try {
                         client.newCall(Request.Builder().url("$baseApi&action=get_series_categories").build()).execute().use { resp ->
