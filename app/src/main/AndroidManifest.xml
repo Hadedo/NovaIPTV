@@ -8,7 +8,7 @@
         android:allowBackup="true"
         android:icon="@drawable/ic_launcher"
         android:roundIcon="@drawable/ic_launcher"
-        android:label="DEVKAN 34"
+        android:label="Devkan"
         android:usesCleartextTraffic="true"
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.NoActionBar">
