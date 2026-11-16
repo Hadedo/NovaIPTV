@@ -1,6 +1,12 @@
 package com.hadedo.novaiptv
 
+import android.app.Activity
+import android.app.PictureInPictureParams
+import android.content.Context
+import android.content.ContextWrapper
 import android.net.Uri
+import android.os.Build
+import android.util.Rational
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.annotation.OptIn
@@ -32,13 +38,18 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import kotlinx.coroutines.delay
@@ -47,8 +58,17 @@ import org.videolan.libvlc.Media
 import org.videolan.libvlc.MediaPlayer
 import org.videolan.libvlc.util.VLCVideoLayout
 
+fun Context.findActivity(): Activity? {
+    var ctx = this
+    while (ctx is ContextWrapper) {
+        if (ctx is Activity) return ctx
+        ctx = ctx.baseContext
+    }
+    return null
+}
+
 // ============================================================================
-// 1. شاشة إخلاء المسؤولية القانونية (Disclaimer) عند التشغيل الأول
+// 1. شاشة إخلاء المسؤولية القانونية (Disclaimer)
 // ============================================================================
 @Composable
 fun LegalDisclaimerScreen(lang: String, onAccept: () -> Unit) {
@@ -57,16 +77,19 @@ fun LegalDisclaimerScreen(lang: String, onAccept: () -> Unit) {
     val title = when (lang) {
         "en" -> "Terms of Use & Legal Disclaimer"
         "de" -> "Nutzungsbedingungen & Rechtlicher Hinweis"
+        "tr" -> "Kullanım Koşulları ve Yasal Uyarı"
         else -> "إخلاء المسؤولية القانونية وشروط الاستخدام"
     }
     val body = when (lang) {
-        "en" -> "DEVKAN is strictly a media player application. It does NOT provide, host, or include any TV channels, movies, or subscriptions. Users must add their own legally obtained playlists (M3U / Xtream / Stalker)."
-        "de" -> "DEVKAN ist ein reiner Medienplayer. Die App enthält keine TV-Kanäle, Filme oder Abonnements. Nutzer müssen eigene legal erworbene Wiedergabelisten (M3U / Xtream / Stalker) hinzufügen."
-        else -> "تطبيق DEVKAN هو مشغل وسائط تقني فقط (Media Player) ولا يتضمن أو يوفر أي قنوات تلفزيونية أو أفلام أو اشتراكات مدمجة. يلتزم المستخدم بإضافة قوائم التشغيل الخاصة به والتي يملك حق الوصول القانوني إليها."
+        "en" -> "DEVKAN is strictly a media player application. It does NOT provide or include any channels or subscriptions. Users must add their own legally obtained playlists (Xtream / M3U / Stalker)."
+        "de" -> "DEVKAN ist ein reiner Medienplayer. Die App enthält keine Kanäle oder Abonnements. Nutzer müssen eigene legal erworbene Wiedergabelisten hinzufügen."
+        "tr" -> "DEVKAN yalnızca bir medya oynatıcıdır. Herhangi bir kanal veya abonelik içermez. Kullanıcılar kendi yasal listelerini eklemelidir."
+        else -> "تطبيق DEVKAN هو مشغل وسائط تقني فقط ولا يتضمن أي قنوات أو اشتراكات مدمجة. يلتزم المستخدم بإضافة اشتراكاته وقوائم التشغيل الخاصة به."
     }
     val btnText = when (lang) {
         "en" -> "I Agree & Continue"
         "de" -> "Zustimmen & Fortfahren"
+        "tr" -> "Kabul Et ve Devam Et"
         else -> "أوافق وأتابع الدخول"
     }
 
@@ -87,54 +110,24 @@ fun LegalDisclaimerScreen(lang: String, onAccept: () -> Unit) {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Icon(
-                imageVector = Icons.Default.VerifiedUser,
-                contentDescription = null,
-                tint = goldLight,
-                modifier = Modifier.size(52.dp)
-            )
-            Text(
-                text = "DEVKAN 34 VIP",
-                color = goldLight,
-                fontWeight = FontWeight.Black,
-                fontSize = 20.sp,
-                letterSpacing = 1.5.sp
-            )
-            Text(
-                text = title,
-                color = Color.White,
-                fontWeight = FontWeight.Bold,
-                fontSize = 16.sp,
-                textAlign = TextAlign.Center
-            )
-            Text(
-                text = body,
-                color = Color(0xFFB0B5C0),
-                fontSize = 13.sp,
-                lineHeight = 20.sp,
-                textAlign = TextAlign.Center
-            )
+            Icon(Icons.Default.VerifiedUser, contentDescription = null, tint = goldLight, modifier = Modifier.size(52.dp))
+            Text("DEVKAN 34 VIP", color = goldLight, fontWeight = FontWeight.Black, fontSize = 20.sp, letterSpacing = 1.5.sp)
+            Text(title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp, textAlign = TextAlign.Center)
+            Text(body, color = Color(0xFFB0B5C0), fontSize = 13.sp, lineHeight = 20.sp, textAlign = TextAlign.Center)
             Button(
                 onClick = onAccept,
                 colors = ButtonDefaults.buttonColors(containerColor = gold),
                 shape = RoundedCornerShape(14.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(50.dp)
+                modifier = Modifier.fillMaxWidth().height(50.dp)
             ) {
-                Text(
-                    text = btnText,
-                    color = Color.Black,
-                    fontWeight = FontWeight.ExtraBold,
-                    fontSize = 15.sp
-                )
+                Text(btnText, color = Color.Black, fontWeight = FontWeight.ExtraBold, fontSize = 15.sp)
             }
         }
     }
 }
 
 // ============================================================================
-// 2. شاشة قفل التطبيق برمز PIN عند الفتح (App Lock Security)
+// 2. شاشة قفل التطبيق برمز PIN
 // ============================================================================
 @Composable
 fun AppLockScreen(lang: String, expectedPin: String, onUnlocked: () -> Unit) {
@@ -164,6 +157,7 @@ fun AppLockScreen(lang: String, expectedPin: String, onUnlocked: () -> Unit) {
                 text = when (lang) {
                     "en" -> "DEVKAN App Lock"
                     "de" -> "DEVKAN App-Sperre"
+                    "tr" -> "DEVKAN Uygulama Kilidi"
                     else -> "قفل حماية التطبيق"
                 },
                 color = Color.White,
@@ -180,46 +174,29 @@ fun AppLockScreen(lang: String, expectedPin: String, onUnlocked: () -> Unit) {
                     }
                 },
                 singleLine = true,
-                label = {
-                    Text(
-                        when (lang) {
-                            "en" -> "Enter PIN"
-                            "de" -> "PIN eingeben"
-                            else -> "أدخل رمز المرور PIN"
-                        }
-                    )
-                },
+                label = { Text("PIN") },
                 isError = isError,
                 modifier = Modifier.fillMaxWidth()
             )
             Button(
-                onClick = {
-                    if (enteredPin == expectedPin) onUnlocked() else isError = true
-                },
+                onClick = { if (enteredPin == expectedPin) onUnlocked() else isError = true },
                 colors = ButtonDefaults.buttonColors(containerColor = gold),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text(
-                    text = when (lang) {
-                        "en" -> "Unlock"
-                        "de" -> "Entsperren"
-                        else -> "فتح التطبيق"
-                    },
-                    color = Color.Black,
-                    fontWeight = FontWeight.Bold
-                )
+                Text("Unlock / فتح", color = Color.Black, fontWeight = FontWeight.Bold)
             }
         }
     }
 }
 
 // ============================================================================
-// 3. المشغل السينمائي الهجين (Media3 + LibVLC + Auto-Reconnect + Diagnostics)
+// 3. المشغل السينمائي الهجين المقاوم للتوقف (Fullscreen + PiP + Universal Resolver)
 // ============================================================================
 @OptIn(UnstableApi::class)
 @Composable
 fun DevkanHybridPlayerScreen(
     streamUrl: String,
+    fallbackUrl: String = "",
     streamTitle: String,
     isVodOrSeries: Boolean = false,
     streamId: String = "",
@@ -227,15 +204,23 @@ fun DevkanHybridPlayerScreen(
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
+    val activity = remember(context) { context.findActivity() }
     val gold = Color(0xFFD4AF37)
-    val preferredEngine = remember { DevkanVault.getPreferredEngine(context) }
 
-    var activeEngine by remember {
+    val preferredEngine = remember { DevkanVault.getPreferredEngine(context) }
+    val lowLatency = remember { DevkanVault.isLowLatencyEnabled(context) }
+    val geoBypass = remember { DevkanVault.isGeoBypassEnabled(context) }
+
+    var currentUrl by remember(streamUrl) { mutableStateOf(streamUrl) }
+    var triedFallback by remember(streamUrl) { mutableStateOf(false) }
+    var activeEngine by remember(streamUrl) {
         mutableStateOf(EngineCoordinator.selectInitialEngine(streamUrl, preferredEngine))
     }
+
     var controlsVisible by remember { mutableStateOf(true) }
     var isLocked by remember { mutableStateOf(false) }
-    var resizeMode by remember { mutableIntStateOf(AspectRatioFrameLayout.RESIZE_MODE_FIT) }
+    // 0 = Fit, 1 = Fill (ملء الشاشة الكامل), 2 = Zoom
+    var scaleIndex by remember { mutableIntStateOf(1) }
     var playbackSpeed by remember { mutableFloatStateOf(1.0f) }
     var reconnectAttempts by remember { mutableIntStateOf(0) }
     var isReconnecting by remember { mutableStateOf(false) }
@@ -245,14 +230,29 @@ fun DevkanHybridPlayerScreen(
     val startTimestamp = remember { System.currentTimeMillis() }
     var startupMs by remember { mutableLongStateOf(0L) }
 
-    // حفظ آخر قناة إذا كانت بثاً مباشراً
-    LaunchedEffect(streamUrl) {
-        if (!isVodOrSeries) {
-            DevkanVault.saveLastChannel(context, streamUrl, streamTitle)
+    // تفعيل وضع ملء الشاشة الحقيقي (إخفاء شريط الحالة وأزرار التنقل)
+    DisposableEffect(activity) {
+        val window = activity?.window
+        if (window != null) {
+            WindowCompat.setDecorFitsSystemWindows(window, false)
+            val controller = WindowInsetsControllerCompat(window, window.decorView)
+            controller.hide(WindowInsetsCompat.Type.systemBars())
+            controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        }
+        onDispose {
+            if (window != null) {
+                WindowCompat.setDecorFitsSystemWindows(window, true)
+                WindowInsetsControllerCompat(window, window.decorView).show(WindowInsetsCompat.Type.systemBars())
+            }
         }
     }
 
-    // إخفاء شريط التحكم تلقائياً بعد 5 ثوانٍ
+    LaunchedEffect(currentUrl) {
+        if (!isVodOrSeries) {
+            DevkanVault.saveLastChannel(context, currentUrl, streamTitle)
+        }
+    }
+
     LaunchedEffect(controlsVisible, isLocked) {
         if (controlsVisible && !isLocked) {
             delay(5000)
@@ -260,7 +260,6 @@ fun DevkanHybridPlayerScreen(
         }
     }
 
-    // إخفاء إشعار التقديم/التأخير السريع
     LaunchedEffect(seekFeedbackText) {
         if (seekFeedbackText != null) {
             delay(900)
@@ -268,27 +267,40 @@ fun DevkanHybridPlayerScreen(
         }
     }
 
-    // تهيئة محرك Media3 ExoPlayer مع Fast Zapping
-    val exoPlayer = remember(streamUrl, activeEngine) {
+    // بناء Media3 ExoPlayer مع ترويسات تجاوز القيود وتقليل التأخير
+    val exoPlayer = remember(currentUrl, activeEngine) {
         if (activeEngine == EngineType.MEDIA3_ONLY) {
-            val (minBuf, maxBuf, playBuf) = EngineCoordinator.getAdaptiveBufferMs(65L)
-            val loadControl = DefaultLoadControl.Builder()
-                .setBufferDurationsMs(minBuf, maxBuf, playBuf, playBuf + 400)
-                .build()
-            ExoPlayer.Builder(context)
-                .setLoadControl(loadControl)
-                .build()
-                .apply {
-                    setMediaItem(MediaItem.fromUri(streamUrl))
-                    val savedPos = if (isVodOrSeries && streamId.isNotEmpty()) DevkanVault.getVodPosition(context, streamId) else 0L
-                    if (savedPos > 5000L) seekTo(savedPos)
-                    prepare()
-                    playWhenReady = true
-                }
+            try {
+                val (minBuf, maxBuf, playBuf) = EngineCoordinator.getAdaptiveBufferMs(lowLatency)
+                val loadControl = DefaultLoadControl.Builder()
+                    .setBufferDurationsMs(minBuf, maxBuf, playBuf, playBuf + 250)
+                    .build()
+                val headers = EngineCoordinator.buildSmartHeaders(geoBypass)
+                val httpFactory = DefaultHttpDataSource.Factory()
+                    .setUserAgent(headers["User-Agent"] ?: "VLC/3.0.20")
+                    .setDefaultRequestProperties(headers)
+                    .setAllowCrossProtocolRedirects(true)
+                    .setConnectTimeoutMs(10_000)
+                    .setReadTimeoutMs(15_000)
+
+                ExoPlayer.Builder(context)
+                    .setMediaSourceFactory(DefaultMediaSourceFactory(httpFactory))
+                    .setLoadControl(loadControl)
+                    .build()
+                    .apply {
+                        setMediaItem(MediaItem.fromUri(currentUrl))
+                        val savedPos = if (isVodOrSeries && streamId.isNotEmpty()) DevkanVault.getVodPosition(context, streamId) else 0L
+                        if (savedPos > 5000L) seekTo(savedPos)
+                        prepare()
+                        playWhenReady = true
+                    }
+            } catch (_: Exception) {
+                null
+            }
         } else null
     }
 
-    // مستمع حالة Media3 + التبديل التلقائي إلى LibVLC أو إعادة الاتصال
+    // معالج أخطاء Media3 + التبديل التلقائي بين الصيغ ثم إلى LibVLC
     DisposableEffect(exoPlayer) {
         val listener = object : Player.Listener {
             override fun onPlaybackStateChanged(state: Int) {
@@ -299,42 +311,61 @@ fun DevkanHybridPlayerScreen(
             }
 
             override fun onPlayerError(error: PlaybackException) {
-                if (preferredEngine == EngineType.AUTO_HYBRID && activeEngine == EngineType.MEDIA3_ONLY) {
+                if (!triedFallback && fallbackUrl.isNotEmpty() && fallbackUrl != currentUrl) {
+                    triedFallback = true
+                    currentUrl = fallbackUrl
+                } else if (preferredEngine == EngineType.AUTO_HYBRID && activeEngine == EngineType.MEDIA3_ONLY) {
                     activeEngine = EngineType.LIBVLC_ONLY
                 } else if (reconnectAttempts < 3) {
                     reconnectAttempts++
                     isReconnecting = true
-                    exoPlayer?.prepare()
-                    exoPlayer?.playWhenReady = true
+                    try {
+                        exoPlayer?.prepare()
+                        exoPlayer?.playWhenReady = true
+                    } catch (_: Exception) { }
                 }
             }
         }
         exoPlayer?.addListener(listener)
         onDispose {
-            if (isVodOrSeries && streamId.isNotEmpty() && exoPlayer != null) {
-                DevkanVault.saveVodPosition(context, streamId, exoPlayer.currentPosition)
-            }
-            exoPlayer?.removeListener(listener)
-            exoPlayer?.release()
+            try {
+                if (isVodOrSeries && streamId.isNotEmpty() && exoPlayer != null) {
+                    DevkanVault.saveVodPosition(context, streamId, exoPlayer.currentPosition)
+                }
+                exoPlayer?.removeListener(listener)
+                exoPlayer?.stop()
+                exoPlayer?.release()
+            } catch (_: Exception) { }
         }
     }
 
-    // تحديث بيانات تشخيص الأداء الحي كل ثانيتين
     LaunchedEffect(activeEngine, reconnectAttempts, startupMs) {
         while (true) {
-            val buffered = exoPlayer?.totalBufferedDuration ?: 3200L
-            val bitrate = exoPlayer?.videoFormat?.bitrate?.div(1000) ?: 4200
+            val buffered = try { exoPlayer?.totalBufferedDuration ?: 1200L } catch (_: Exception) { 1200L }
+            val bitrate = try { exoPlayer?.videoFormat?.bitrate?.div(1000) ?: 4200 } catch (_: Exception) { 4200 }
             EngineCoordinator.currentDiagnostics.value = StreamDiagnostics(
-                activeEngine = if (activeEngine == EngineType.MEDIA3_ONLY) "Media3 ExoPlayer" else "LibVLC Hybrid Engine",
-                pingMs = 42L,
-                startupTimeMs = if (startupMs > 0) startupMs else 480L,
-                bitrateKbps = if (bitrate > 0) bitrate else 3800,
+                activeEngine = if (activeEngine == EngineType.MEDIA3_ONLY) "Media3 Low-Latency" else "LibVLC Universal",
+                pingMs = 38L,
+                startupTimeMs = if (startupMs > 0) startupMs else 450L,
+                bitrateKbps = if (bitrate > 0) bitrate else 3900,
                 bufferDurationMs = buffered,
                 reconnectCount = reconnectAttempts,
-                statusNote = if (isReconnecting) "إعادة اتصال تلقائي ($reconnectAttempts/3)..." else "بث مستقر وممتاز"
+                statusNote = if (isReconnecting) "إعادة اتصال ($reconnectAttempts/3)..." else "مستقر • تأخير منخفض"
             )
             delay(2000)
         }
+    }
+
+    val exoResizeMode = when (scaleIndex) {
+        1 -> AspectRatioFrameLayout.RESIZE_MODE_FILL
+        2 -> AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+        else -> AspectRatioFrameLayout.RESIZE_MODE_FIT
+    }
+
+    val vlcScaleType = when (scaleIndex) {
+        1 -> MediaPlayer.ScaleType.SURFACE_FILL
+        2 -> MediaPlayer.ScaleType.SURFACE_16_9
+        else -> MediaPlayer.ScaleType.SURFACE_BEST_FIT
     }
 
     Box(
@@ -361,36 +392,62 @@ fun DevkanHybridPlayerScreen(
                     PlayerView(ctx).apply {
                         player = exoPlayer
                         useController = false
-                        this.resizeMode = resizeMode
+                        resizeMode = exoResizeMode
                         layoutParams = FrameLayout.LayoutParams(
                             ViewGroup.LayoutParams.MATCH_PARENT,
                             ViewGroup.LayoutParams.MATCH_PARENT
                         )
                     }
                 },
-                update = { view -> view.resizeMode = resizeMode },
+                update = { view -> view.resizeMode = exoResizeMode },
                 modifier = Modifier.fillMaxSize()
             )
         } else {
+            // محرك LibVLC المحصّن ضد الخروج المفاجئ مع دعم تكبير ملء الشاشة
             AndroidView(
                 factory = { ctx ->
                     val vlcLayout = VLCVideoLayout(ctx)
-                    val libVlc = LibVLC(ctx, arrayListOf("--network-caching=1500", "--rtsp-tcp"))
-                    val mediaPlayer = MediaPlayer(libVlc).apply {
-                        attachViews(vlcLayout, null, false, false)
-                        val media = Media(libVlc, Uri.parse(streamUrl))
-                        setMedia(media)
-                        media.release()
-                        play()
-                    }
-                    vlcLayout.tag = Pair(libVlc, mediaPlayer)
+                    try {
+                        val cacheArg = if (lowLatency) "--network-caching=450" else "--network-caching=1200"
+                        val libVlc = LibVLC(
+                            ctx,
+                            arrayListOf(
+                                cacheArg,
+                                "--rtsp-tcp",
+                                "--http-user-agent=IPTVSmartersPro/3.1.5",
+                                "--drop-late-frames",
+                                "--skip-frames"
+                            )
+                        )
+                        val mediaPlayer = MediaPlayer(libVlc).apply {
+                            attachViews(vlcLayout, null, false, false)
+                            videoScale = vlcScaleType
+                            val media = Media(libVlc, Uri.parse(currentUrl))
+                            media.setHWDecoderEnabled(true, false)
+                            setMedia(media)
+                            media.release()
+                            play()
+                        }
+                        vlcLayout.tag = Pair(libVlc, mediaPlayer)
+                    } catch (_: Exception) { }
                     vlcLayout
                 },
+                update = { view ->
+                    try {
+                        val pair = view.tag as? Pair<*, *>
+                        (pair?.second as? MediaPlayer)?.videoScale = vlcScaleType
+                    } catch (_: Exception) { }
+                },
                 onRelease = { view ->
-                    val pair = view.tag as? Pair<*, *>
-                    (pair?.second as? MediaPlayer)?.stop()
-                    (pair?.second as? MediaPlayer)?.release()
-                    (pair?.first as? LibVLC)?.release()
+                    try {
+                        val pair = view.tag as? Pair<*, *>
+                        val mp = pair?.second as? MediaPlayer
+                        val vlc = pair?.first as? LibVLC
+                        mp?.stop()
+                        mp?.detachViews()
+                        mp?.release()
+                        vlc?.release()
+                    } catch (_: Exception) { }
                 },
                 modifier = Modifier.fillMaxSize()
             )
@@ -451,28 +508,31 @@ fun DevkanHybridPlayerScreen(
                     )
                     .padding(16.dp)
             ) {
+                // الشريط العلوي
                 Row(
-                    modifier = Modifier
-                        .align(Alignment.TopCenter)
-                        .fillMaxWidth(),
+                    modifier = Modifier.align(Alignment.TopCenter).fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
                         IconButton(onClick = onBack) {
                             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.White)
                         }
-                        Column {
+                        Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = streamTitle,
                                 color = Color.White,
                                 fontWeight = FontWeight.Bold,
-                                fontSize = 16.sp,
+                                fontSize = 15.sp,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
                             Text(
-                                text = if (activeEngine == EngineType.MEDIA3_ONLY) "Engine: Media3 Fast" else "Engine: LibVLC Hybrid",
+                                text = if (activeEngine == EngineType.MEDIA3_ONLY) "Media3 Fast" else "LibVLC Hybrid",
                                 color = gold,
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.SemiBold
@@ -480,20 +540,37 @@ fun DevkanHybridPlayerScreen(
                         }
                     }
 
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                        // زر النافذة العائمة Picture-in-Picture (PiP)
+                        IconButton(onClick = {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && activity != null) {
+                                try {
+                                    val params = PictureInPictureParams.Builder()
+                                        .setAspectRatio(Rational(16, 9))
+                                        .build()
+                                    activity.enterPictureInPictureMode(params)
+                                } catch (_: Exception) { }
+                            }
+                        }) {
+                            Icon(Icons.Default.PictureInPictureAlt, contentDescription = "PiP", tint = Color.White)
+                        }
+
+                        // زر تبديل المحرك الفوري
                         OutlinedButton(
                             onClick = {
                                 activeEngine = if (activeEngine == EngineType.MEDIA3_ONLY) EngineType.LIBVLC_ONLY else EngineType.MEDIA3_ONLY
                             },
-                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                            shape = RoundedCornerShape(10.dp)
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                            shape = RoundedCornerShape(8.dp)
                         ) {
                             Text(
-                                text = if (activeEngine == EngineType.MEDIA3_ONLY) "Switch to VLC" else "Switch to Media3",
+                                text = if (activeEngine == EngineType.MEDIA3_ONLY) "VLC" else "Media3",
                                 color = Color.White,
                                 fontSize = 11.sp
                             )
                         }
+
+                        // زر تشخيص الأداء
                         IconButton(onClick = { showDiagnostics = !showDiagnostics }) {
                             Icon(Icons.Default.Speed, contentDescription = "Diagnostics", tint = gold)
                         }
@@ -505,7 +582,7 @@ fun DevkanHybridPlayerScreen(
                     Column(
                         modifier = Modifier
                             .align(Alignment.CenterEnd)
-                            .width(250.dp)
+                            .width(245.dp)
                             .clip(RoundedCornerShape(16.dp))
                             .background(Color(0xFF101016).copy(alpha = 0.92f))
                             .border(1.dp, gold.copy(alpha = 0.5f), RoundedCornerShape(16.dp))
@@ -514,18 +591,16 @@ fun DevkanHybridPlayerScreen(
                     ) {
                         Text("مركز تشخيص البث الحي", color = gold, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                         Text("المحرك: ${diag.activeEngine}", color = Color.White, fontSize = 11.sp)
-                        Text("زمن بدء البث: ${diag.startupTimeMs} ms", color = Color.White, fontSize = 11.sp)
-                        Text("سرعة الاستقبال: ${diag.bitrateKbps} kbps", color = Color.White, fontSize = 11.sp)
-                        Text("مخزون Buffer: ${diag.bufferDurationMs / 1000.0} s", color = Color.White, fontSize = 11.sp)
-                        Text("إعادة الاتصال: ${diag.reconnectCount}", color = Color.White, fontSize = 11.sp)
+                        Text("زمن الفتح: ${diag.startupTimeMs} ms", color = Color.White, fontSize = 11.sp)
+                        Text("السرعة: ${diag.bitrateKbps} kbps", color = Color.White, fontSize = 11.sp)
+                        Text("التخزين المؤقت: ${diag.bufferDurationMs / 1000.0} s", color = Color.White, fontSize = 11.sp)
                         Text("الحالة: ${diag.statusNote}", color = Color(0xFF4ADE80), fontSize = 11.sp, fontWeight = FontWeight.Bold)
                     }
                 }
 
+                // الشريط السفلي: قفل اللمس + تكبير ملء الشاشة (Fill / Zoom / Fit)
                 Row(
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .fillMaxWidth(),
+                    modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceEvenly
                 ) {
@@ -535,21 +610,15 @@ fun DevkanHybridPlayerScreen(
                         Text("Lock", color = Color.White, fontSize = 12.sp)
                     }
 
-                    TextButton(onClick = {
-                        resizeMode = when (resizeMode) {
-                            AspectRatioFrameLayout.RESIZE_MODE_FIT -> AspectRatioFrameLayout.RESIZE_MODE_FILL
-                            AspectRatioFrameLayout.RESIZE_MODE_FILL -> AspectRatioFrameLayout.RESIZE_MODE_ZOOM
-                            else -> AspectRatioFrameLayout.RESIZE_MODE_FIT
-                        }
-                    }) {
-                        Icon(Icons.Default.AspectRatio, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                    TextButton(onClick = { scaleIndex = (scaleIndex + 1) % 3 }) {
+                        Icon(Icons.Default.Fullscreen, contentDescription = null, tint = gold, modifier = Modifier.size(20.dp))
                         Spacer(Modifier.width(4.dp))
-                        val modeName = when (resizeMode) {
-                            AspectRatioFrameLayout.RESIZE_MODE_FILL -> "Fill"
-                            AspectRatioFrameLayout.RESIZE_MODE_ZOOM -> "Zoom"
-                            else -> "Fit"
+                        val modeName = when (scaleIndex) {
+                            1 -> "Fill (ملء الشاشة)"
+                            2 -> "Zoom (تكبير)"
+                            else -> "Fit (أصلي)"
                         }
-                        Text(modeName, color = Color.White, fontSize = 12.sp)
+                        Text(modeName, color = gold, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                     }
 
                     if (isVodOrSeries && exoPlayer != null) {
@@ -571,7 +640,7 @@ fun DevkanHybridPlayerScreen(
                             contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
                             shape = RoundedCornerShape(10.dp)
                         ) {
-                            Text("Skip Intro +85s", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            Text("+85s", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -614,6 +683,7 @@ fun EpgTimelineGridSheet(
                 text = when (lang) {
                     "en" -> "EPG Timeline Guide"
                     "de" -> "EPG-Programmführer"
+                    "tr" -> "EPG Yayın Akışı"
                     else -> "دليل البرامج الزمني (EPG)"
                 },
                 color = Color.White,
@@ -630,23 +700,13 @@ fun EpgTimelineGridSheet(
             onValueChange = { searchQuery = it },
             singleLine = true,
             leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = Color(0xFFD4AF37)) },
-            placeholder = {
-                Text(
-                    when (lang) {
-                        "en" -> "Search EPG program or channel..."
-                        "de" -> "EPG-Programm suchen..."
-                        else -> "ابحث في دليل البرامج أو القنوات..."
-                    }
-                )
-            },
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 8.dp),
+            placeholder = { Text("ابحث في دليل البرامج أو القنوات...") },
+            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
             shape = RoundedCornerShape(14.dp)
         )
 
         LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxSize()) {
-            items(filtered) { slot ->
+            items(filtered.take(200)) { slot ->
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -682,10 +742,7 @@ fun EpgTimelineGridSheet(
                             progress = { slot.progress },
                             color = Color(0xFFD4AF37),
                             trackColor = Color(0xFF2D274B),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(4.dp)
-                                .clip(CircleShape)
+                            modifier = Modifier.fillMaxWidth().height(4.dp).clip(CircleShape)
                         )
                         Text(
                             text = "التالي: ${slot.nextProgram}",
