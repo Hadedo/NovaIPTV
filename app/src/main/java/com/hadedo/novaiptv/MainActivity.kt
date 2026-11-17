@@ -20,6 +20,7 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -48,7 +49,9 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -240,7 +243,8 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
     val todayRealMatches = remember { mutableStateListOf<RealSportsMatch>() }
     val watchlistIds = remember { mutableStateListOf<String>() }
 
-    // حالة بيانات الـ EPG الرياضي المجمّع والمصنّف زمنياً (LSH + Single-Pass)
+    // قوائم جاهزة مسبقاً في الخلفية لمنع أي تجميد للواجهة
+    var cachedSportsChannels by remember { mutableStateOf<List<MediaItemModel>>(emptyList()) }
     var classifiedSports by remember {
         mutableStateOf(
             ClassifiedSportsData(
@@ -250,6 +254,22 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
                 livePrograms = emptyList()
             )
         )
+    }
+
+    // معالجة وتصفية القنوات الرياضية في الخلفية (Dispatchers.Default) بعيداً عن Main Thread
+    LaunchedEffect(allItems.size) {
+        if (allItems.isEmpty()) {
+            cachedSportsChannels = emptyList()
+        } else {
+            val snapshot = allItems.toList()
+            cachedSportsChannels = withContext(Dispatchers.Default) {
+                val raw = snapshot.filter { item ->
+                    item.contentType == "LIVE" &&
+                        SportsMatchExtractor.isSportsProgram(item.group, item.title, null)
+                }
+                DevkanPlaylistRepository.deduplicateSportChannels(raw)
+            }
+        }
     }
 
     BackHandler(
@@ -275,16 +295,17 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
 
     // الفتح الفوري في 0.1 ثانية + المزامنة الصامتة في الخلفية لـ Catalog و Sports EPG
     LaunchedEffect(Unit) {
-        val cached = DevkanVault.getCachedItems(context)
+        val cached = withContext(Dispatchers.IO) { DevkanVault.getCachedItems(context) }
         if (cached.isNotEmpty()) {
             allItems.clear()
             allItems.addAll(cached)
         }
 
-        // استرجاع الـ EPG الرياضي المحفوظ محلياً وتصنيفه فوراً
-        val cachedEpg = DevkanVault.getCachedSportsEpg(context)
+        val cachedEpg = withContext(Dispatchers.IO) { DevkanVault.getCachedSportsEpg(context) }
         if (cachedEpg.isNotEmpty()) {
-            classifiedSports = EpgSportsPipeline.classifyAndGroupSports(cachedEpg)
+            classifiedSports = withContext(Dispatchers.Default) {
+                EpgSportsPipeline.classifyAndGroupSports(cachedEpg)
+            }
         }
 
         val saved = DevkanVault.getSavedSubscription(context)
@@ -298,7 +319,7 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
                 if (loadedItems.isNotEmpty()) {
                     allItems.clear()
                     allItems.addAll(loadedItems)
-                    DevkanVault.saveCachedItems(context, loadedItems)
+                    withContext(Dispatchers.IO) { DevkanVault.saveCachedItems(context, loadedItems) }
                     classifiedSports = DevkanPlaylistRepository.syncAndClassifySportsEpg(context, updatedSub, loadedItems)
                 }
                 isSyncing = false
@@ -333,7 +354,7 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
                 if (imported.isNotEmpty()) {
                     allItems.clear()
                     allItems.addAll(imported)
-                    DevkanVault.saveCachedItems(context, imported)
+                    withContext(Dispatchers.IO) { DevkanVault.saveCachedItems(context, imported) }
                     Toast.makeText(context, "تم استيراد وحفظ ${imported.size} عنصر!", Toast.LENGTH_SHORT).show()
                 }
             }
@@ -511,7 +532,7 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
             }
 
             when (selectedTab) {
-                // 0: الشاشة الرئيسية الهجينة (أحدث الإصدارات + البث الرياضي المستخرج من EPG + 4K)
+                // 0: الشاشة الرئيسية الهجينة
                 0 -> {
                     val lastCh = remember { DevkanVault.getLastChannel(context) }
 
@@ -549,7 +570,6 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
                             .padding(14.dp),
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        // بطاقة المباراة الجارية أو القادمة المستخرجة من EPG اشتراكك (أولوية قصوى)
                         val epgTopMatch = classifiedSports.liveMatches.firstOrNull()
                             ?: classifiedSports.upcoming24hMatches.firstOrNull()
 
@@ -725,7 +745,7 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
                     }
                 }
 
-                // 1: البث المباشر مع جلب البرنامج الحالي من الدليل الفوري
+                // 1: البث المباشر
                 1 -> {
                     val liveChannels = remember(allItems.size) { allItems.filter { it.contentType == "LIVE" } }
                     val groups = remember(liveChannels.size) { listOf("ALL") + liveChannels.map { it.group }.distinct() }
@@ -799,35 +819,32 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
                     }
                 }
 
-                // 2: مركز الرياضة الذكي (EPG Live + Upcoming 24h عبر LSH + القنوات الموحدة)
+                // 2: مركز الرياضة الذكي (فوري 0ms بفضل المعالجة المسبقة في الخلفية)
                 2 -> {
                     var selectedSportNetwork by remember { mutableStateOf("ALL") }
                     val networks = listOf("ALL" to "الكل", "BEIN" to "beIN SPORTS", "SSC" to "SSC", "ALKASS" to "الكأس", "AD" to "أبو ظبي", "RABIAA" to "الرابعة")
 
-                    val rawSportChannels = remember(allItems.size) {
-                        allItems.filter { item ->
-                            item.contentType == "LIVE" && SportsMatchExtractor.isSportsProgram(item.group, item.title, null)
-                        }
-                    }
-
-                    val deduplicatedSports = remember(rawSportChannels.size, selectedSportNetwork) {
-                        val deduped = DevkanPlaylistRepository.deduplicateSportChannels(rawSportChannels)
-                        deduped.filter { item ->
-                            val text = "${item.group} ${item.title}".lowercase()
-                            when (selectedSportNetwork) {
-                                "BEIN" -> text.contains("bein")
-                                "SSC" -> text.contains("ssc")
-                                "ALKASS" -> text.contains("kass") || text.contains("كأس") || text.contains("الكاس")
-                                "AD" -> text.contains("abu dhabi") || text.contains("ad sport") || text.contains("ابوظبي") || text.contains("أبوظبي")
-                                "RABIAA" -> text.contains("rabiaa") || text.contains("الرابعة") || text.contains("iraq")
-                                else -> true
+                    val deduplicatedSports = remember(cachedSportsChannels, selectedSportNetwork) {
+                        if (selectedSportNetwork == "ALL") {
+                            cachedSportsChannels
+                        } else {
+                            cachedSportsChannels.filter { item ->
+                                val text = "${item.group} ${item.title}".lowercase()
+                                when (selectedSportNetwork) {
+                                    "BEIN" -> text.contains("bein")
+                                    "SSC" -> text.contains("ssc")
+                                    "ALKASS" -> text.contains("kass") || text.contains("كأس") || text.contains("الكاس")
+                                    "AD" -> text.contains("abu dhabi") || text.contains("ad sport") || text.contains("ابوظبي") || text.contains("أبوظبي")
+                                    "RABIAA" -> text.contains("rabiaa") || text.contains("الرابعة") || text.contains("iraq")
+                                    else -> true
+                                }
                             }
                         }
                     }
 
                     Column(modifier = Modifier.fillMaxSize().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            items(networks) { (code, label) ->
+                            items(networks, key = { it.first }) { (code, label) ->
                                 FilterChip(
                                     selected = selectedSportNetwork == code,
                                     onClick = { selectedSportNetwork = code },
@@ -837,12 +854,11 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
                         }
 
                         LazyColumn(state = sportsListState, verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                            // 1. المباريات الجارية الآن من دليل EPG
                             if (classifiedSports.liveMatches.isNotEmpty() && selectedSportNetwork == "ALL") {
-                                item {
+                                item(key = "header_live_epg") {
                                     Text("🔴 جارية الآن على قنواتك (${classifiedSports.liveMatches.size})", color = Color(0xFFF87171), fontWeight = FontWeight.Bold, fontSize = 15.sp)
                                 }
-                                items(classifiedSports.liveMatches, key = { "live_${it.matchKey}" }) { match ->
+                                itemsIndexed(classifiedSports.liveMatches, key = { idx, it -> "live_${idx}_${it.matchKey}" }) { _, match ->
                                     SmartEpgMatchCard(
                                         match = match,
                                         onPlayPrimary = { launchGroupedMatchStream(match) },
@@ -853,12 +869,11 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
                                 }
                             }
 
-                            // 2. المباريات القادمة خلال 24 ساعة من دليل EPG
                             if (classifiedSports.upcoming24hMatches.isNotEmpty() && selectedSportNetwork == "ALL") {
-                                item {
+                                item(key = "header_upcoming_epg") {
                                     Text("🟢 قادمة خلال 24 ساعة (${classifiedSports.upcoming24hMatches.size})", color = Color(0xFF4ADE80), fontWeight = FontWeight.Bold, fontSize = 15.sp)
                                 }
-                                items(classifiedSports.upcoming24hMatches, key = { "up_${it.matchKey}" }) { match ->
+                                itemsIndexed(classifiedSports.upcoming24hMatches, key = { idx, it -> "up_${idx}_${it.matchKey}" }) { _, match ->
                                     SmartEpgMatchCard(
                                         match = match,
                                         onPlayPrimary = { launchGroupedMatchStream(match) },
@@ -869,12 +884,11 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
                                 }
                             }
 
-                            // 3. جدول مباريات اليوم العام (احتياطي في حال عدم توفر EPG كافٍ)
                             if (classifiedSports.liveMatches.isEmpty() && classifiedSports.upcoming24hMatches.isEmpty() && todayRealMatches.isNotEmpty() && selectedSportNetwork == "ALL") {
-                                item {
+                                item(key = "header_today_matches") {
                                     Text("🏆 مباريات اليوم والقنوات الناقلة", color = goldLight, fontWeight = FontWeight.Bold, fontSize = 15.sp)
                                 }
-                                items(todayRealMatches.take(10), key = { it.id }) { match ->
+                                itemsIndexed(todayRealMatches.take(10), key = { idx, it -> "real_${idx}_${it.id}" }) { _, match ->
                                     val title = "${match.homeTeam} vs ${match.awayTeam}"
                                     val isReminded = MatchReminderManager.remindedMatches.contains(title)
                                     Row(
@@ -907,11 +921,10 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
                                 }
                             }
 
-                            // 4. القنوات الرياضية الموحدة (تُشغّل عبر Media3 ExoPlayer حتمياً)
-                            item {
+                            item(key = "header_sports_channels") {
                                 Text("📺 القنوات الرياضية الموحدة (${deduplicatedSports.size})", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
                             }
-                            items(deduplicatedSports, key = { it.id }) { ch ->
+                            itemsIndexed(deduplicatedSports, key = { idx, it -> "sp_${idx}_${it.id}" }) { _, ch ->
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -1080,7 +1093,7 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
                                 if (items.isNotEmpty()) {
                                     allItems.clear()
                                     allItems.addAll(items)
-                                    DevkanVault.saveCachedItems(context, items)
+                                    withContext(Dispatchers.IO) { DevkanVault.saveCachedItems(context, items) }
                                     classifiedSports = DevkanPlaylistRepository.syncAndClassifySportsEpg(context, updated, items)
                                 }
                                 isSyncing = false
@@ -1091,6 +1104,7 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
                             DevkanVault.clearSubscription(context)
                             currentSub = null
                             allItems.clear()
+                            cachedSportsChannels = emptyList()
                             classifiedSports = ClassifiedSportsData(emptyList(), emptyList(), emptyList(), emptyList())
                             Toast.makeText(context, "تم حذف الاشتراك", Toast.LENGTH_SHORT).show()
                         },
@@ -1102,7 +1116,7 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
         }
     }
 
-    // نافذة اختيار الجودة عند وجود أكثر من قناة ناقلة لنفس المباراة (4K / FHD / HD)
+    // نافذة اختيار الجودة عند وجود أكثر من قناة ناقلة لنفس المباراة
     selectedGroupedMatchForQuality?.let { match ->
         AlertDialog(
             onDismissRequest = { selectedGroupedMatchForQuality = null },
@@ -1149,15 +1163,10 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
 
     // نافذة اختيار القناة الناقلة السريعة للمباريات العامة
     selectedMatchForChannelPicker?.let { match ->
-        val matchingChannels = remember(allItems.size, match.id) {
-            val allSports = DevkanPlaylistRepository.deduplicateSportChannels(
-                allItems.filter {
-                    it.contentType == "LIVE" && SportsMatchExtractor.isSportsProgram(it.group, it.title, null)
-                }
-            )
+        val matchingChannels = remember(cachedSportsChannels, match.id) {
             val broadcasterKeyword = match.suggestedBroadcaster.substringBefore(" ").lowercase()
-            val priority = allSports.filter { it.title.lowercase().contains(broadcasterKeyword) || it.group.lowercase().contains(broadcasterKeyword) }
-            if (priority.isNotEmpty()) priority.take(8) else allSports.take(8)
+            val priority = cachedSportsChannels.filter { it.title.lowercase().contains(broadcasterKeyword) || it.group.lowercase().contains(broadcasterKeyword) }
+            if (priority.isNotEmpty()) priority.take(8) else cachedSportsChannels.take(8)
         }
 
         AlertDialog(
@@ -1221,7 +1230,7 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
                     if (loadedItems.isNotEmpty()) {
                         allItems.clear()
                         allItems.addAll(loadedItems)
-                        DevkanVault.saveCachedItems(context, loadedItems)
+                        withContext(Dispatchers.IO) { DevkanVault.saveCachedItems(context, loadedItems) }
                         classifiedSports = DevkanPlaylistRepository.syncAndClassifySportsEpg(context, updatedSub, loadedItems)
                         Toast.makeText(context, "تم الاتصال وحفظ ${loadedItems.size} قناة وفيلم ومسلسل!", Toast.LENGTH_SHORT).show()
                         showAddDialog = false
