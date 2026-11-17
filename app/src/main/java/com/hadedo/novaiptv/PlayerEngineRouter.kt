@@ -1,4 +1,4 @@
-package com.devkan.vip.player
+package com.hadedo.novaiptv
 
 enum class PlayerEngine {
     MEDIA3_EXOPLAYER,
@@ -14,9 +14,6 @@ data class PlaybackConfig(
 
 object PlayerEngineRouter {
 
-    /**
-     * في قسم الرياضة: يفرض Media3 ExoPlayer بشكل حتمي (Deterministic) مع Low Latency و ABR
-     */
     fun resolvePlaybackConfig(
         isSportsSection: Boolean,
         manualOverrideEngine: PlayerEngine? = null,
