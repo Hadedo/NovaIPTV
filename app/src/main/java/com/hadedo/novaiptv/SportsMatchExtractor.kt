@@ -1,6 +1,4 @@
-package com.devkan.vip.domain.sports
-
-import com.devkan.vip.domain.model.SportsMatchInfo
+package com.hadedo.novaiptv
 
 object SportsMatchExtractor {
 
@@ -203,7 +201,6 @@ object SportsMatchExtractor {
             Regex("""(.+?)\s+(ضد|فى|في|vs\.?|VS|v\.?)\s+(.+)""", RegexOption.IGNORE_CASE),
             Regex("""(.+?)\s+(at|@)\s+(.+)""", RegexOption.IGNORE_CASE)
         )
-        // تقييد فاصل الشرطة (-) بالقنوات الرياضية لمنع التداخل مع نشرات الأخبار والأفلام
         if (isCategorySports || isSportsProgram(null, title, description)) {
             patterns.add(Regex("""(.+?)\s+[-–—]\s+(.+)"""))
         }
