@@ -24,6 +24,7 @@ import java.net.URLEncoder
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.TimeZone
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 
@@ -94,9 +95,13 @@ data class RealSportsMatch(
 val id: String,
 val homeTeam: String,
 val awayTeam: String,
+val homeLogo: String = "",
+val awayLogo: String = "",
+val scoreText: String = "VS",
 val league: String,
 val matchTime: String,
 val status: String,
+val isLive: Boolean = false,
 val suggestedBroadcaster: String = "beIN SPORTS"
 )
 
@@ -224,12 +229,13 @@ getSecurePrefs(context).edit().putString("auto_sync_interval", interval.name).ap
 fun shouldRunBackgroundSync(context: Context): Boolean {
 val interval = getAutoSyncInterval(context)
 if (interval == AutoSyncInterval.MANUAL || interval.days <= 0) return false
-val lastSync = getSecurePrefs(context).getLong("last_catalog_sync_ms", 0L)
+val activeId = getSavedSubscription(context)?.id ?: "default"
+val lastSync = getSecurePrefs(context).getLong("last_catalog_sync_ms_$activeId", 0L)
 return (System.currentTimeMillis() - lastSync) >= interval.days * 86400000L
 }
 
-fun markCatalogSyncedNow(context: Context) {
-getSecurePrefs(context).edit().putLong("last_catalog_sync_ms", System.currentTimeMillis()).apply()
+fun markCatalogSyncedNow(context: Context, subId: String = getSavedSubscription(context)?.id ?: "default") {
+getSecurePrefs(context).edit().putLong("last_catalog_sync_ms_$subId", System.currentTimeMillis()).apply()
 }
 
 fun getAllSubscriptions(context: Context): MutableList<SavedSubscription> {
@@ -332,12 +338,13 @@ fun deleteSubscriptionById(context: Context, subId: String) {
 val list = getAllSubscriptions(context).filterNot { it.id == subId }
 val nextId = list.firstOrNull()?.id ?: ""
 saveAllSubscriptions(context, list, nextId)
-if (list.isEmpty()) {
 try {
+File(context.filesDir, "devkan_cache_$subId.json").delete()
+if (list.isEmpty()) {
 File(context.filesDir, "devkan_cached_playlist_v5.json").delete()
 File(context.filesDir, "devkan_cached_sports_epg_v5.json").delete()
-} catch (_: Exception) { }
 }
+} catch (_: Exception) { }
 }
 
 fun clearSubscription(context: Context) {
@@ -382,7 +389,7 @@ val raw = getSecurePrefs(context).getString("preferred_engine", EngineType.AUTO_
 return try { EngineType.valueOf(raw ?: EngineType.AUTO_HYBRID.name) } catch (e: Exception) { EngineType.AUTO_HYBRID }
 }
 
-fun saveCachedItems(context: Context, items: List<MediaItemModel>) {
+fun saveCachedItems(context: Context, items: List<MediaItemModel>, subId: String = getSavedSubscription(context)?.id ?: "default") {
 try {
 val arr = JSONArray()
 items.forEach { item ->
@@ -403,14 +410,17 @@ put("addedTimestamp", item.addedTimestamp)
 put("is4k", item.is4k)
 })
 }
-File(context.filesDir, "devkan_cached_playlist_v5.json").writeText(arr.toString())
-markCatalogSyncedNow(context)
+File(context.filesDir, "devkan_cache_$subId.json").writeText(arr.toString())
+markCatalogSyncedNow(context, subId)
 } catch (_: Exception) { }
 }
 
-fun getCachedItems(context: Context): List<MediaItemModel> {
+fun getCachedItems(context: Context, subId: String = getSavedSubscription(context)?.id ?: "default"): List<MediaItemModel> {
 return try {
-val file = File(context.filesDir, "devkan_cached_playlist_v5.json")
+var file = File(context.filesDir, "devkan_cache_$subId.json")
+if (!file.exists()) {
+file = File(context.filesDir, "devkan_cached_playlist_v5.json")
+}
 if (!file.exists()) return emptyList()
 val arr = JSONArray(file.readText())
 val list = ArrayList<MediaItemModel>(arr.length())
@@ -574,8 +584,8 @@ ping to String.format(Locale.US, "%.1f", mbps.coerceIn(1.5, 150.0)).toDouble()
 object DevkanPlaylistRepository {
 private fun buildClient(geoBypass: Boolean, userAgent: String = "IPTVSmartersPro/3.1.5 (Linux; Android 14)"): OkHttpClient {
 return OkHttpClient.Builder()
-.connectTimeout(10, TimeUnit.SECONDS)
-.readTimeout(20, TimeUnit.SECONDS)
+.connectTimeout(12, TimeUnit.SECONDS)
+.readTimeout(25, TimeUnit.SECONDS)
 .addInterceptor { chain ->
 val builder = chain.request().newBuilder()
 .header("User-Agent", userAgent)
@@ -591,9 +601,10 @@ chain.proceed(builder.build())
 private fun detectOriginTag(group: String, title: String): String {
 val text = "$group $title".lowercase()
 return when {
-text.contains("korean") || text.contains("كوري") || text.contains("korea") || text.contains("kdrama") -> "كوري"
-text.contains("indian") || text.contains("bollywood") || text.contains("هندي") || text.contains("hindi") -> "هندي"
-text.contains("arab") || text.contains("عربي") || text.contains("egypt") || text.contains("مصري") || text.contains("خليجي") || text.contains("سوري") || text.contains("عراقي") || Regex("[\\u0600-\\u06FF]").containsMatchIn(title) -> "عربي"
+text.contains("korean") || text.contains("كوري") || text.contains("كوريا") || text.contains("korea") || text.contains("kdrama") || text.contains("آسيوي") || text.contains("asian") -> "كوري"
+text.contains("indian") || text.contains("bollywood") || text.contains("هندي") || text.contains("بوليوود") || text.contains("hindi") -> "هندي"
+text.contains("turkish") || text.contains("تركي") || text.contains("تركيا") || text.contains("مترجم تركي") || text.contains("مدبلج تركي") -> "تركي"
+text.contains("arab") || text.contains("عربي") || text.contains("عربية") || text.contains("egypt") || text.contains("مصري") || text.contains("خليجي") || text.contains("سوري") || text.contains("عراقي") || text.contains("رمضان") || Regex("[\\u0600-\\u06FF]").containsMatchIn(title) -> "عربي"
 else -> "أجنبي"
 }
 }
@@ -601,9 +612,13 @@ else -> "أجنبي"
 private fun detectGenreTag(group: String, title: String): String {
 val text = "$group $title".lowercase()
 return when {
-text.contains("history") || text.contains("historical") || text.contains("تاريخ") -> "تاريخي"
-text.contains("action") || text.contains("أكشن") || text.contains("اكشن") || text.contains("war") -> "أكشن"
+text.contains("sci-fi") || text.contains("scifi") || text.contains("science") || text.contains("fantasy") || text.contains("خيال") || text.contains("فانتازيا") -> "خيال علمي"
+text.contains("romance") || text.contains("romantic") || text.contains("رومانسي") || text.contains("حب") -> "رومانسي"
+text.contains("horror") || text.contains("thriller") || text.contains("رعب") || text.contains("إثارة") || text.contains("غموض") -> "رعب وإثارة"
+text.contains("action") || text.contains("أكشن") || text.contains("اكشن") || text.contains("war") || text.contains("حرب") || text.contains("قتال") -> "أكشن"
 text.contains("comedy") || text.contains("كوميد") -> "كوميدي"
+text.contains("history") || text.contains("historical") || text.contains("تاريخ") -> "تاريخي"
+text.contains("anime") || text.contains("cartoon") || text.contains("kids") || text.contains("انمي") || text.contains("أنمي") || text.contains("أطفال") -> "أنمي وعائلي"
 else -> "دراما"
 }
 }
@@ -854,7 +869,8 @@ try {
 client.newCall(Request.Builder().url("$baseApi&action=get_vod_streams").build()).execute().use { resp ->
 val arr = JSONArray(resp.body?.string() ?: "[]")
 val cats = vodCatTask.await()
-for (i in 0 until minOf(arr.length(), 1800)) {
+val maxLimit = minOf(arr.length(), 8000)
+for (i in 0 until maxLimit) {
 val obj = arr.getJSONObject(i)
 val id = obj.optString("stream_id")
 val name = obj.optString("name", "Movie $i")
@@ -893,7 +909,8 @@ try {
 client.newCall(Request.Builder().url("$baseApi&action=get_series").build()).execute().use { resp ->
 val arr = JSONArray(resp.body?.string() ?: "[]")
 val cats = seriesCatTask.await()
-for (i in 0 until minOf(arr.length(), 1800)) {
+val maxLimit = minOf(arr.length(), 8000)
+for (i in 0 until maxLimit) {
 val obj = arr.getJSONObject(i)
 val id = obj.optString("series_id")
 val name = obj.optString("name", "Series $i")
@@ -1099,8 +1116,7 @@ return when {
 l.contains("saudi") || l.contains("roshn") -> "SSC Sports"
 l.contains("iraq") || l.contains("afc") || l.contains("asian") -> "الرابعة الرياضية / الكأس"
 l.contains("serie a") || l.contains("italian") -> "AD SPORTS Premium"
-l.contains("premier") || l.contains("champions") || l.contains("liga") || l.contains("bundesliga") || l.contains("ligue 1") -> "beIN SPORTS"
-else -> "beIN SPORTS / القنوات الرياضية"
+else -> "beIN SPORTS"
 }
 }
 
@@ -1110,37 +1126,83 @@ val client = OkHttpClient.Builder()
 .readTimeout(10, TimeUnit.SECONDS)
 .build()
 val matches = mutableListOf<RealSportsMatch>()
+val endpoints = listOf(
+"https://site.api.espn.com/apis/site/v2/sports/soccer/all/scoreboard",
+"https://site.api.espn.com/apis/site/v2/sports/soccer/uefa.champions/scoreboard",
+"https://site.api.espn.com/apis/site/v2/sports/soccer/eng.1/scoreboard",
+"https://site.api.espn.com/apis/site/v2/sports/soccer/esp.1/scoreboard"
+)
+val baghdadFmt = SimpleDateFormat("hh:mm a", Locale.US).apply {
+timeZone = TimeZone.getTimeZone("Asia/Baghdad")
+}
+val isoFmt = SimpleDateFormat("yyyy-MM-dd'T'HH:mm'Z'", Locale.US).apply {
+timeZone = TimeZone.getTimeZone("UTC")
+}
+
+for (ep in endpoints) {
+if (matches.size >= 30) break
 try {
-val todayStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
-val url = "https://www.thesportsdb.com/api/v1/json/3/eventsday.php?d=$todayStr&s=Soccer"
-client.newCall(Request.Builder().url(url).build()).execute().use { resp ->
+client.newCall(Request.Builder().url(ep).build()).execute().use { resp ->
 val root = JSONObject(resp.body?.string() ?: "{}")
 val events = root.optJSONArray("events") ?: JSONArray()
-for (i in 0 until minOf(events.length(), 25)) {
+for (i in 0 until events.length()) {
 val ev = events.getJSONObject(i)
-val id = ev.optString("idEvent", "$i")
-val home = ev.optString("strHomeTeam", "")
-val away = ev.optString("strAwayTeam", "")
-val league = ev.optString("strLeague", "Football")
-val time = ev.optString("strTime", "20:00").take(5)
-val status = ev.optString("strStatus", "Scheduled").ifEmpty { "اليوم" }
-if (home.isNotEmpty() && away.isNotEmpty()) {
+val id = ev.optString("id", "$i")
+if (matches.any { it.id == id }) continue
+val comp = ev.optJSONArray("competitions")?.optJSONObject(0) ?: continue
+val competitors = comp.optJSONArray("competitors") ?: continue
+if (competitors.length() < 2) continue
+
+val c1 = competitors.getJSONObject(0)
+val c2 = competitors.getJSONObject(1)
+val homeObj = if (c1.optString("homeAway") == "home") c1 else c2
+val awayObj = if (c1.optString("homeAway") == "home") c2 else c1
+
+val homeName = homeObj.optJSONObject("team")?.optString("shortDisplayName", "") ?: ""
+val awayName = awayObj.optJSONObject("team")?.optString("shortDisplayName", "") ?: ""
+val homeLogo = homeObj.optJSONObject("team")?.optString("logo", "") ?: ""
+val awayLogo = awayObj.optJSONObject("team")?.optString("logo", "") ?: ""
+val homeScore = homeObj.optString("score", "0")
+val awayScore = awayObj.optString("score", "0")
+
+val statusObj = ev.optJSONObject("status")?.optJSONObject("type")
+val state = statusObj?.optString("state", "pre") ?: "pre"
+val detail = statusObj?.optString("shortDetail", "") ?: ""
+val isLive = state == "in"
+
+val leagueName = ev.optJSONObject("season")?.optString("slug", "")
+?.replace("-", " ")?.uppercase()
+?: root.optJSONArray("leagues")?.optJSONObject(0)?.optString("name", "Football")
+?: "Football"
+
+val rawDate = ev.optString("date", "")
+val timeStr = try {
+val d = isoFmt.parse(rawDate)
+if (d != null) baghdadFmt.format(d) else detail
+} catch (_: Exception) { detail }
+
+if (homeName.isNotEmpty() && awayName.isNotEmpty()) {
 matches.add(
 RealSportsMatch(
 id = id,
-homeTeam = home,
-awayTeam = away,
-league = league,
-matchTime = time,
-status = status,
-suggestedBroadcaster = mapLeagueToBroadcaster(league)
+homeTeam = homeName,
+awayTeam = awayName,
+homeLogo = homeLogo,
+awayLogo = awayLogo,
+scoreText = if (state == "pre") "VS" else "$homeScore - $awayScore",
+league = leagueName,
+matchTime = if (isLive) detail else timeStr,
+status = if (isLive) "مباشر $detail" else if (state == "post") "انتهت" else timeStr,
+isLive = isLive,
+suggestedBroadcaster = mapLeagueToBroadcaster(leagueName)
 )
 )
 }
 }
 }
 } catch (_: Exception) { }
-matches
+}
+matches.sortedByDescending { it.isLive }
 }
 }
 
