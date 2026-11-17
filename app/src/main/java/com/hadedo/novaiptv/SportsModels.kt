@@ -1,4 +1,4 @@
-package com.devkan.vip.domain.model
+package com.hadedo.novaiptv
 
 data class EpgProgram(
     val id: String,
