@@ -34,6 +34,8 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import kotlinx.coroutines.launch
@@ -1068,19 +1070,90 @@ fun SmartAddConnectionDialog(
         } catch (_: Exception) { }
     }
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor = Color(0xFF14141D),
-        title = {
-            Text(
-                text = if (editingSub != null) "تعديل الاشتراك" else strings.addConnection,
-                color = Color.White,
-                fontWeight = FontWeight.Bold,
-                fontSize = 18.sp
+    fun submitConnection() {
+        val finalLabel = subLabel.trim().ifEmpty {
+            when (selectedMode) {
+                "XTREAM" -> username.trim().ifEmpty { "Xtream VIP" }
+                "STALKER" -> "Stalker MAC"
+                else -> "M3U Playlist"
+            }
+        }
+        val sub = when (selectedMode) {
+            "XTREAM" -> SavedSubscription(
+                id = editingSub?.id ?: UUID.randomUUID().toString(),
+                label = finalLabel,
+                type = "XTREAM",
+                host = host.trim(),
+                username = username.trim(),
+                password = password.trim()
             )
-        },
-        text = {
-            Column(modifier = Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            "M3U" -> SavedSubscription(
+                id = editingSub?.id ?: UUID.randomUUID().toString(),
+                label = finalLabel,
+                type = "M3U",
+                host = m3uUrl.trim(),
+                m3uUrl = m3uUrl.trim()
+            )
+            else -> SavedSubscription(
+                id = editingSub?.id ?: UUID.randomUUID().toString(),
+                label = finalLabel,
+                type = "STALKER",
+                host = host.trim(),
+                macAddress = macAddress.trim()
+            )
+        }
+        onSaveAndConnect(sub)
+    }
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            decorFitsSystemWindows = false
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth(0.94f)
+                .imePadding()
+                .clip(RoundedCornerShape(22.dp))
+                .background(Color(0xFF14141D))
+                .border(1.dp, gold.copy(alpha = 0.45f), RoundedCornerShape(22.dp))
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = if (editingSub != null) "تعديل الاشتراك" else strings.addConnection,
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    TextButton(onClick = onDismiss) {
+                        Text("إلغاء", color = Color.Gray, fontSize = 13.sp)
+                    }
+                    Button(
+                        colors = ButtonDefaults.buttonColors(containerColor = gold),
+                        shape = RoundedCornerShape(10.dp),
+                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
+                        onClick = { submitConnection() }
+                    ) {
+                        Text("حفظ واتصال", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    }
+                }
+            }
+
+            Column(
+                modifier = Modifier
+                    .heightIn(max = 360.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     listOf("XTREAM" to "Xtream Codes", "M3U" to "قائمة M3U", "STALKER" to "Stalker MAC").forEach { (mode, label) ->
                         val active = selectedMode == mode
@@ -1157,50 +1230,6 @@ fun SmartAddConnectionDialog(
                     }
                 }
             }
-        },
-        confirmButton = {
-            Button(
-                colors = ButtonDefaults.buttonColors(containerColor = gold),
-                onClick = {
-                    val finalLabel = subLabel.trim().ifEmpty {
-                        when (selectedMode) {
-                            "XTREAM" -> username.trim().ifEmpty { "Xtream VIP" }
-                            "STALKER" -> "Stalker MAC"
-                            else -> "M3U Playlist"
-                        }
-                    }
-                    val sub = when (selectedMode) {
-                        "XTREAM" -> SavedSubscription(
-                            id = editingSub?.id ?: UUID.randomUUID().toString(),
-                            label = finalLabel,
-                            type = "XTREAM",
-                            host = host.trim(),
-                            username = username.trim(),
-                            password = password.trim()
-                        )
-                        "M3U" -> SavedSubscription(
-                            id = editingSub?.id ?: UUID.randomUUID().toString(),
-                            label = finalLabel,
-                            type = "M3U",
-                            host = m3uUrl.trim(),
-                            m3uUrl = m3uUrl.trim()
-                        )
-                        else -> SavedSubscription(
-                            id = editingSub?.id ?: UUID.randomUUID().toString(),
-                            label = finalLabel,
-                            type = "STALKER",
-                            host = host.trim(),
-                            macAddress = macAddress.trim()
-                        )
-                    }
-                    onSaveAndConnect(sub)
-                }
-            ) {
-                Text("حفظ واتصال", color = Color.Black, fontWeight = FontWeight.Bold)
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("إلغاء", color = Color.Gray) }
         }
-    )
+    }
 }
