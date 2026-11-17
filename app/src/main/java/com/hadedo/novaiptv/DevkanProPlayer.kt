@@ -1,1236 +1,1006 @@
 package com.hadedo.novaiptv
 
+import android.app.Activity
+import android.app.PictureInPictureParams
 import android.content.Context
-import android.content.SharedPreferences
+import android.content.ContextWrapper
+import android.content.pm.ActivityInfo
+import android.content.res.Configuration
 import android.net.Uri
-import android.util.Base64
-import androidx.compose.runtime.mutableStateListOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.security.crypto.EncryptedSharedPreferences
-import androidx.security.crypto.MasterKey
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.withContext
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import org.json.JSONArray
-import org.json.JSONObject
-import java.io.BufferedReader
-import java.io.File
-import java.io.InputStreamReader
-import java.net.URLEncoder
-import java.text.SimpleDateFormat
-import java.util.Date
+import android.os.Build
+import android.util.Rational
+import android.view.ViewGroup
+import android.view.WindowManager
+import android.widget.FrameLayout
+import androidx.activity.compose.BackHandler
+import androidx.annotation.OptIn
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
+import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackException
+import androidx.media3.common.PlaybackParameters
+import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.exoplayer.DefaultLoadControl
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.ui.AspectRatioFrameLayout
+import androidx.media3.ui.PlayerView
+import kotlinx.coroutines.delay
+import org.videolan.libvlc.LibVLC
+import org.videolan.libvlc.Media
+import org.videolan.libvlc.MediaPlayer
+import org.videolan.libvlc.util.VLCVideoLayout
 import java.util.Locale
-import java.util.TimeZone
-import java.util.UUID
-import java.util.concurrent.TimeUnit
 
-data class SavedSubscription(
-val id: String = UUID.randomUUID().toString(),
-val label: String = "اشتراك رئيسي",
-val type: String,
-val host: String,
-val username: String = "",
-val password: String = "",
-val m3uUrl: String = "",
-val macAddress: String = "",
-val status: String = "Active",
-val expDateFormatted: String = "Unlimited",
-val allowedCountries: String = "Global / All",
-val activeCons: String = "1",
-val maxCons: String = "1"
+fun Context.findActivity(): Activity? {
+var ctx = this
+while (ctx is ContextWrapper) {
+if (ctx is Activity) return ctx
+ctx = ctx.baseContext
+}
+return null
+}
+
+private fun formatDurationMs(ms: Long): String {
+if (ms <= 0L) return "00:00"
+val totalSec = ms / 1000
+val hours = totalSec / 3600
+val minutes = (totalSec % 3600) / 60
+val seconds = totalSec % 60
+return if (hours > 0) String.format(Locale.US, "%d:%02d:%02d", hours, minutes, seconds)
+else String.format(Locale.US, "%02d:%02d", minutes, seconds)
+}
+
+@Composable
+fun LegalDisclaimerScreen(lang: String, onAccept: () -> Unit) {
+val gold = Color(0xFFD4AF37)
+val goldLight = Color(0xFFFDE047)
+val title = when (lang) {
+"en" -> "Terms of Use & Legal Disclaimer"
+"de" -> "Nutzungsbedingungen & Rechtlicher Hinweis"
+"tr" -> "Kullanım Koşulları ve Yasal Uyarı"
+else -> "إخلاء المسؤولية القانونية وشروط الاستخدام"
+}
+val body = when (lang) {
+"en" -> "DEVKAN is strictly a media player application. It does NOT provide or include any channels or subscriptions. Users must add their own legally obtained playlists."
+"de" -> "DEVKAN ist ein reiner Medienplayer. Die App enthält keine Kanäle oder Abonnements. Nutzer müssen eigene Wiedergabelisten hinzufügen."
+"tr" -> "DEVKAN yalnızca bir medya oynatıcıdır. Herhangi bir kanal veya abonelik içermez."
+else -> "تطبيق DEVKAN هو مشغل وسائط تقني فقط ولا يتضمن أي قنوات أو اشتراكات مدمجة. يلتزم المستخدم بإضافة اشتراكاته وقوائم التشغيل الخاصة به."
+}
+
+Box(
+modifier = Modifier.fillMaxSize().background(Color(0xFF07070A)).padding(24.dp),
+contentAlignment = Alignment.Center
+) {
+Column(
+modifier = Modifier
+.fillMaxWidth()
+.clip(RoundedCornerShape(24.dp))
+.background(Color(0xFF111116))
+.border(1.dp, gold.copy(alpha = 0.5f), RoundedCornerShape(24.dp))
+.padding(24.dp),
+horizontalAlignment = Alignment.CenterHorizontally,
+verticalArrangement = Arrangement.spacedBy(16.dp)
+) {
+Icon(Icons.Default.VerifiedUser, contentDescription = null, tint = goldLight, modifier = Modifier.size(52.dp))
+Text("DEVKAN 34 VIP", color = goldLight, fontWeight = FontWeight.Black, fontSize = 20.sp, letterSpacing = 1.5.sp)
+Text(title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp, textAlign = TextAlign.Center)
+Text(body, color = Color(0xFFB0B5C0), fontSize = 13.sp, lineHeight = 20.sp, textAlign = TextAlign.Center)
+Button(
+onClick = onAccept,
+colors = ButtonDefaults.buttonColors(containerColor = gold),
+shape = RoundedCornerShape(14.dp),
+modifier = Modifier.fillMaxWidth().height(50.dp)
+) {
+Text("أوافق وأتابع الدخول / Continue", color = Color.Black, fontWeight = FontWeight.ExtraBold, fontSize = 15.sp)
+}
+}
+}
+}
+
+@Composable
+fun AppLockScreen(lang: String, expectedPin: String, onUnlocked: () -> Unit) {
+var enteredPin by remember { mutableStateOf("") }
+var isError by remember { mutableStateOf(false) }
+val gold = Color(0xFFD4AF37)
+
+Box(
+modifier = Modifier.fillMaxSize().background(Color(0xFF07070A)).padding(24.dp),
+contentAlignment = Alignment.Center
+) {
+Column(
+modifier = Modifier
+.fillMaxWidth()
+.clip(RoundedCornerShape(24.dp))
+.background(Color(0xFF121218))
+.border(1.dp, gold.copy(alpha = 0.4f), RoundedCornerShape(24.dp))
+.padding(24.dp),
+horizontalAlignment = Alignment.CenterHorizontally,
+verticalArrangement = Arrangement.spacedBy(16.dp)
+) {
+Icon(Icons.Default.Lock, contentDescription = null, tint = gold, modifier = Modifier.size(44.dp))
+Text("DEVKAN App Lock", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+OutlinedTextField(
+value = enteredPin,
+onValueChange = {
+if (it.length <= 6) {
+enteredPin = it
+isError = false
+if (it == expectedPin) onUnlocked()
+}
+},
+singleLine = true,
+label = { Text("PIN") },
+isError = isError,
+modifier = Modifier.fillMaxWidth()
 )
-
-data class MediaItemModel(
-val id: String,
-val rawId: String = "",
-val title: String,
-val url: String,
-val fallbackUrl: String = "",
-val group: String,
-val logo: String = "",
-val contentType: String = "LIVE",
-val rating: String = "",
-val year: String = "",
-val originTag: String = "أجنبي",
-val genreTag: String = "دراما",
-val addedTimestamp: Long = 0L,
-val is4k: Boolean = false
-)
-
-data class VodDetailedInfo(
-val title: String,
-val plot: String,
-val cast: String,
-val director: String,
-val releaseDate: String,
-val duration: String,
-val rating: String,
-val backdropUrl: String
-)
-
-data class SeriesEpisodeModel(
-val id: String,
-val episodeNum: Int,
-val seasonNum: Int,
-val title: String,
-val url: String,
-val duration: String = ""
-)
-
-data class SeriesDetailedInfo(
-val title: String,
-val plot: String,
-val cast: String,
-val releaseDate: String,
-val rating: String,
-val backdropUrl: String,
-val seasons: Map<Int, List<SeriesEpisodeModel>>
-)
-
-data class RealSportsMatch(
-val id: String,
-val homeTeam: String,
-val awayTeam: String,
-val homeLogo: String = "",
-val awayLogo: String = "",
-val scoreText: String = "VS",
-val league: String,
-val matchTime: String,
-val status: String,
-val isLive: Boolean = false,
-val suggestedBroadcaster: String = "beIN SPORTS"
-)
-
-enum class AutoSyncInterval(val days: Int, val labelAr: String, val labelEn: String) {
-DAILY(1, "كل يوم (24 ساعة)", "Every Day (24h)"),
-WEEKLY(7, "كل أسبوع (7 أيام)", "Every Week (7d)"),
-MONTHLY(30, "كل شهر (30 يوماً)", "Every Month (30d)"),
-MANUAL(0, "يدوي فقط", "Manual Only")
-}
-
-enum class EngineType(val labelAr: String, val labelEn: String, val labelDe: String, val labelTr: String) {
-AUTO_HYBRID("تلقائي هجين (Media3 + LibVLC)", "Auto Hybrid (Media3 + VLC)", "Auto-Hybrid (Media3 + LibVLC)", "Otomatik Hibrit (Media3 + LibVLC)"),
-MEDIA3_ONLY("Media3 ExoPlayer (فائق السرعة)", "Media3 ExoPlayer (Fast Zapping)", "Media3 ExoPlayer (Schnell)", "Media3 ExoPlayer (Hızlı)"),
-LIBVLC_ONLY("LibVLC (للترميزات الصعبة AC3/TS)", "LibVLC (Advanced Codecs)", "LibVLC (Erweiterte Codecs)", "LibVLC (Gelişmiş Kodekler)")
-}
-
-enum class DnsProvider(val label: String, val dohUrl: String, val ips: List<String>) {
-SYSTEM("تلقائي (DNS النظام)", "", emptyList()),
-CLOUDFLARE("Cloudflare (1.1.1.1)", "https://cloudflare-dns.com/dns-query", listOf("1.1.1.1", "1.0.0.1")),
-GOOGLE("Google (8.8.8.8)", "https://dns.google/dns-query", listOf("8.8.8.8", "8.8.4.4")),
-ADGUARD("AdGuard (حظر إعلانات)", "https://dns.adguard-dns.com/dns-query", listOf("94.140.14.14", "94.140.15.15"))
-}
-
-data class StreamDiagnostics(
-val activeEngine: String = "Media3 ExoPlayer",
-val pingMs: Long = 0L,
-val startupTimeMs: Long = 0L,
-val bitrateKbps: Int = 0,
-val bufferDurationMs: Long = 0L,
-val reconnectCount: Int = 0,
-val statusNote: String = "مستقر"
-)
-
-object DevkanVault {
-private var cachedPrefs: SharedPreferences? = null
-
-private fun getSecurePrefs(context: Context): SharedPreferences {
-cachedPrefs?.let { return it }
-val prefs = try {
-val masterKey = MasterKey.Builder(context)
-.setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-.build()
-EncryptedSharedPreferences.create(
-context,
-"devkan_secure_vault_v5",
-masterKey,
-EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
-)
-} catch (e: Exception) {
-context.getSharedPreferences("devkan_fallback_prefs_v5", Context.MODE_PRIVATE)
-}
-cachedPrefs = prefs
-return prefs
-}
-
-fun isDisclaimerAccepted(context: Context): Boolean =
-getSecurePrefs(context).getBoolean("disclaimer_accepted", false)
-
-fun setDisclaimerAccepted(context: Context, accepted: Boolean) {
-getSecurePrefs(context).edit().putBoolean("disclaimer_accepted", accepted).apply()
-}
-
-fun getLanguage(context: Context): String =
-getSecurePrefs(context).getString("app_lang", "ar") ?: "ar"
-
-fun setLanguage(context: Context, lang: String) {
-getSecurePrefs(context).edit().putString("app_lang", lang).apply()
-}
-
-fun getUserAgent(context: Context): String =
-getSecurePrefs(context).getString("custom_user_agent", "IPTVSmartersPro/3.1.5 (Linux; Android 14)")
-?: "IPTVSmartersPro/3.1.5 (Linux; Android 14)"
-
-fun setUserAgent(context: Context, ua: String) {
-getSecurePrefs(context).edit().putString("custom_user_agent", ua).apply()
-}
-
-fun getDnsProvider(context: Context): DnsProvider {
-val raw = getSecurePrefs(context).getString("custom_dns", DnsProvider.SYSTEM.name)
-return try { DnsProvider.valueOf(raw ?: DnsProvider.SYSTEM.name) } catch (_: Exception) { DnsProvider.SYSTEM }
-}
-
-fun setDnsProvider(context: Context, provider: DnsProvider) {
-getSecurePrefs(context).edit().putString("custom_dns", provider.name).apply()
-}
-
-fun getAppLockPin(context: Context): String =
-getSecurePrefs(context).getString("app_lock_pin", "") ?: ""
-
-fun setAppLockPin(context: Context, pin: String) {
-getSecurePrefs(context).edit().putString("app_lock_pin", pin).apply()
-}
-
-fun isLowLatencyEnabled(context: Context): Boolean =
-getSecurePrefs(context).getBoolean("low_latency_mode", true)
-
-fun setLowLatencyEnabled(context: Context, enabled: Boolean) {
-getSecurePrefs(context).edit().putBoolean("low_latency_mode", enabled).apply()
-}
-
-fun isGeoBypassEnabled(context: Context): Boolean =
-getSecurePrefs(context).getBoolean("geo_bypass_headers", true)
-
-fun setGeoBypassEnabled(context: Context, enabled: Boolean) {
-getSecurePrefs(context).edit().putBoolean("geo_bypass_headers", enabled).apply()
-}
-
-fun isAutoResumeEnabled(context: Context): Boolean =
-getSecurePrefs(context).getBoolean("auto_resume_last", false)
-
-fun setAutoResumeEnabled(context: Context, enabled: Boolean) {
-getSecurePrefs(context).edit().putBoolean("auto_resume_last", enabled).apply()
-}
-
-fun getAutoSyncInterval(context: Context): AutoSyncInterval {
-val raw = getSecurePrefs(context).getString("auto_sync_interval", AutoSyncInterval.DAILY.name)
-return try { AutoSyncInterval.valueOf(raw ?: AutoSyncInterval.DAILY.name) } catch (_: Exception) { AutoSyncInterval.DAILY }
-}
-
-fun setAutoSyncInterval(context: Context, interval: AutoSyncInterval) {
-getSecurePrefs(context).edit().putString("auto_sync_interval", interval.name).apply()
-}
-
-fun shouldRunBackgroundSync(context: Context): Boolean {
-val interval = getAutoSyncInterval(context)
-if (interval == AutoSyncInterval.MANUAL || interval.days <= 0) return false
-val activeId = getSavedSubscription(context)?.id ?: "default"
-val lastSync = getSecurePrefs(context).getLong("last_catalog_sync_ms_$activeId", 0L)
-return (System.currentTimeMillis() - lastSync) >= interval.days * 86400000L
-}
-
-fun markCatalogSyncedNow(context: Context, subId: String = getSavedSubscription(context)?.id ?: "default") {
-getSecurePrefs(context).edit().putLong("last_catalog_sync_ms_$subId", System.currentTimeMillis()).apply()
-}
-
-fun getAllSubscriptions(context: Context): MutableList<SavedSubscription> {
-val prefs = getSecurePrefs(context)
-val raw = prefs.getString("multi_subs_json", null)
-val list = mutableListOf<SavedSubscription>()
-if (!raw.isNullOrEmpty()) {
-try {
-val arr = JSONArray(raw)
-for (i in 0 until arr.length()) {
-val o = arr.getJSONObject(i)
-list.add(
-SavedSubscription(
-id = o.optString("id", UUID.randomUUID().toString()),
-label = o.optString("label", "اشتراك ${i + 1}"),
-type = o.optString("type", "XTREAM"),
-host = o.optString("host"),
-username = o.optString("username"),
-password = o.optString("password"),
-m3uUrl = o.optString("m3uUrl"),
-macAddress = o.optString("macAddress"),
-status = o.optString("status", "Active"),
-expDateFormatted = o.optString("expDateFormatted", "Unlimited"),
-allowedCountries = o.optString("allowedCountries", "Global / All"),
-activeCons = o.optString("activeCons", "1"),
-maxCons = o.optString("maxCons", "1")
-)
-)
-}
-} catch (_: Exception) { }
-}
-if (list.isEmpty()) {
-val oldType = prefs.getString("sub_type", null)
-if (oldType != null) {
-val migrated = SavedSubscription(
-id = "default_sub",
-label = prefs.getString("sub_user", "اشتراك 1")?.ifEmpty { "اشتراك 1" } ?: "اشتراك 1",
-type = oldType,
-host = prefs.getString("sub_host", "") ?: "",
-username = prefs.getString("sub_user", "") ?: "",
-password = prefs.getString("sub_pass", "") ?: "",
-m3uUrl = prefs.getString("sub_m3u", "") ?: "",
-macAddress = prefs.getString("sub_mac", "") ?: "",
-status = prefs.getString("sub_status", "Active") ?: "Active",
-expDateFormatted = prefs.getString("sub_exp", "Unlimited") ?: "Unlimited",
-allowedCountries = prefs.getString("sub_countries", "Global") ?: "Global",
-activeCons = prefs.getString("sub_active_cons", "1") ?: "1",
-maxCons = prefs.getString("sub_max_cons", "1") ?: "1"
-)
-list.add(migrated)
-saveAllSubscriptions(context, list, migrated.id)
+Button(
+onClick = { if (enteredPin == expectedPin) onUnlocked() else isError = true },
+colors = ButtonDefaults.buttonColors(containerColor = gold),
+modifier = Modifier.fillMaxWidth()
+) {
+Text("Unlock / فتح", color = Color.Black, fontWeight = FontWeight.Bold)
 }
 }
-return list
-}
-
-private fun saveAllSubscriptions(context: Context, list: List<SavedSubscription>, activeId: String?) {
-val arr = JSONArray()
-list.forEach { s ->
-arr.put(JSONObject().apply {
-put("id", s.id)
-put("label", s.label)
-put("type", s.type)
-put("host", s.host)
-put("username", s.username)
-put("password", s.password)
-put("m3uUrl", s.m3uUrl)
-put("macAddress", s.macAddress)
-put("status", s.status)
-put("expDateFormatted", s.expDateFormatted)
-put("allowedCountries", s.allowedCountries)
-put("activeCons", s.activeCons)
-put("maxCons", s.maxCons)
-})
-}
-val ed = getSecurePrefs(context).edit().putString("multi_subs_json", arr.toString())
-if (activeId != null) ed.putString("active_sub_id", activeId)
-ed.apply()
-}
-
-fun saveSubscription(context: Context, sub: SavedSubscription) {
-val list = getAllSubscriptions(context)
-val idx = list.indexOfFirst { it.id == sub.id }
-if (idx != -1) list[idx] = sub else list.add(sub)
-saveAllSubscriptions(context, list, sub.id)
-}
-
-fun switchActiveSubscription(context: Context, subId: String) {
-getSecurePrefs(context).edit().putString("active_sub_id", subId).apply()
-}
-
-fun getSavedSubscription(context: Context): SavedSubscription? {
-val list = getAllSubscriptions(context)
-if (list.isEmpty()) return null
-val activeId = getSecurePrefs(context).getString("active_sub_id", null)
-return list.find { it.id == activeId } ?: list.first()
-}
-
-fun deleteSubscriptionById(context: Context, subId: String) {
-val list = getAllSubscriptions(context).filterNot { it.id == subId }
-val nextId = list.firstOrNull()?.id ?: ""
-saveAllSubscriptions(context, list, nextId)
-try {
-File(context.filesDir, "devkan_cache_$subId.json").delete()
-if (list.isEmpty()) {
-File(context.filesDir, "devkan_cached_playlist_v5.json").delete()
-File(context.filesDir, "devkan_cached_sports_epg_v5.json").delete()
-}
-} catch (_: Exception) { }
-}
-
-fun clearSubscription(context: Context) {
-val active = getSavedSubscription(context)
-if (active != null) deleteSubscriptionById(context, active.id)
-}
-
-fun saveLastChannel(context: Context, url: String, title: String) {
-getSecurePrefs(context).edit()
-.putString("last_channel_url", url)
-.putString("last_channel_title", title)
-.apply()
-}
-
-fun getLastChannel(context: Context): Pair<String, String>? {
-val prefs = getSecurePrefs(context)
-val url = prefs.getString("last_channel_url", null) ?: return null
-val title = prefs.getString("last_channel_title", "Last Channel") ?: "Last Channel"
-return url to title
-}
-
-fun saveVodProgress(context: Context, streamId: String, positionMs: Long, durationMs: Long) {
-val progressFraction = if (durationMs > 0L) (positionMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f) else 0f
-getSecurePrefs(context).edit()
-.putLong("vod_pos_$streamId", positionMs)
-.putFloat("vod_frac_$streamId", progressFraction)
-.apply()
-}
-
-fun getVodPosition(context: Context, streamId: String): Long =
-getSecurePrefs(context).getLong("vod_pos_$streamId", 0L)
-
-fun getVodProgressFraction(context: Context, streamId: String): Float =
-getSecurePrefs(context).getFloat("vod_frac_$streamId", 0f)
-
-fun savePreferredEngine(context: Context, engine: EngineType) {
-getSecurePrefs(context).edit().putString("preferred_engine", engine.name).apply()
-}
-
-fun getPreferredEngine(context: Context): EngineType {
-val raw = getSecurePrefs(context).getString("preferred_engine", EngineType.AUTO_HYBRID.name)
-return try { EngineType.valueOf(raw ?: EngineType.AUTO_HYBRID.name) } catch (e: Exception) { EngineType.AUTO_HYBRID }
-}
-
-// تخزين كاش منفصل لكل اشتراك لتبديل فوري وسريع
-fun saveCachedItems(context: Context, items: List<MediaItemModel>, subId: String = getSavedSubscription(context)?.id ?: "default") {
-try {
-val arr = JSONArray()
-items.forEach { item ->
-arr.put(JSONObject().apply {
-put("id", item.id)
-put("rawId", item.rawId)
-put("title", item.title)
-put("url", item.url)
-put("fallbackUrl", item.fallbackUrl)
-put("group", item.group)
-put("logo", item.logo)
-put("contentType", item.contentType)
-put("rating", item.rating)
-put("year", item.year)
-put("originTag", item.originTag)
-put("genreTag", item.genreTag)
-put("addedTimestamp", item.addedTimestamp)
-put("is4k", item.is4k)
-})
-}
-File(context.filesDir, "devkan_cache_$subId.json").writeText(arr.toString())
-markCatalogSyncedNow(context, subId)
-} catch (_: Exception) { }
-}
-
-fun getCachedItems(context: Context, subId: String = getSavedSubscription(context)?.id ?: "default"): List<MediaItemModel> {
-return try {
-var file = File(context.filesDir, "devkan_cache_$subId.json")
-if (!file.exists()) {
-file = File(context.filesDir, "devkan_cached_playlist_v5.json")
-}
-if (!file.exists()) return emptyList()
-val arr = JSONArray(file.readText())
-val list = ArrayList<MediaItemModel>(arr.length())
-for (i in 0 until arr.length()) {
-val obj = arr.getJSONObject(i)
-list.add(
-MediaItemModel(
-id = obj.optString("id"),
-rawId = obj.optString("rawId"),
-title = obj.optString("title"),
-url = obj.optString("url"),
-fallbackUrl = obj.optString("fallbackUrl"),
-group = obj.optString("group"),
-logo = obj.optString("logo"),
-contentType = obj.optString("contentType", "LIVE"),
-rating = obj.optString("rating"),
-year = obj.optString("year"),
-originTag = obj.optString("originTag", "أجنبي"),
-genreTag = obj.optString("genreTag", "دراما"),
-addedTimestamp = obj.optLong("addedTimestamp", 0L),
-is4k = obj.optBoolean("is4k", false)
-)
-)
-}
-list
-} catch (_: Exception) { emptyList() }
-}
-
-fun saveCachedSportsEpg(context: Context, programs: List<EpgProgram>) {
-try {
-val arr = JSONArray()
-programs.forEach { p ->
-arr.put(JSONObject().apply {
-put("id", p.id)
-put("channelId", p.channelId)
-put("channelName", p.channelName)
-put("channelLogo", p.channelLogo ?: "")
-put("streamQuality", p.streamQuality ?: "")
-put("title", p.title)
-put("description", p.description ?: "")
-put("startTime", p.startTime)
-put("endTime", p.endTime)
-put("category", p.category ?: "")
-put("isSports", p.isSports)
-put("homeTeam", p.homeTeam ?: "")
-put("awayTeam", p.awayTeam ?: "")
-put("competition", p.competition ?: "")
-})
-}
-File(context.filesDir, "devkan_cached_sports_epg_v5.json").writeText(arr.toString())
-} catch (_: Exception) { }
-}
-
-fun getCachedSportsEpg(context: Context): List<EpgProgram> {
-return try {
-val file = File(context.filesDir, "devkan_cached_sports_epg_v5.json")
-if (!file.exists()) return emptyList()
-val arr = JSONArray(file.readText())
-val list = ArrayList<EpgProgram>(arr.length())
-for (i in 0 until arr.length()) {
-val obj = arr.getJSONObject(i)
-list.add(
-EpgProgram(
-id = obj.optString("id"),
-channelId = obj.optString("channelId"),
-channelName = obj.optString("channelName"),
-channelLogo = obj.optString("channelLogo").ifEmpty { null },
-streamQuality = obj.optString("streamQuality").ifEmpty { null },
-title = obj.optString("title"),
-description = obj.optString("description").ifEmpty { null },
-startTime = obj.optLong("startTime"),
-endTime = obj.optLong("endTime"),
-category = obj.optString("category").ifEmpty { null },
-isSports = obj.optBoolean("isSports", false),
-homeTeam = obj.optString("homeTeam").ifEmpty { null },
-awayTeam = obj.optString("awayTeam").ifEmpty { null },
-competition = obj.optString("competition").ifEmpty { null }
-)
-)
-}
-list
-} catch (_: Exception) { emptyList() }
 }
 }
 
-object EngineCoordinator {
-val currentDiagnostics = mutableStateOf(StreamDiagnostics())
+@OptIn(UnstableApi::class)
+@Composable
+fun DevkanHybridPlayerScreen(
+streamUrl: String,
+fallbackUrl: String = "",
+streamTitle: String,
+isVodOrSeries: Boolean = false,
+streamId: String = "",
+quickChannels: List<MediaItemModel> = emptyList(),
+onSwitchChannel: (MediaItemModel) -> Unit = {},
+lang: String = "ar",
+onBack: () -> Unit
+) {
+val context = LocalContext.current
+val activity = remember(context) { context.findActivity() }
+val configuration = LocalConfiguration.current
+val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+val gold = Color(0xFFD4AF37)
 
-fun selectInitialEngine(
-url: String,
-preferred: EngineType,
-isSportsSection: Boolean = false
-): EngineType {
-val manualOverride = when (preferred) {
-EngineType.MEDIA3_ONLY -> PlayerEngine.MEDIA3_EXOPLAYER
-EngineType.LIBVLC_ONLY -> PlayerEngine.LIB_VLC
-EngineType.AUTO_HYBRID -> null
+val preferredEngine = remember { DevkanVault.getPreferredEngine(context) }
+val lowLatency = remember { DevkanVault.isLowLatencyEnabled(context) }
+val geoBypass = remember { DevkanVault.isGeoBypassEnabled(context) }
+val customUserAgent = remember { DevkanVault.getUserAgent(context) }
+
+var currentUrl by remember(streamUrl) { mutableStateOf(streamUrl) }
+var triedFallback by remember(streamUrl) { mutableStateOf(false) }
+var activeEngine by remember(streamUrl) {
+mutableStateOf(EngineCoordinator.selectInitialEngine(streamUrl, preferredEngine))
 }
-if (isSportsSection) {
-val config = PlayerEngineRouter.resolvePlaybackConfig(
-isSportsSection = true,
-manualOverrideEngine = manualOverride
-)
-return if (config.engine == PlayerEngine.LIB_VLC) EngineType.LIBVLC_ONLY else EngineType.MEDIA3_ONLY
-}
-if (preferred != EngineType.AUTO_HYBRID) return preferred
-val lower = url.lowercase()
-return if (lower.endsWith(".ts") || lower.endsWith(".avi") || lower.contains("mpegts") || lower.contains("rtsp://")) {
-EngineType.LIBVLC_ONLY
+
+var controlsVisible by remember { mutableStateOf(true) }
+var isLocked by remember { mutableStateOf(false) }
+var isPaused by remember { mutableStateOf(false) }
+var showQuickDrawer by remember { mutableStateOf(false) }
+var drawerSearchQuery by remember { mutableStateOf("") }
+var currentPosMs by remember { mutableLongStateOf(0L) }
+var totalDurMs by remember { mutableLongStateOf(0L) }
+
+var scaleIndex by remember { mutableIntStateOf(if (isLandscape) 1 else 0) }
+var playbackSpeed by remember { mutableFloatStateOf(1.0f) }
+var reconnectAttempts by remember { mutableIntStateOf(0) }
+var isReconnecting by remember { mutableStateOf(false) }
+var showDiagnostics by remember { mutableStateOf(false) }
+var seekFeedbackText by remember { mutableStateOf<String?>(null) }
+var vlcPlayerRef by remember { mutableStateOf<MediaPlayer?>(null) }
+
+val startTimestamp = remember(currentUrl) { System.currentTimeMillis() }
+var startupMs by remember(currentUrl) { mutableLongStateOf(0L) }
+
+DisposableEffect(activity, isPaused) {
+val window = activity?.window
+if (window != null) {
+if (!isPaused) {
+window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 } else {
-EngineType.MEDIA3_ONLY
+window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 }
 }
-
-fun getAdaptiveBufferMs(lowLatency: Boolean): Triple<Int, Int, Int> {
-return if (lowLatency) Triple(1800, 6000, 450) else Triple(6000, 20000, 1200)
-}
-
-fun buildSmartHeaders(geoBypass: Boolean, customUserAgent: String = "IPTVSmartersPro/3.1.5 (Linux; Android 14)"): Map<String, String> {
-val headers = mutableMapOf(
-"User-Agent" to customUserAgent,
-"Accept" to "*/*",
-"Connection" to "keep-alive"
-)
-if (geoBypass) {
-headers["X-Forwarded-For"] = "104.28.14.12"
-headers["CF-IPCountry"] = "US"
-}
-return headers
-}
-
-suspend fun runServerSpeedAndPingTest(serverUrl: String): Pair<Long, Double> = withContext(Dispatchers.IO) {
-val client = OkHttpClient.Builder()
-.connectTimeout(6, TimeUnit.SECONDS)
-.readTimeout(6, TimeUnit.SECONDS)
-.build()
-val cleanUrl = if (serverUrl.startsWith("http")) serverUrl else "https://www.google.com"
-return@withContext try {
-val startPing = System.currentTimeMillis()
-client.newCall(Request.Builder().url(cleanUrl).head().build()).execute().use { }
-val ping = (System.currentTimeMillis() - startPing).coerceAtLeast(12L)
-val startDl = System.currentTimeMillis()
-var bytesRead = 0L
-client.newCall(Request.Builder().url(cleanUrl).get().build()).execute().use { resp ->
-val stream = resp.body?.byteStream()
-val buf = ByteArray(8192)
-var read = 0
-while (stream != null && stream.read(buf).also { read = it } != -1 && bytesRead < 250_000) {
-bytesRead += read
-}
-}
-val elapsedSec = ((System.currentTimeMillis() - startDl).coerceAtLeast(50L)) / 1000.0
-val mbps = ((bytesRead * 8.0) / 1_000_000.0) / elapsedSec
-ping to String.format(Locale.US, "%.1f", mbps.coerceIn(1.5, 150.0)).toDouble()
-} catch (e: Exception) {
-999L to 0.0
-}
-}
-}
-
-object DevkanPlaylistRepository {
-private fun buildClient(geoBypass: Boolean, userAgent: String = "IPTVSmartersPro/3.1.5 (Linux; Android 14)"): OkHttpClient {
-return OkHttpClient.Builder()
-.connectTimeout(12, TimeUnit.SECONDS)
-.readTimeout(25, TimeUnit.SECONDS)
-.addInterceptor { chain ->
-val builder = chain.request().newBuilder()
-.header("User-Agent", userAgent)
-if (geoBypass) {
-builder.header("X-Forwarded-For", "104.28.14.12")
-builder.header("CF-IPCountry", "US")
-}
-chain.proceed(builder.build())
-}
-.build()
-}
-
-private fun detectOriginTag(group: String, title: String): String {
-val text = "$group $title".lowercase()
-return when {
-text.contains("korean") || text.contains("كوري") || text.contains("كوريا") || text.contains("korea") || text.contains("kdrama") || text.contains("آسيوي") || text.contains("asian") -> "كوري"
-text.contains("indian") || text.contains("bollywood") || text.contains("هندي") || text.contains("بوليوود") || text.contains("hindi") -> "هندي"
-text.contains("turkish") || text.contains("تركي") || text.contains("تركيا") || text.contains("مترجم تركي") || text.contains("مدبلج تركي") -> "تركي"
-text.contains("arab") || text.contains("عربي") || text.contains("عربية") || text.contains("egypt") || text.contains("مصري") || text.contains("خليجي") || text.contains("سوري") || text.contains("عراقي") || text.contains("رمضان") || Regex("[\\u0600-\\u06FF]").containsMatchIn(title) -> "عربي"
-else -> "أجنبي"
-}
-}
-
-private fun detectGenreTag(group: String, title: String): String {
-val text = "$group $title".lowercase()
-return when {
-text.contains("sci-fi") || text.contains("scifi") || text.contains("science") || text.contains("fantasy") || text.contains("خيال") || text.contains("فانتازيا") -> "خيال علمي"
-text.contains("romance") || text.contains("romantic") || text.contains("رومانسي") || text.contains("حب") -> "رومانسي"
-text.contains("horror") || text.contains("thriller") || text.contains("رعب") || text.contains("إثارة") || text.contains("غموض") -> "رعب وإثارة"
-text.contains("action") || text.contains("أكشن") || text.contains("اكشن") || text.contains("war") || text.contains("حرب") || text.contains("قتال") -> "أكشن"
-text.contains("comedy") || text.contains("كوميد") -> "كوميدي"
-text.contains("history") || text.contains("historical") || text.contains("تاريخ") -> "تاريخي"
-text.contains("anime") || text.contains("cartoon") || text.contains("kids") || text.contains("انمي") || text.contains("أنمي") || text.contains("أطفال") -> "أنمي وعائلي"
-else -> "دراما"
-}
-}
-
-private fun checkIs4K(group: String, title: String): Boolean {
-val text = "$group $title".uppercase()
-return text.contains("4K") || text.contains("UHD") || text.contains("2160P")
-}
-
-private fun detectStreamQuality(title: String): String {
-val t = title.uppercase()
-return when {
-t.contains("4K") || t.contains("UHD") -> "4K"
-t.contains("FHD") || t.contains("1080") -> "FHD"
-t.contains("HD") || t.contains("720") -> "HD"
-else -> "SD"
-}
-}
-
-fun deduplicateSportChannels(channels: List<MediaItemModel>): List<MediaItemModel> {
-val seenNormalized = mutableSetOf<String>()
-val result = mutableListOf<MediaItemModel>()
-val sorted = channels.sortedByDescending { ch ->
-val t = ch.title.uppercase()
-when {
-t.contains("4K") || t.contains("UHD") -> 4
-t.contains("FHD") || t.contains("1080") -> 3
-t.contains("HD") -> 2
-else -> 1
-}
-}
-for (ch in sorted) {
-val cleanKey = ch.title.uppercase()
-.replace(Regex("\\b(4K|UHD|FHD|HD|SD|LOW|HEVC|H265|VIP|BACKUP|BK|1080P|720P)\\b"), "")
-.replace(Regex("[^A-Z0-9\\u0600-\\u06FF]"), "")
-.trim()
-if (cleanKey.isNotEmpty() && !seenNormalized.contains(cleanKey)) {
-seenNormalized.add(cleanKey)
-result.add(ch)
-}
-}
-return result
-}
-
-suspend fun syncAndClassifySportsEpg(
-context: Context,
-sub: SavedSubscription,
-liveChannels: List<MediaItemModel>
-): ClassifiedSportsData = withContext(Dispatchers.IO) {
-if (sub.type != "XTREAM") {
-val cached = DevkanVault.getCachedSportsEpg(context)
-return@withContext EpgSportsPipeline.classifyAndGroupSports(cached)
-}
-val sportsChannels = liveChannels.filter {
-it.contentType == "LIVE" && SportsMatchExtractor.isSportsProgram(it.group, it.title, null)
-}.take(30)
-val client = buildClient(true)
-val cleanHost = sub.host.trimEnd('/')
-val u = URLEncoder.encode(sub.username, "UTF-8")
-val p = URLEncoder.encode(sub.password, "UTF-8")
-val enrichedList = coroutineScope {
-sportsChannels.filter { it.rawId.isNotBlank() }.map { ch ->
-async {
-val localList = mutableListOf<EpgProgram>()
+onDispose {
 try {
-val url = "$cleanHost/player_api.php?username=$u&password=$p&action=get_short_epg&stream_id=${ch.rawId}&limit=4"
-client.newCall(Request.Builder().url(url).build()).execute().use { resp ->
-val listings = JSONObject(resp.body?.string() ?: "{}").optJSONArray("epg_listings") ?: JSONArray()
-for (i in 0 until listings.length()) {
-val item = listings.getJSONObject(i)
-val startMs = EpgSportsPipeline.resolveXtreamTimestamp(
-unixSeconds = item.optLong("start_timestamp", 0L),
-rawDateStr = item.optString("start", "")
-)
-val endMs = EpgSportsPipeline.resolveXtreamTimestamp(
-unixSeconds = item.optLong("stop_timestamp", 0L),
-rawDateStr = item.optString("end", "")
-)
-if (startMs > 0L && endMs > startMs) {
-localList.add(
-EpgSportsPipeline.enrichProgramForStorage(
-EpgProgram(
-id = item.optString("id", "${ch.rawId}_$i"),
-channelId = ch.rawId,
-channelName = ch.title,
-channelLogo = ch.logo.ifEmpty { null },
-streamQuality = detectStreamQuality(ch.title),
-title = item.optString("title", ""),
-description = item.optString("description", ""),
-startTime = startMs,
-endTime = endMs,
-category = ch.group
-)
-)
-)
-}
-}
-}
-} catch (_: Exception) { }
-localList
-}
-}.awaitAll().flatten()
-}
-if (enrichedList.isNotEmpty()) {
-DevkanVault.saveCachedSportsEpg(context, enrichedList)
-return@withContext EpgSportsPipeline.classifyAndGroupSports(enrichedList)
-}
-EpgSportsPipeline.classifyAndGroupSports(DevkanVault.getCachedSportsEpg(context))
-}
-
-suspend fun fetchChannelShortEpg(sub: SavedSubscription, streamRawId: String): Pair<String, String> = withContext(Dispatchers.IO) {
-if (sub.type != "XTREAM" || streamRawId.isEmpty()) return@withContext ("البث المباشر المستمر" to "البرنامج التالي")
-val client = buildClient(true)
-try {
-val cleanHost = sub.host.trimEnd('/')
-val url = "$cleanHost/player_api.php?username=${URLEncoder.encode(sub.username, "UTF-8")}&password=${URLEncoder.encode(sub.password, "UTF-8")}&action=get_short_epg&stream_id=$streamRawId&limit=2"
-client.newCall(Request.Builder().url(url).build()).execute().use { resp ->
-val listings = JSONObject(resp.body?.string() ?: "{}").optJSONArray("epg_listings") ?: JSONArray()
-if (listings.length() > 0) {
-val nowRaw = listings.getJSONObject(0).optString("title", "")
-val nowTitle = try { String(Base64.decode(nowRaw, Base64.DEFAULT)) } catch (_: Exception) { nowRaw }
-val nextRaw = if (listings.length() > 1) listings.getJSONObject(1).optString("title", "") else ""
-val nextTitle = try { String(Base64.decode(nextRaw, Base64.DEFAULT)) } catch (_: Exception) { nextRaw }
-if (nowTitle.isNotBlank()) return@withContext (nowTitle.trim() to nextTitle.trim().ifEmpty { "البث المستمر" })
-}
-}
-} catch (_: Exception) { }
-"البث المباشر المستمر" to "البرنامج التالي على الجدول"
-}
-
-suspend fun loadSubscriptionContent(
-sub: SavedSubscription,
-geoBypass: Boolean = true
-): Pair<SavedSubscription, List<MediaItemModel>> = withContext(Dispatchers.IO) {
-val client = buildClient(geoBypass)
-val items = mutableListOf<MediaItemModel>()
-var updatedSub = sub
-
-try {
-when (sub.type) {
-"XTREAM" -> {
-val cleanHost = sub.host.trimEnd('/')
-val u = URLEncoder.encode(sub.username, "UTF-8")
-val p = URLEncoder.encode(sub.password, "UTF-8")
-val baseApi = "$cleanHost/player_api.php?username=$u&password=$p"
-
-coroutineScope {
-val infoTask = async {
-try {
-client.newCall(Request.Builder().url(baseApi).build()).execute().use { resp ->
-val userInfo = JSONObject(resp.body?.string() ?: "{}").optJSONObject("user_info")
-if (userInfo != null) {
-val status = userInfo.optString("status", "Active")
-val expRaw = userInfo.optString("exp_date", "")
-val expFormatted = if (expRaw.isNotEmpty() && expRaw != "null") {
-val millis = expRaw.toLongOrNull()?.times(1000L) ?: 0L
-if (millis > 0L) SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date(millis)) else "Unlimited"
-} else "Unlimited"
-val allowedRaw = userInfo.optString("allowed_countries", "")
-val countries = if (allowedRaw.isNotEmpty() && allowedRaw != "[]" && allowedRaw != "null") allowedRaw else "Global / All Countries"
-updatedSub = updatedSub.copy(
-status = status,
-expDateFormatted = expFormatted,
-allowedCountries = countries,
-activeCons = userInfo.optString("active_cons", "1"),
-maxCons = userInfo.optString("max_connections", "1")
-)
-}
-}
+window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 } catch (_: Exception) { }
 }
-
-val liveCatTask = async {
-val map = mutableMapOf<String, String>()
-try {
-client.newCall(Request.Builder().url("$baseApi&action=get_live_categories").build()).execute().use { resp ->
-val arr = JSONArray(resp.body?.string() ?: "[]")
-for (i in 0 until arr.length()) {
-val obj = arr.getJSONObject(i)
-map[obj.optString("category_id")] = obj.optString("category_name", "Live TV")
-}
-}
-} catch (_: Exception) { }
-map
 }
 
-val vodCatTask = async {
-val map = mutableMapOf<String, String>()
-try {
-client.newCall(Request.Builder().url("$baseApi&action=get_vod_categories").build()).execute().use { resp ->
-val arr = JSONArray(resp.body?.string() ?: "[]")
-for (i in 0 until arr.length()) {
-val obj = arr.getJSONObject(i)
-map[obj.optString("category_id")] = obj.optString("category_name", "Movies")
-}
-}
-} catch (_: Exception) { }
-map
+LaunchedEffect(isLandscape) {
+scaleIndex = if (isLandscape) 1 else 0
 }
 
-val seriesCatTask = async {
-val map = mutableMapOf<String, String>()
-try {
-client.newCall(Request.Builder().url("$baseApi&action=get_series_categories").build()).execute().use { resp ->
-val arr = JSONArray(resp.body?.string() ?: "[]")
-for (i in 0 until arr.length()) {
-val obj = arr.getJSONObject(i)
-map[obj.optString("category_id")] = obj.optString("category_name", "Series")
-}
-}
-} catch (_: Exception) { }
-map
-}
-
-val liveStreamsTask = async {
-val list = mutableListOf<MediaItemModel>()
-try {
-client.newCall(Request.Builder().url("$baseApi&action=get_live_streams").build()).execute().use { resp ->
-val arr = JSONArray(resp.body?.string() ?: "[]")
-val cats = liveCatTask.await()
-for (i in 0 until arr.length()) {
-val obj = arr.getJSONObject(i)
-val id = obj.optString("stream_id")
-val name = obj.optString("name", "Channel $i")
-val icon = obj.optString("stream_icon", "")
-val catName = cats[obj.optString("category_id")] ?: "Live Channels"
-list.add(
-MediaItemModel(
-id = "live_$id",
-rawId = id,
-title = name,
-url = "$cleanHost/live/${sub.username}/${sub.password}/$id.m3u8",
-fallbackUrl = "$cleanHost/live/${sub.username}/${sub.password}/$id.ts",
-group = catName,
-logo = icon,
-contentType = "LIVE"
-)
-)
-}
-}
-} catch (_: Exception) { }
-list
-}
-
-// جلب كامل مكتبة الأفلام بدون اقتطاع (حتى تظهر الكورية والهندية والأقسام كلها)
-val vodStreamsTask = async {
-val list = mutableListOf<MediaItemModel>()
-try {
-client.newCall(Request.Builder().url("$baseApi&action=get_vod_streams").build()).execute().use { resp ->
-val arr = JSONArray(resp.body?.string() ?: "[]")
-val cats = vodCatTask.await()
-val maxLimit = minOf(arr.length(), 8000)
-for (i in 0 until maxLimit) {
-val obj = arr.getJSONObject(i)
-val id = obj.optString("stream_id")
-val name = obj.optString("name", "Movie $i")
-val icon = obj.optString("stream_icon", "")
-val rating = obj.optString("rating", "")
-val addedTs = obj.optString("added", "0").toLongOrNull() ?: 0L
-val ext = obj.optString("container_extension", "mp4").ifEmpty { "mp4" }
-val catName = cats[obj.optString("category_id")] ?: "Movies"
-val yearMatch = Regex("(19|20)\\d{2}").find(name)?.value ?: ""
-list.add(
-MediaItemModel(
-id = "vod_$id",
-rawId = id,
-title = name,
-url = "$cleanHost/movie/${sub.username}/${sub.password}/$id.$ext",
-group = catName,
-logo = icon,
-contentType = "MOVIE",
-rating = rating,
-year = yearMatch,
-originTag = detectOriginTag(catName, name),
-genreTag = detectGenreTag(catName, name),
-addedTimestamp = addedTs,
-is4k = checkIs4K(catName, name)
-)
-)
-}
-}
-} catch (_: Exception) { }
-list
-}
-
-// جلب كامل مكتبة المسلسلات بدون اقتطاع
-val seriesStreamsTask = async {
-val list = mutableListOf<MediaItemModel>()
-try {
-client.newCall(Request.Builder().url("$baseApi&action=get_series").build()).execute().use { resp ->
-val arr = JSONArray(resp.body?.string() ?: "[]")
-val cats = seriesCatTask.await()
-val maxLimit = minOf(arr.length(), 8000)
-for (i in 0 until maxLimit) {
-val obj = arr.getJSONObject(i)
-val id = obj.optString("series_id")
-val name = obj.optString("name", "Series $i")
-val cover = obj.optString("cover", "")
-val rating = obj.optString("rating", "")
-val lastMod = obj.optString("last_modified", "0").toLongOrNull() ?: 0L
-val release = obj.optString("releaseDate", "").take(4).ifEmpty {
-Regex("(19|20)\\d{2}").find(name)?.value ?: ""
-}
-val catName = cats[obj.optString("category_id")] ?: "Series"
-list.add(
-MediaItemModel(
-id = "ser_$id",
-rawId = id,
-title = name,
-url = "",
-group = catName,
-logo = cover,
-contentType = "SERIES",
-rating = rating,
-year = release,
-originTag = detectOriginTag(catName, name),
-genreTag = detectGenreTag(catName, name),
-addedTimestamp = lastMod,
-is4k = checkIs4K(catName, name)
-)
-)
-}
-}
-} catch (_: Exception) { }
-list
-}
-
-infoTask.await()
-items.addAll(liveStreamsTask.await())
-items.addAll(vodStreamsTask.await())
-items.addAll(seriesStreamsTask.await())
-}
-}
-
-"M3U" -> {
-client.newCall(Request.Builder().url(sub.m3uUrl).build()).execute().use { resp ->
-items.addAll(parseM3uLines((resp.body?.string() ?: "").lines()))
-}
-updatedSub = updatedSub.copy(status = "Active (M3U)", expDateFormatted = "M3U Playlist")
-}
-
-"STALKER" -> {
-val cleanPortal = sub.host.trimEnd('/')
-val macEncoded = URLEncoder.encode(sub.macAddress.trim(), "UTF-8")
-val req = Request.Builder()
-.url("$cleanPortal/portal.php?type=stb&action=handshake&token=&JsHttpRequest=1-xml")
-.header("Cookie", "mac=$macEncoded; stb_lang=en; timezone=Europe/Berlin")
-.build()
-var token = ""
-client.newCall(req).execute().use { resp ->
-token = JSONObject(resp.body?.string() ?: "{}").optJSONObject("js")?.optString("token", "") ?: ""
-}
-if (token.isNotEmpty()) {
-val channelsReq = Request.Builder()
-.url("$cleanPortal/portal.php?type=itv&action=get_all_channels&JsHttpRequest=1-xml")
-.header("Cookie", "mac=$macEncoded; stb_lang=en")
-.header("Authorization", "Bearer $token")
-.build()
-client.newCall(channelsReq).execute().use { resp ->
-val dataArr = JSONObject(resp.body?.string() ?: "{}").optJSONObject("js")?.optJSONArray("data") ?: JSONArray()
-for (i in 0 until dataArr.length()) {
-val ch = dataArr.getJSONObject(i)
-val name = ch.optString("name", "Stalker CH $i")
-val cmd = ch.optString("cmd", "").removePrefix("ffmpeg ").trim()
-val logo = ch.optString("logo", "")
-if (cmd.isNotEmpty()) {
-items.add(MediaItemModel("stk_$i", "$i", name, cmd, "", "Stalker TV", logo, "LIVE"))
-}
-}
-}
-updatedSub = updatedSub.copy(status = "Active (Stalker MAC)", expDateFormatted = "Portal Connected")
-}
-}
-}
-} catch (_: Exception) { }
-
-updatedSub to items
-}
-
-suspend fun fetchVodDetails(sub: SavedSubscription, vodRawId: String, fallbackTitle: String, fallbackPoster: String): VodDetailedInfo = withContext(Dispatchers.IO) {
-val client = buildClient(true)
-try {
-val cleanHost = sub.host.trimEnd('/')
-val url = "$cleanHost/player_api.php?username=${URLEncoder.encode(sub.username, "UTF-8")}&password=${URLEncoder.encode(sub.password, "UTF-8")}&action=get_vod_info&vod_id=$vodRawId"
-client.newCall(Request.Builder().url(url).build()).execute().use { resp ->
-val info = JSONObject(resp.body?.string() ?: "{}").optJSONObject("info")
-if (info != null) {
-val backdrops = info.optJSONArray("backdrop_path")
-val bg = if (backdrops != null && backdrops.length() > 0) backdrops.optString(0) else fallbackPoster
-return@withContext VodDetailedInfo(
-title = info.optString("name", fallbackTitle).ifEmpty { fallbackTitle },
-plot = info.optString("plot", "لا يتوفر وصف تفصيلي لهذا الفيلم حالياً.").ifEmpty { "لا يتوفر وصف تفصيلي لهذا الفيلم حالياً." },
-cast = info.optString("cast", "غير متوفر"),
-director = info.optString("director", "غير متوفر"),
-releaseDate = info.optString("releasedate", "2025"),
-duration = info.optString("duration", "01:45:00"),
-rating = info.optString("rating", "7.8"),
-backdropUrl = bg.ifEmpty { fallbackPoster }
-)
-}
-}
-} catch (_: Exception) { }
-VodDetailedInfo(fallbackTitle, "جاهز للمشاهدة بجودة عالية.", "غير متوفر", "غير متوفر", "2025", "HD", "8.0", fallbackPoster)
-}
-
-suspend fun fetchSeriesDetails(sub: SavedSubscription, seriesRawId: String, fallbackTitle: String, fallbackPoster: String): SeriesDetailedInfo = withContext(Dispatchers.IO) {
-val client = buildClient(true)
-val seasonsMap = sortedMapOf<Int, MutableList<SeriesEpisodeModel>>()
-try {
-val cleanHost = sub.host.trimEnd('/')
-val url = "$cleanHost/player_api.php?username=${URLEncoder.encode(sub.username, "UTF-8")}&password=${URLEncoder.encode(sub.password, "UTF-8")}&action=get_series_info&series_id=$seriesRawId"
-client.newCall(Request.Builder().url(url).build()).execute().use { resp ->
-val root = JSONObject(resp.body?.string() ?: "{}")
-val info = root.optJSONObject("info")
-val episodesObj = root.optJSONObject("episodes")
-if (episodesObj != null) {
-val keys = episodesObj.keys()
-while (keys.hasNext()) {
-val seasonKey = keys.next()
-val sNum = seasonKey.toIntOrNull() ?: 1
-val epArr = episodesObj.optJSONArray(seasonKey) ?: continue
-val list = seasonsMap.getOrPut(sNum) { mutableListOf() }
-for (i in 0 until epArr.length()) {
-val ep = epArr.getJSONObject(i)
-val epId = ep.optString("id")
-val epNum = ep.optInt("episode_num", i + 1)
-val epTitle = ep.optString("title", "الحلقة $epNum")
-val ext = ep.optString("container_extension", "mp4").ifEmpty { "mp4" }
-val dur = ep.optJSONObject("info")?.optString("duration", "") ?: ""
-val epUrl = "$cleanHost/series/${sub.username}/${sub.password}/$epId.$ext"
-list.add(SeriesEpisodeModel("ep_$epId", epNum, sNum, epTitle, epUrl, dur))
-}
-}
-}
-if (info != null) {
-return@withContext SeriesDetailedInfo(
-title = info.optString("name", fallbackTitle).ifEmpty { fallbackTitle },
-plot = info.optString("plot", "مسلسل متكامل المواسم والحلقات.").ifEmpty { "مسلسل متكامل المواسم والحلقات." },
-cast = info.optString("cast", "غير متوفر"),
-releaseDate = info.optString("releaseDate", "2025"),
-rating = info.optString("rating", "8.4"),
-backdropUrl = info.optString("cover", fallbackPoster).ifEmpty { fallbackPoster },
-seasons = seasonsMap
-)
-}
-}
-} catch (_: Exception) { }
-SeriesDetailedInfo(fallbackTitle, "اختر الموسم والحلقة للمشاهدة.", "غير متوفر", "2025", "8.2", fallbackPoster, seasonsMap)
-}
-
-fun parseM3uLines(lines: List<String>): List<MediaItemModel> {
-val result = mutableListOf<MediaItemModel>()
-var name = "Channel"
-var group = "General"
-var logo = ""
-lines.forEachIndexed { idx, line ->
-val t = line.trim()
-if (t.startsWith("#EXTINF:")) {
-name = t.substringAfterLast(",").trim().ifEmpty { "Channel $idx" }
-group = Regex("""group-title="([^"]*)"""").find(t)?.groupValues?.get(1)?.ifEmpty { "General" } ?: "General"
-logo = Regex("""tvg-logo="([^"]*)"""").find(t)?.groupValues?.get(1) ?: ""
-} else if (t.startsWith("http://") || t.startsWith("https://") || t.startsWith("rtsp://")) {
-val isMovie = t.endsWith(".mp4", true) || t.endsWith(".mkv", true) || t.endsWith(".avi", true)
-result.add(
-MediaItemModel(
-id = "m3u_$idx",
-rawId = "$idx",
-title = name,
-url = t,
-group = group,
-logo = logo,
-contentType = if (isMovie) "MOVIE" else "LIVE",
-originTag = detectOriginTag(group, name),
-genreTag = detectGenreTag(group, name),
-is4k = checkIs4K(group, name)
-)
-)
-}
-}
-return result
-}
-
-suspend fun parseLocalUri(context: Context, uri: Uri): List<MediaItemModel> = withContext(Dispatchers.IO) {
-try {
-context.contentResolver.openInputStream(uri)?.use { input ->
-return@withContext parseM3uLines(BufferedReader(InputStreamReader(input)).readLines())
-}
-} catch (_: Exception) { }
-emptyList()
-}
-}
-
-// ============================================================================
-// 4. مصدر رياضي حي ومباشر (ESPN Scoreboard API - نتائج مباشرة ودقيقة المباراة)
-// ============================================================================
-object RealSportsDataSource {
-private fun mapLeagueToBroadcaster(league: String): String {
-val l = league.lowercase()
-return when {
-l.contains("saudi") || l.contains("roshn") -> "SSC Sports"
-l.contains("iraq") || l.contains("afc") || l.contains("asian") -> "الرابعة الرياضية / الكأس"
-l.contains("serie a") || l.contains("italian") -> "AD SPORTS Premium"
-else -> "beIN SPORTS"
-}
-}
-
-suspend fun fetchTodayRealMatches(): List<RealSportsMatch> = withContext(Dispatchers.IO) {
-val client = OkHttpClient.Builder()
-.connectTimeout(8, TimeUnit.SECONDS)
-.readTimeout(10, TimeUnit.SECONDS)
-.build()
-val matches = mutableListOf<RealSportsMatch>()
-val endpoints = listOf(
-"https://site.api.espn.com/apis/site/v2/sports/soccer/all/scoreboard",
-"https://site.api.espn.com/apis/site/v2/sports/soccer/uefa.champions/scoreboard",
-"https://site.api.espn.com/apis/site/v2/sports/soccer/eng.1/scoreboard",
-"https://site.api.espn.com/apis/site/v2/sports/soccer/esp.1/scoreboard"
-)
-val baghdadFmt = SimpleDateFormat("hh:mm a", Locale.US).apply {
-timeZone = TimeZone.getTimeZone("Asia/Baghdad")
-}
-val isoFmt = SimpleDateFormat("yyyy-MM-dd'T'HH:mm'Z'", Locale.US).apply {
-timeZone = TimeZone.getTimeZone("UTC")
-}
-
-for (ep in endpoints) {
-if (matches.size >= 30) break
-try {
-client.newCall(Request.Builder().url(ep).build()).execute().use { resp ->
-val root = JSONObject(resp.body?.string() ?: "{}")
-val events = root.optJSONArray("events") ?: JSONArray()
-for (i in 0 until events.length()) {
-val ev = events.getJSONObject(i)
-val id = ev.optString("id", "$i")
-if (matches.any { it.id == id }) continue
-val comp = ev.optJSONArray("competitions")?.optJSONObject(0) ?: continue
-val competitors = comp.optJSONArray("competitors") ?: continue
-if (competitors.length() < 2) continue
-
-val c1 = competitors.getJSONObject(0)
-val c2 = competitors.getJSONObject(1)
-val homeObj = if (c1.optString("homeAway") == "home") c1 else c2
-val awayObj = if (c1.optString("homeAway") == "home") c2 else c1
-
-val homeName = homeObj.optJSONObject("team")?.optString("shortDisplayName", "") ?: ""
-val awayName = awayObj.optJSONObject("team")?.optString("shortDisplayName", "") ?: ""
-val homeLogo = homeObj.optJSONObject("team")?.optString("logo", "") ?: ""
-val awayLogo = awayObj.optJSONObject("team")?.optString("logo", "") ?: ""
-val homeScore = homeObj.optString("score", "0")
-val awayScore = awayObj.optString("score", "0")
-
-val statusObj = ev.optJSONObject("status")?.optJSONObject("type")
-val state = statusObj?.optString("state", "pre") ?: "pre"
-val detail = statusObj?.optString("shortDetail", "") ?: ""
-val isLive = state == "in"
-
-val leagueName = ev.optJSONObject("season")?.optString("slug", "")
-?.replace("-", " ")?.uppercase()
-?: root.optJSONArray("leagues")?.optJSONObject(0)?.optString("name", "Football")
-?: "Football"
-
-val rawDate = ev.optString("date", "")
-val timeStr = try {
-val d = isoFmt.parse(rawDate)
-if (d != null) baghdadFmt.format(d) else detail
-} catch (_: Exception) { detail }
-
-if (homeName.isNotEmpty() && awayName.isNotEmpty()) {
-matches.add(
-RealSportsMatch(
-id = id,
-homeTeam = homeName,
-awayTeam = awayName,
-homeLogo = homeLogo,
-awayLogo = awayLogo,
-scoreText = if (state == "pre") "VS" else "$homeScore - $awayScore",
-league = leagueName,
-matchTime = if (isLive) detail else timeStr,
-status = if (isLive) "مباشر $detail" else if (state == "post") "انتهت" else timeStr,
-isLive = isLive,
-suggestedBroadcaster = mapLeagueToBroadcaster(leagueName)
-)
-)
-}
-}
-}
-} catch (_: Exception) { }
-}
-matches.sortedByDescending { it.isLive }
-}
-}
-
-data class EpgSlot(
-val channelName: String,
-val channelLogo: String,
-val currentProgram: String,
-val nextProgram: String,
-val timeRange: String,
-val progress: Float
-)
-
-object MatchReminderManager {
-val remindedMatches = mutableStateListOf<String>()
-
-fun toggleReminder(matchTitle: String): Boolean {
-return if (remindedMatches.contains(matchTitle)) {
-remindedMatches.remove(matchTitle)
-false
+BackHandler {
+if (showQuickDrawer) {
+showQuickDrawer = false
 } else {
-remindedMatches.add(matchTitle)
-true
+try {
+activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+} catch (_: Exception) { }
+onBack()
+}
+}
+
+DisposableEffect(activity) {
+val window = activity?.window
+if (window != null) {
+WindowCompat.setDecorFitsSystemWindows(window, false)
+val controller = WindowInsetsControllerCompat(window, window.decorView)
+controller.hide(WindowInsetsCompat.Type.systemBars())
+controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+}
+onDispose {
+try {
+activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+if (window != null) {
+WindowCompat.setDecorFitsSystemWindows(window, true)
+WindowInsetsControllerCompat(window, window.decorView).show(WindowInsetsCompat.Type.systemBars())
+}
+} catch (_: Exception) { }
+}
+}
+
+LaunchedEffect(currentUrl) {
+if (!isVodOrSeries) {
+DevkanVault.saveLastChannel(context, currentUrl, streamTitle)
+}
+}
+
+LaunchedEffect(controlsVisible, isLocked, isPaused, showQuickDrawer) {
+if (controlsVisible && !isLocked && !isPaused && !showQuickDrawer) {
+delay(5000)
+controlsVisible = false
+}
+}
+
+LaunchedEffect(seekFeedbackText) {
+if (seekFeedbackText != null) {
+delay(900)
+seekFeedbackText = null
+}
+}
+
+val exoPlayer = remember(activeEngine) {
+if (activeEngine == EngineType.MEDIA3_ONLY) {
+try {
+val (minBuf, maxBuf, playBuf) = EngineCoordinator.getAdaptiveBufferMs(lowLatency)
+val loadControl = DefaultLoadControl.Builder()
+.setBufferDurationsMs(minBuf, maxBuf, playBuf, playBuf + 250)
+.build()
+val headers = EngineCoordinator.buildSmartHeaders(geoBypass, customUserAgent)
+val httpFactory = DefaultHttpDataSource.Factory()
+.setUserAgent(customUserAgent)
+.setDefaultRequestProperties(headers)
+.setAllowCrossProtocolRedirects(true)
+.setConnectTimeoutMs(10_000)
+.setReadTimeoutMs(15_000)
+
+ExoPlayer.Builder(context)
+.setMediaSourceFactory(DefaultMediaSourceFactory(httpFactory))
+.setLoadControl(loadControl)
+.build()
+} catch (_: Exception) {
+null
+}
+} else null
+}
+
+LaunchedEffect(exoPlayer, currentUrl, streamId) {
+if (exoPlayer != null) {
+try {
+exoPlayer.stop()
+exoPlayer.clearMediaItems()
+exoPlayer.setMediaItem(MediaItem.fromUri(currentUrl))
+val savedPos = if (isVodOrSeries && streamId.isNotEmpty()) DevkanVault.getVodPosition(context, streamId) else 0L
+if (savedPos > 5000L) exoPlayer.seekTo(savedPos)
+exoPlayer.prepare()
+exoPlayer.playWhenReady = true
+isPaused = false
+} catch (_: Exception) { }
+}
+}
+
+LaunchedEffect(exoPlayer, vlcPlayerRef, isVodOrSeries, streamId) {
+while (true) {
+delay(1000)
+try {
+if (exoPlayer != null) {
+currentPosMs = exoPlayer.currentPosition.coerceAtLeast(0L)
+totalDurMs = exoPlayer.duration.coerceAtLeast(0L)
+isPaused = !exoPlayer.isPlaying && exoPlayer.playbackState == Player.STATE_READY
+if (isVodOrSeries && streamId.isNotEmpty() && currentPosMs > 2000L && totalDurMs > 0L) {
+DevkanVault.saveVodProgress(context, streamId, currentPosMs, totalDurMs)
+}
+} else if (vlcPlayerRef != null && vlcPlayerRef?.isReleased == false) {
+currentPosMs = vlcPlayerRef?.time?.coerceAtLeast(0L) ?: 0L
+totalDurMs = vlcPlayerRef?.length?.coerceAtLeast(0L) ?: 0L
+isPaused = vlcPlayerRef?.isPlaying == false
+if (isVodOrSeries && streamId.isNotEmpty() && currentPosMs > 2000L && totalDurMs > 0L) {
+DevkanVault.saveVodProgress(context, streamId, currentPosMs, totalDurMs)
+}
+}
+} catch (_: Exception) { }
+}
+}
+
+DisposableEffect(exoPlayer) {
+val listener = object : Player.Listener {
+override fun onPlaybackStateChanged(state: Int) {
+if (state == Player.STATE_READY && startupMs == 0L) {
+startupMs = (System.currentTimeMillis() - startTimestamp).coerceAtLeast(120L)
+isReconnecting = false
+}
+}
+
+override fun onPlayerError(error: PlaybackException) {
+if (!triedFallback && fallbackUrl.isNotEmpty() && fallbackUrl != currentUrl) {
+triedFallback = true
+currentUrl = fallbackUrl
+} else if (preferredEngine == EngineType.AUTO_HYBRID && activeEngine == EngineType.MEDIA3_ONLY) {
+activeEngine = EngineType.LIBVLC_ONLY
+} else if (reconnectAttempts < 3) {
+reconnectAttempts++
+isReconnecting = true
+try {
+exoPlayer?.prepare()
+exoPlayer?.playWhenReady = true
+} catch (_: Exception) { }
+}
+}
+}
+exoPlayer?.addListener(listener)
+onDispose {
+try {
+if (isVodOrSeries && streamId.isNotEmpty() && exoPlayer != null) {
+DevkanVault.saveVodProgress(context, streamId, exoPlayer.currentPosition, exoPlayer.duration)
+}
+exoPlayer?.removeListener(listener)
+exoPlayer?.stop()
+exoPlayer?.release()
+} catch (_: Exception) { }
+}
+}
+
+LaunchedEffect(activeEngine, reconnectAttempts, startupMs) {
+while (true) {
+val buffered = try { exoPlayer?.totalBufferedDuration ?: 1200L } catch (_: Exception) { 1200L }
+val bitrate = try { exoPlayer?.videoFormat?.bitrate?.div(1000) ?: 4200 } catch (_: Exception) { 4200 }
+EngineCoordinator.currentDiagnostics.value = StreamDiagnostics(
+activeEngine = if (activeEngine == EngineType.MEDIA3_ONLY) "Media3 Low-Latency" else "LibVLC Universal",
+pingMs = 38L,
+startupTimeMs = if (startupMs > 0) startupMs else 450L,
+bitrateKbps = if (bitrate > 0) bitrate else 3900,
+bufferDurationMs = buffered,
+reconnectCount = reconnectAttempts,
+statusNote = if (isReconnecting) "إعادة اتصال ($reconnectAttempts/3)..." else "مستقر • الشاشة محمية من الانطفاء"
+)
+delay(2000)
+}
+}
+
+fun togglePlayPause() {
+try {
+if (exoPlayer != null) {
+if (exoPlayer.isPlaying) {
+exoPlayer.pause()
+isPaused = true
+} else {
+exoPlayer.play()
+isPaused = false
+}
+} else if (vlcPlayerRef != null && vlcPlayerRef?.isReleased == false) {
+if (vlcPlayerRef?.isPlaying == true) {
+vlcPlayerRef?.pause()
+isPaused = true
+} else {
+vlcPlayerRef?.play()
+isPaused = false
+}
+}
+} catch (_: Exception) { }
+}
+
+fun seekByDelta(deltaMs: Long) {
+try {
+if (exoPlayer != null) {
+exoPlayer.seekTo((exoPlayer.currentPosition + deltaMs).coerceAtLeast(0L))
+} else if (vlcPlayerRef != null && vlcPlayerRef?.isReleased == false) {
+vlcPlayerRef?.time = ((vlcPlayerRef?.time ?: 0L) + deltaMs).coerceAtLeast(0L)
+}
+} catch (_: Exception) { }
+}
+
+val exoResizeMode = when (scaleIndex) {
+1 -> AspectRatioFrameLayout.RESIZE_MODE_FILL
+2 -> AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+3 -> AspectRatioFrameLayout.RESIZE_MODE_FIXED_WIDTH
+else -> AspectRatioFrameLayout.RESIZE_MODE_FIT
+}
+
+val vlcScaleType = when (scaleIndex) {
+1 -> MediaPlayer.ScaleType.SURFACE_FILL
+2 -> MediaPlayer.ScaleType.SURFACE_16_9
+3 -> MediaPlayer.ScaleType.SURFACE_FIT_SCREEN
+else -> MediaPlayer.ScaleType.SURFACE_BEST_FIT
+}
+
+Box(
+modifier = Modifier
+.fillMaxSize()
+.background(Color.Black)
+.pointerInput(isLocked) {
+detectTapGestures(
+onTap = {
+if (showQuickDrawer) showQuickDrawer = false
+else controlsVisible = !controlsVisible
+},
+onDoubleTap = { offset ->
+if (!isLocked) {
+val isRightSide = offset.x > size.width / 2f
+val delta = if (isRightSide) 10_000L else -10_000L
+seekByDelta(delta)
+seekFeedbackText = if (isRightSide) "+10s ⏩" else "⏪ -10s"
+}
+}
+)
+}
+) {
+if (activeEngine == EngineType.MEDIA3_ONLY && exoPlayer != null) {
+AndroidView(
+factory = { ctx ->
+PlayerView(ctx).apply {
+player = exoPlayer
+useController = false
+resizeMode = exoResizeMode
+setKeepContentOnPlayerReset(false)
+layoutParams = FrameLayout.LayoutParams(
+ViewGroup.LayoutParams.MATCH_PARENT,
+ViewGroup.LayoutParams.MATCH_PARENT
+)
+}
+},
+update = { view ->
+if (view.player !== exoPlayer) {
+view.player = exoPlayer
+}
+view.resizeMode = exoResizeMode
+},
+modifier = Modifier.fillMaxSize()
+)
+} else {
+key(currentUrl) {
+AndroidView(
+factory = { ctx ->
+val vlcLayout = VLCVideoLayout(ctx).apply {
+layoutParams = FrameLayout.LayoutParams(
+ViewGroup.LayoutParams.MATCH_PARENT,
+ViewGroup.LayoutParams.MATCH_PARENT
+)
+}
+try {
+val cacheArg = if (lowLatency) "--network-caching=450" else "--network-caching=1200"
+val libVlc = LibVLC(
+ctx,
+arrayListOf(
+cacheArg,
+"--rtsp-tcp",
+"--http-user-agent=$customUserAgent",
+"--drop-late-frames",
+"--skip-frames"
+)
+)
+val mediaPlayer = MediaPlayer(libVlc).apply {
+attachViews(vlcLayout, null, false, false)
+videoScale = vlcScaleType
+val media = Media(libVlc, Uri.parse(currentUrl))
+media.setHWDecoderEnabled(true, false)
+setMedia(media)
+media.release()
+play()
+val savedPos = if (isVodOrSeries && streamId.isNotEmpty()) DevkanVault.getVodPosition(ctx, streamId) else 0L
+if (savedPos > 5000L) time = savedPos
+}
+vlcPlayerRef = mediaPlayer
+vlcLayout.tag = Pair(libVlc, mediaPlayer)
+} catch (_: Exception) { }
+vlcLayout
+},
+update = { view ->
+try {
+val pair = view.tag as? Pair<*, *>
+val mp = pair?.second as? MediaPlayer
+if (mp != null && !mp.isReleased) {
+mp.videoScale = vlcScaleType
+mp.updateVideoSurfaces()
+}
+} catch (_: Exception) { }
+},
+onRelease = { view ->
+try {
+val pair = view.tag as? Pair<*, *>
+val mp = pair?.second as? MediaPlayer
+val vlc = pair?.first as? LibVLC
+if (mp != null && !mp.isReleased) {
+mp.stop()
+mp.detachViews()
+mp.release()
+}
+vlc?.release()
+vlcPlayerRef = null
+} catch (_: Exception) { }
+},
+modifier = Modifier.fillMaxSize()
+)
+}
+}
+
+seekFeedbackText?.let { text ->
+Box(
+modifier = Modifier
+.align(Alignment.Center)
+.clip(RoundedCornerShape(16.dp))
+.background(Color.Black.copy(alpha = 0.72f))
+.padding(horizontal = 20.dp, vertical = 10.dp)
+) {
+Text(text = text, color = Color.White, fontWeight = FontWeight.Black, fontSize = 18.sp)
+}
+}
+
+if (isReconnecting) {
+Row(
+modifier = Modifier
+.align(Alignment.TopCenter)
+.padding(top = 64.dp)
+.clip(RoundedCornerShape(12.dp))
+.background(Color(0xFFB91C1C).copy(alpha = 0.9f))
+.padding(horizontal = 14.dp, vertical = 6.dp),
+verticalAlignment = Alignment.CenterVertically,
+horizontalArrangement = Arrangement.spacedBy(8.dp)
+) {
+CircularProgressIndicator(color = Color.White, modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
+Text("إعادة الاتصال التلقائي ($reconnectAttempts/3)...", color = Color.White, fontSize = 12.sp)
+}
+}
+
+if (isLocked && controlsVisible) {
+IconButton(
+onClick = { isLocked = false },
+modifier = Modifier
+.align(Alignment.TopStart)
+.padding(16.dp)
+.background(Color.Black.copy(alpha = 0.65f), CircleShape)
+) {
+Icon(Icons.Default.LockOpen, contentDescription = "Unlock", tint = gold)
+}
+}
+
+if (showQuickDrawer && quickChannels.isNotEmpty()) {
+val drawerFiltered = remember(quickChannels, drawerSearchQuery) {
+if (drawerSearchQuery.isBlank()) quickChannels
+else quickChannels.filter { it.title.contains(drawerSearchQuery.trim(), ignoreCase = true) }
+}
+Column(
+modifier = Modifier
+.align(Alignment.CenterStart)
+.fillMaxHeight()
+.width(275.dp)
+.background(Color(0xFF0E0E16).copy(alpha = 0.95f))
+.border(1.dp, gold.copy(alpha = 0.4f))
+.padding(12.dp),
+verticalArrangement = Arrangement.spacedBy(8.dp)
+) {
+Row(
+modifier = Modifier.fillMaxWidth(),
+horizontalArrangement = Arrangement.SpaceBetween,
+verticalAlignment = Alignment.CenterVertically
+) {
+Text("القنوات (${drawerFiltered.size})", color = gold, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+IconButton(onClick = { showQuickDrawer = false }) {
+Icon(Icons.Default.Close, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+}
+}
+OutlinedTextField(
+value = drawerSearchQuery,
+onValueChange = { drawerSearchQuery = it },
+placeholder = { Text("بحث سريع عن قناة...", fontSize = 11.sp) },
+singleLine = true,
+shape = RoundedCornerShape(10.dp),
+modifier = Modifier.fillMaxWidth()
+)
+LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+items(drawerFiltered, key = { it.id }) { ch ->
+val isCurrent = ch.url == currentUrl
+Row(
+modifier = Modifier
+.fillMaxWidth()
+.clip(RoundedCornerShape(10.dp))
+.background(if (isCurrent) gold.copy(alpha = 0.25f) else Color(0xFF171724))
+.clickable {
+showQuickDrawer = false
+onSwitchChannel(ch)
+}
+.padding(10.dp),
+verticalAlignment = Alignment.CenterVertically,
+horizontalArrangement = Arrangement.SpaceBetween
+) {
+Text(
+text = ch.title,
+color = if (isCurrent) gold else Color.White,
+fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal,
+fontSize = 12.sp,
+maxLines = 1,
+overflow = TextOverflow.Ellipsis,
+modifier = Modifier.weight(1f)
+)
+if (isCurrent) {
+Icon(Icons.Default.Equalizer, contentDescription = null, tint = gold, modifier = Modifier.size(16.dp))
+}
+}
+}
+}
+}
+}
+
+AnimatedVisibility(visible = controlsVisible && !isLocked, modifier = Modifier.fillMaxSize()) {
+Box(
+modifier = Modifier
+.fillMaxSize()
+.background(
+Brush.verticalGradient(
+colors = listOf(
+Color.Black.copy(alpha = 0.78f),
+Color.Transparent,
+Color.Black.copy(alpha = 0.88f)
+)
+)
+)
+.padding(16.dp)
+) {
+Row(
+modifier = Modifier.align(Alignment.TopCenter).fillMaxWidth(),
+verticalAlignment = Alignment.CenterVertically,
+horizontalArrangement = Arrangement.SpaceBetween
+) {
+Row(
+modifier = Modifier.weight(1f),
+verticalAlignment = Alignment.CenterVertically,
+horizontalArrangement = Arrangement.spacedBy(8.dp)
+) {
+IconButton(onClick = {
+try {
+activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+} catch (_: Exception) { }
+onBack()
+}) {
+Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.White)
+}
+Column(modifier = Modifier.weight(1f)) {
+Text(
+text = streamTitle,
+color = Color.White,
+fontWeight = FontWeight.Bold,
+fontSize = 15.sp,
+maxLines = 1,
+overflow = TextOverflow.Ellipsis
+)
+Text(
+text = if (activeEngine == EngineType.MEDIA3_ONLY) "Media3 Fast" else "LibVLC Hybrid",
+color = gold,
+fontSize = 11.sp,
+fontWeight = FontWeight.SemiBold
+)
+}
+}
+
+Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+if (!isVodOrSeries && quickChannels.isNotEmpty()) {
+IconButton(onClick = { showQuickDrawer = !showQuickDrawer }) {
+Icon(Icons.Default.List, contentDescription = "Channels", tint = gold)
+}
+}
+
+IconButton(onClick = {
+if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && activity != null) {
+try {
+val params = PictureInPictureParams.Builder()
+.setAspectRatio(Rational(16, 9))
+.build()
+activity.enterPictureInPictureMode(params)
+} catch (_: Exception) { }
+}
+}) {
+Icon(Icons.Default.PictureInPictureAlt, contentDescription = "PiP", tint = Color.White)
+}
+
+OutlinedButton(
+onClick = {
+activeEngine = if (activeEngine == EngineType.MEDIA3_ONLY) EngineType.LIBVLC_ONLY else EngineType.MEDIA3_ONLY
+},
+contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+shape = RoundedCornerShape(8.dp)
+) {
+Text(
+text = if (activeEngine == EngineType.MEDIA3_ONLY) "VLC" else "Media3",
+color = Color.White,
+fontSize = 11.sp
+)
+}
+
+IconButton(onClick = { showDiagnostics = !showDiagnostics }) {
+Icon(Icons.Default.Speed, contentDescription = "Diagnostics", tint = gold)
+}
+}
+}
+
+Row(
+modifier = Modifier.align(Alignment.Center),
+verticalAlignment = Alignment.CenterVertically,
+horizontalArrangement = Arrangement.spacedBy(28.dp)
+) {
+if (isVodOrSeries) {
+IconButton(
+onClick = { seekByDelta(-10_000L) },
+modifier = Modifier.size(48.dp).background(Color.Black.copy(alpha = 0.55f), CircleShape)
+) {
+Icon(Icons.Default.Replay10, contentDescription = "-10s", tint = Color.White, modifier = Modifier.size(28.dp))
+}
+}
+
+IconButton(
+onClick = { togglePlayPause() },
+modifier = Modifier
+.size(66.dp)
+.background(gold.copy(alpha = 0.92f), CircleShape)
+) {
+Icon(
+imageVector = if (isPaused) Icons.Default.PlayArrow else Icons.Default.Pause,
+contentDescription = "Play/Pause",
+tint = Color.Black,
+modifier = Modifier.size(38.dp)
+)
+}
+
+if (isVodOrSeries) {
+IconButton(
+onClick = { seekByDelta(10_000L) },
+modifier = Modifier.size(48.dp).background(Color.Black.copy(alpha = 0.55f), CircleShape)
+) {
+Icon(Icons.Default.Forward10, contentDescription = "+10s", tint = Color.White, modifier = Modifier.size(28.dp))
+}
+}
+}
+
+if (showDiagnostics) {
+val diag = EngineCoordinator.currentDiagnostics.value
+Column(
+modifier = Modifier
+.align(Alignment.CenterEnd)
+.width(245.dp)
+.clip(RoundedCornerShape(16.dp))
+.background(Color(0xFF101016).copy(alpha = 0.92f))
+.border(1.dp, gold.copy(alpha = 0.5f), RoundedCornerShape(16.dp))
+.padding(14.dp),
+verticalArrangement = Arrangement.spacedBy(6.dp)
+) {
+Text("مركز تشخيص البث الحي", color = gold, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+Text("المحرك: ${diag.activeEngine}", color = Color.White, fontSize = 11.sp)
+Text("زمن الفتح: ${diag.startupTimeMs} ms", color = Color.White, fontSize = 11.sp)
+Text("السرعة: ${diag.bitrateKbps} kbps", color = Color.White, fontSize = 11.sp)
+Text("التخزين المؤقت: ${diag.bufferDurationMs / 1000.0} s", color = Color.White, fontSize = 11.sp)
+Text("الحالة: ${diag.statusNote}", color = Color(0xFF4ADE80), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+}
+}
+
+Column(
+modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth(),
+verticalArrangement = Arrangement.spacedBy(4.dp)
+) {
+if (isVodOrSeries && totalDurMs > 0L) {
+Row(
+modifier = Modifier.fillMaxWidth(),
+verticalAlignment = Alignment.CenterVertically,
+horizontalArrangement = Arrangement.spacedBy(8.dp)
+) {
+Text(formatDurationMs(currentPosMs), color = Color.White, fontSize = 11.sp)
+Slider(
+value = (currentPosMs.toFloat() / totalDurMs.toFloat()).coerceIn(0f, 1f),
+onValueChange = { fraction ->
+val target = (fraction * totalDurMs).toLong()
+currentPosMs = target
+try {
+exoPlayer?.seekTo(target)
+if (vlcPlayerRef != null && vlcPlayerRef?.isReleased == false) {
+vlcPlayerRef?.time = target
+}
+} catch (_: Exception) { }
+},
+colors = SliderDefaults.colors(thumbColor = gold, activeTrackColor = gold),
+modifier = Modifier.weight(1f)
+)
+Text(formatDurationMs(totalDurMs), color = Color.White, fontSize = 11.sp)
+}
+}
+
+Row(
+modifier = Modifier.fillMaxWidth(),
+verticalAlignment = Alignment.CenterVertically,
+horizontalArrangement = Arrangement.SpaceEvenly
+) {
+TextButton(onClick = {
+try {
+activity?.requestedOrientation = if (isLandscape) {
+ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+} else {
+ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+}
+} catch (_: Exception) { }
+}) {
+Icon(Icons.Default.ScreenRotation, contentDescription = "Rotate", tint = gold, modifier = Modifier.size(18.dp))
+Spacer(Modifier.width(4.dp))
+Text(if (isLandscape) "طولي" else "عرضي", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+}
+
+TextButton(onClick = { scaleIndex = (scaleIndex + 1) % 4 }) {
+Icon(Icons.Default.AspectRatio, contentDescription = null, tint = gold, modifier = Modifier.size(18.dp))
+Spacer(Modifier.width(4.dp))
+val modeName = when (scaleIndex) {
+1 -> "Fill"
+2 -> "Zoom"
+3 -> "16:9"
+else -> "Fit"
+}
+Text(modeName, color = gold, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+}
+
+if (isVodOrSeries) {
+Button(
+onClick = {
+seekByDelta(85_000L)
+seekFeedbackText = "تخطي المقدمة +85s ⏭️"
+},
+colors = ButtonDefaults.buttonColors(containerColor = gold.copy(alpha = 0.28f)),
+contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+shape = RoundedCornerShape(8.dp)
+) {
+Text("تخطي الانترو", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+}
+
+if (exoPlayer != null) {
+TextButton(onClick = {
+playbackSpeed = when (playbackSpeed) {
+1.0f -> 1.25f
+1.25f -> 1.5f
+1.5f -> 2.0f
+else -> 1.0f
+}
+exoPlayer.playbackParameters = PlaybackParameters(playbackSpeed)
+}) {
+Text("${playbackSpeed}x", color = gold, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+}
+}
+} else {
+TextButton(onClick = { isLocked = true }) {
+Icon(Icons.Default.Lock, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+Spacer(Modifier.width(4.dp))
+Text("قفل", color = Color.White, fontSize = 11.sp)
+}
+}
+}
+}
+}
+}
+}
+}
+
+@Composable
+fun EpgTimelineGridSheet(
+slots: List<EpgSlot>,
+lang: String,
+onPlayChannel: (String) -> Unit,
+onClose: () -> Unit
+) {
+BackHandler { onClose() }
+var searchQuery by remember { mutableStateOf("") }
+val filtered = remember(slots, searchQuery) {
+if (searchQuery.isBlank()) slots
+else slots.filter {
+it.channelName.contains(searchQuery, ignoreCase = true) ||
+it.currentProgram.contains(searchQuery, ignoreCase = true)
+}
+}
+
+Column(
+modifier = Modifier
+.fillMaxSize()
+.background(Color(0xFF0B0A14))
+.padding(16.dp)
+) {
+Row(
+modifier = Modifier.fillMaxWidth(),
+verticalAlignment = Alignment.CenterVertically,
+horizontalArrangement = Arrangement.SpaceBetween
+) {
+Text("دليل البرامج الزمني (EPG)", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+IconButton(onClick = onClose) {
+Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White)
+}
+}
+
+OutlinedTextField(
+value = searchQuery,
+onValueChange = { searchQuery = it },
+singleLine = true,
+leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = Color(0xFFD4AF37)) },
+placeholder = { Text("ابحث في دليل البرامج أو القنوات...") },
+modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+shape = RoundedCornerShape(14.dp)
+)
+
+LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxSize()) {
+items(filtered.take(200)) { slot ->
+Row(
+modifier = Modifier
+.fillMaxWidth()
+.clip(RoundedCornerShape(14.dp))
+.background(Color(0xFF171429))
+.border(1.dp, Color(0xFF2D274B), RoundedCornerShape(14.dp))
+.clickable { onPlayChannel(slot.channelName) }
+.padding(12.dp),
+verticalAlignment = Alignment.CenterVertically,
+horizontalArrangement = Arrangement.spacedBy(12.dp)
+) {
+Column(modifier = Modifier.width(105.dp)) {
+Text(slot.channelName, color = Color(0xFFFDE047), fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+Text(text = slot.timeRange, color = Color(0xFF9CA3AF), fontSize = 11.sp)
+}
+Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+Text(slot.currentProgram, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+LinearProgressIndicator(
+progress = { slot.progress },
+color = Color(0xFFD4AF37),
+trackColor = Color(0xFF2D274B),
+modifier = Modifier.fillMaxWidth().height(4.dp).clip(CircleShape)
+)
+Text("التالي: ${slot.nextProgram}", color = Color(0xFF9CA3AF), fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+}
+}
+}
 }
 }
 }
