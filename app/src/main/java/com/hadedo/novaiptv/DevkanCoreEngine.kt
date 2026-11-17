@@ -24,7 +24,7 @@ import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 // ============================================================================
-// نماذج البيانات الموحدة (v5.0 - Smart Catalog + Hybrid EPG + Sports Matcher)
+// نماذج البيانات الموحدة (v5.1 - Smart Catalog + Hybrid EPG + LSH Sports Matcher)
 // ============================================================================
 data class SavedSubscription(
     val type: String, // "XTREAM", "M3U", "STALKER"
@@ -121,7 +121,7 @@ data class StreamDiagnostics(
 )
 
 // ============================================================================
-// 1. طبقة الأمان والتخزين المشفر + جدولة المزامنة التلقائية
+// 1. طبقة الأمان والتخزين المشفر + جدولة المزامنة التلقائية + كاش EPG الرياضي
 // ============================================================================
 object DevkanVault {
     private fun getSecurePrefs(context: Context): SharedPreferences {
@@ -254,6 +254,7 @@ object DevkanVault {
             .apply()
         try {
             File(context.filesDir, "devkan_cached_playlist_v5.json").delete()
+            File(context.filesDir, "devkan_cached_sports_epg_v5.json").delete()
         } catch (_: Exception) { }
     }
 
@@ -356,15 +357,93 @@ object DevkanVault {
             emptyList()
         }
     }
+
+    // حفظ واسترجاع برامج الـ EPG الرياضية المعالجة مسبقاً (0ms عند فتح الواجهة)
+    fun saveCachedSportsEpg(context: Context, programs: List<EpgProgram>) {
+        try {
+            val arr = JSONArray()
+            programs.forEach { p ->
+                val obj = JSONObject()
+                obj.put("id", p.id)
+                obj.put("channelId", p.channelId)
+                obj.put("channelName", p.channelName)
+                obj.put("channelLogo", p.channelLogo ?: "")
+                obj.put("streamQuality", p.streamQuality ?: "")
+                obj.put("title", p.title)
+                obj.put("description", p.description ?: "")
+                obj.put("startTime", p.startTime)
+                obj.put("endTime", p.endTime)
+                obj.put("category", p.category ?: "")
+                obj.put("isSports", p.isSports)
+                obj.put("homeTeam", p.homeTeam ?: "")
+                obj.put("awayTeam", p.awayTeam ?: "")
+                obj.put("competition", p.competition ?: "")
+                arr.put(obj)
+            }
+            File(context.filesDir, "devkan_cached_sports_epg_v5.json").writeText(arr.toString())
+        } catch (_: Exception) { }
+    }
+
+    fun getCachedSportsEpg(context: Context): List<EpgProgram> {
+        return try {
+            val file = File(context.filesDir, "devkan_cached_sports_epg_v5.json")
+            if (!file.exists()) return emptyList()
+            val arr = JSONArray(file.readText())
+            val list = ArrayList<EpgProgram>(arr.length())
+            for (i in 0 until arr.length()) {
+                val obj = arr.getJSONObject(i)
+                list.add(
+                    EpgProgram(
+                        id = obj.optString("id"),
+                        channelId = obj.optString("channelId"),
+                        channelName = obj.optString("channelName"),
+                        channelLogo = obj.optString("channelLogo").ifEmpty { null },
+                        streamQuality = obj.optString("streamQuality").ifEmpty { null },
+                        title = obj.optString("title"),
+                        description = obj.optString("description").ifEmpty { null },
+                        startTime = obj.optLong("startTime"),
+                        endTime = obj.optLong("endTime"),
+                        category = obj.optString("category").ifEmpty { null },
+                        isSports = obj.optBoolean("isSports", false),
+                        homeTeam = obj.optString("homeTeam").ifEmpty { null },
+                        awayTeam = obj.optString("awayTeam").ifEmpty { null },
+                        competition = obj.optString("competition").ifEmpty { null }
+                    )
+                )
+            }
+            list
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
 }
 
 // ============================================================================
-// 2. المنسق الهجين لمحركات التشغيل
+// 2. المنسق الهجين لمحركات التشغيل (مربوط مع PlayerEngineRouter)
 // ============================================================================
 object EngineCoordinator {
     val currentDiagnostics = mutableStateOf(StreamDiagnostics())
 
-    fun selectInitialEngine(url: String, preferred: EngineType): EngineType {
+    fun selectInitialEngine(
+        url: String,
+        preferred: EngineType,
+        isSportsSection: Boolean = false
+    ): EngineType {
+        val manualOverride = when (preferred) {
+            EngineType.MEDIA3_ONLY -> PlayerEngine.MEDIA3_EXOPLAYER
+            EngineType.LIBVLC_ONLY -> PlayerEngine.LIB_VLC
+            EngineType.AUTO_HYBRID -> null
+        }
+
+        // في قسم الرياضة: فرض Media3 ExoPlayer حتمياً عبر PlayerEngineRouter
+        if (isSportsSection) {
+            val config = PlayerEngineRouter.resolvePlaybackConfig(
+                isSportsSection = true,
+                manualOverrideEngine = manualOverride
+            )
+            return if (config.engine == PlayerEngine.LIB_VLC) EngineType.LIBVLC_ONLY else EngineType.MEDIA3_ONLY
+        }
+
         if (preferred != EngineType.AUTO_HYBRID) return preferred
         val lower = url.lowercase()
         return if (lower.endsWith(".ts") || lower.endsWith(".avi") || lower.contains("mpegts") || lower.contains("rtsp://")) {
@@ -468,6 +547,16 @@ object DevkanPlaylistRepository {
         return text.contains("4K") || text.contains("UHD") || text.contains("2160P")
     }
 
+    private fun detectStreamQuality(title: String): String {
+        val t = title.uppercase()
+        return when {
+            t.contains("4K") || t.contains("UHD") -> "4K"
+            t.contains("FHD") || t.contains("1080") -> "FHD"
+            t.contains("HD") || t.contains("720") -> "HD"
+            else -> "SD"
+        }
+    }
+
     fun deduplicateSportChannels(channels: List<MediaItemModel>): List<MediaItemModel> {
         val seenNormalized = mutableSetOf<String>()
         val result = mutableListOf<MediaItemModel>()
@@ -491,6 +580,74 @@ object DevkanPlaylistRepository {
             }
         }
         return result
+    }
+
+    /**
+     * جلب وتصنيف جدول EPG للقنوات الرياضية في الخلفية عبر EpgSportsPipeline + SportsMatchExtractor (LSH)
+     */
+    suspend fun syncAndClassifySportsEpg(
+        context: Context,
+        sub: SavedSubscription,
+        liveChannels: List<MediaItemModel>
+    ): ClassifiedSportsData = withContext(Dispatchers.IO) {
+        if (sub.type != "XTREAM") {
+            val cached = DevkanVault.getCachedSportsEpg(context)
+            return@withContext EpgSportsPipeline.classifyAndGroupSports(cached)
+        }
+
+        val sportsChannels = liveChannels.filter {
+            it.contentType == "LIVE" && SportsMatchExtractor.isSportsProgram(it.group, it.title, null)
+        }.take(45) // أخذ أهم القنوات الرياضية لتسريع المزامنة
+
+        val client = buildClient(true)
+        val cleanHost = sub.host.trimEnd('/')
+        val u = URLEncoder.encode(sub.username, "UTF-8")
+        val p = URLEncoder.encode(sub.password, "UTF-8")
+        val enrichedList = mutableListOf<EpgProgram>()
+
+        for (ch in sportsChannels) {
+            if (ch.rawId.isBlank()) continue
+            try {
+                val url = "$cleanHost/player_api.php?username=$u&password=$p&action=get_short_epg&stream_id=${ch.rawId}&limit=6"
+                client.newCall(Request.Builder().url(url).build()).execute().use { resp ->
+                    val listings = JSONObject(resp.body?.string() ?: "{}").optJSONArray("epg_listings") ?: JSONArray()
+                    for (i in 0 until listings.length()) {
+                        val item = listings.getJSONObject(i)
+                        val startMs = EpgSportsPipeline.resolveXtreamTimestamp(
+                            unixSeconds = item.optLong("start_timestamp", 0L),
+                            rawDateStr = item.optString("start", "")
+                        )
+                        val endMs = EpgSportsPipeline.resolveXtreamTimestamp(
+                            unixSeconds = item.optLong("stop_timestamp", 0L),
+                            rawDateStr = item.optString("end", "")
+                        )
+                        if (startMs <= 0L || endMs <= startMs) continue
+
+                        val rawProgram = EpgProgram(
+                            id = item.optString("id", "${ch.rawId}_$i"),
+                            channelId = ch.rawId,
+                            channelName = ch.title,
+                            channelLogo = ch.logo.ifEmpty { null },
+                            streamQuality = detectStreamQuality(ch.title),
+                            title = item.optString("title", ""),
+                            description = item.optString("description", ""),
+                            startTime = startMs,
+                            endTime = endMs,
+                            category = ch.group
+                        )
+                        enrichedList.add(EpgSportsPipeline.enrichProgramForStorage(rawProgram))
+                    }
+                }
+            } catch (_: Exception) { }
+        }
+
+        if (enrichedList.isNotEmpty()) {
+            DevkanVault.saveCachedSportsEpg(context, enrichedList)
+            return@withContext EpgSportsPipeline.classifyAndGroupSports(enrichedList)
+        }
+
+        val fallbackCached = DevkanVault.getCachedSportsEpg(context)
+        EpgSportsPipeline.classifyAndGroupSports(fallbackCached)
     }
 
     suspend fun fetchChannelShortEpg(sub: SavedSubscription, streamRawId: String): Pair<String, String> = withContext(Dispatchers.IO) {
