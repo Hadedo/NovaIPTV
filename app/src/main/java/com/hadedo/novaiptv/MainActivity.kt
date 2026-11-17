@@ -267,7 +267,8 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
     var filteredLiveList by remember { mutableStateOf<List<MediaItemModel>>(emptyList()) }
     var filteredCinemaList by remember { mutableStateOf<List<MediaItemModel>>(emptyList()) }
     var vodProgressCache by remember { mutableStateOf>(emptyMap()) }
-    var classifiedSports by remember { mutableStateOf(ClassifiedSportsData(emptyList(), emptyList(), emptyList(), emptyList())) }
+    val emptySports = ClassifiedSportsData(emptyList(), emptyList(), emptyList(), emptyList())
+    var classifiedSports by remember { mutableStateOf(emptySports) }
 
     LaunchedEffect(allItems.size) {
         if (allItems.isEmpty()) {
@@ -585,7 +586,6 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
             }
 
             when (selectedTab) {
-                // 0: الشاشة الرئيسية الهجينة الشاملة
                 0 -> {
                     val lastCh = remember { DevkanVault.getLastChannel(context) }
                     var selectedHomePill by remember { mutableStateOf("الكل") }
@@ -1069,7 +1069,6 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
                     }
                 }
 
-                // 1: البث المباشر وقوائم القنوات
                 1 -> {
                     Column(modifier = Modifier.fillMaxSize().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Row(
@@ -1165,7 +1164,6 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
                     }
                 }
 
-                // 2: مركز الرياضة الذكي
                 2 -> {
                     val networks = listOf("ALL" to "الكل", "BEIN" to "beIN SPORTS", "SSC" to "SSC", "ALKASS" to "الكأس", "AD" to "أبو ظبي", "RABIAA" to "الرابعة")
 
@@ -1309,7 +1307,6 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
                     }
                 }
 
-                // 3: السينما
                 3 -> {
                     Column(modifier = Modifier.fillMaxSize().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1443,7 +1440,6 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
                     }
                 }
 
-                // 4: الإعدادات
                 4 -> {
                     DevkanSettingsScreen(
                         strings = strings,
@@ -1473,7 +1469,7 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
                             allItems.clear()
                             cachedLiveChannels = emptyList()
                             cachedSportsChannels = emptyList()
-                            classifiedSports = ClassifiedSportsData(emptyList(), emptyList(), emptyList(), emptyList())
+                            classifiedSports = emptySports
                             Toast.makeText(context, "تم حذف الاشتراك", Toast.LENGTH_SHORT).show()
                         },
                         onOpenAddDialog = { showAddDialog = true },
