@@ -8,6 +8,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -49,6 +50,7 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -149,7 +151,12 @@ fun DevkanAppRoot() {
 }
 
 @Composable
-fun DevkanBrandHeader(onAddClick: () -> Unit, onImportClick: () -> Unit, strings: AppStrings) {
+fun DevkanBrandHeader(
+    onSearchClick: () -> Unit,
+    onAddClick: () -> Unit,
+    onImportClick: () -> Unit,
+    strings: AppStrings
+) {
     val goldLight = Color(0xFFFDE047)
     val goldMid = Color(0xFFD4AF37)
     val goldDark = Color(0xFFB45309)
@@ -193,6 +200,12 @@ fun DevkanBrandHeader(onAddClick: () -> Unit, onImportClick: () -> Unit, strings
 
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             IconButton(
+                onClick = onSearchClick,
+                modifier = Modifier.size(34.dp).background(Color(0xFF161620), CircleShape)
+            ) {
+                Icon(Icons.Default.Search, contentDescription = "بحث", tint = Color.White, modifier = Modifier.size(18.dp))
+            }
+            IconButton(
                 onClick = onImportClick,
                 modifier = Modifier.size(34.dp).background(Color(0xFF161620), CircleShape)
             ) {
@@ -218,6 +231,7 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
     val goldLight = Color(0xFFFDE047)
 
     var selectedTab by remember { mutableIntStateOf(0) }
+    var selectedSportNetwork by remember { mutableStateOf("ALL") }
     var activeStream by remember { mutableStateOf<MediaItemModel?>(null) }
     var isSportsPlayback by remember { mutableStateOf(false) }
     var selectedMovieForDetails by remember { mutableStateOf<MediaItemModel?>(null) }
@@ -227,12 +241,16 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
 
     var showAddDialog by remember { mutableStateOf(false) }
     var showEpgSheet by remember { mutableStateOf(false) }
+    var showQuickSearch by remember { mutableStateOf(false) }
+    var quickSearchQuery by remember { mutableStateOf("") }
     var selectedLiveCategory by remember { mutableStateOf("ALL") }
+    var liveFilterQuery by remember { mutableStateOf("") }
     var isSyncing by remember { mutableStateOf(false) }
     var lastBackPressTime by remember { mutableLongStateOf(0L) }
 
     var cinemaSubTab by remember { mutableStateOf("MOVIE") }
     var selectedOrigin by remember { mutableStateOf("ALL") }
+    var cinemaFilterQuery by remember { mutableStateOf("") }
     val moviesGridState = rememberLazyGridState()
     val seriesGridState = rememberLazyGridState()
     val liveListState = rememberLazyListState()
@@ -243,8 +261,14 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
     val todayRealMatches = remember { mutableStateListOf<RealSportsMatch>() }
     val watchlistIds = remember { mutableStateListOf<String>() }
 
-    // قوائم جاهزة مسبقاً في الخلفية لمنع أي تجميد للواجهة
+    // قوائم مُعالجة ومُفهرسة مسبقاً في الخلفية لمنع أي ثقل في (القنوات + الرياضة + السينما)
     var cachedSportsChannels by remember { mutableStateOf<List<MediaItemModel>>(emptyList()) }
+    var cachedLiveChannels by remember { mutableStateOf<List<MediaItemModel>>(emptyList()) }
+    var cachedLiveGroups by remember { mutableStateOf<List<String>>(listOf("ALL")) }
+    var filteredLiveList by remember { mutableStateOf<List<MediaItemModel>>(emptyList()) }
+    var filteredCinemaList by remember { mutableStateOf<List<MediaItemModel>>(emptyList()) }
+    var vodProgressCache by remember { mutableStateOf>(emptyMap()) }
+
     var classifiedSports by remember {
         mutableStateOf(
             ClassifiedSportsData(
@@ -256,19 +280,66 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
         )
     }
 
-    // معالجة وتصفية القنوات الرياضية في الخلفية (Dispatchers.Default) بعيداً عن Main Thread
+    // 1. معالجة القنوات الحية والرياضية في الخلفية عند تحميل أو تحديث البيانات
     LaunchedEffect(allItems.size) {
         if (allItems.isEmpty()) {
+            cachedLiveChannels = emptyList()
+            cachedLiveGroups = listOf("ALL")
             cachedSportsChannels = emptyList()
         } else {
             val snapshot = allItems.toList()
-            cachedSportsChannels = withContext(Dispatchers.Default) {
-                val raw = snapshot.filter { item ->
-                    item.contentType == "LIVE" &&
-                        SportsMatchExtractor.isSportsProgram(item.group, item.title, null)
+            withContext(Dispatchers.Default) {
+                val live = snapshot.filter { it.contentType == "LIVE" }
+                val groups = listOf("ALL") + live.map { it.group }.distinct()
+                val rawSports = live.filter { SportsMatchExtractor.isSportsProgram(it.group, it.title, null) }
+                val dedupedSports = DevkanPlaylistRepository.deduplicateSportChannels(rawSports)
+
+                withContext(Dispatchers.Main) {
+                    cachedLiveChannels = live
+                    cachedLiveGroups = groups
+                    cachedSportsChannels = dedupedSports
                 }
-                DevkanPlaylistRepository.deduplicateSportChannels(raw)
             }
+        }
+    }
+
+    // 2. فلترة قائمة القنوات الحية في الخلفية (Dispatchers.Default) لمنع أي تقطيع
+    LaunchedEffect(cachedLiveChannels, selectedLiveCategory, liveFilterQuery) {
+        val q = liveFilterQuery.trim()
+        filteredLiveList = withContext(Dispatchers.Default) {
+            cachedLiveChannels.filter { ch ->
+                (selectedLiveCategory == "ALL" || ch.group == selectedLiveCategory) &&
+                    (q.isEmpty() || ch.title.contains(q, ignoreCase = true))
+            }
+        }
+    }
+
+    // 3. فلترة قسم السينما + تخزين نسب المشاهدة في الذاكرة لمنع قراءة EncryptedSharedPreferences أثناء التمرير
+    LaunchedEffect(allItems.size, cinemaSubTab, selectedOrigin, cinemaFilterQuery, activeStream) {
+        if (allItems.isEmpty()) {
+            filteredCinemaList = emptyList()
+        } else {
+            val snapshot = allItems.toList()
+            val q = cinemaFilterQuery.trim()
+            val result = withContext(Dispatchers.Default) {
+                snapshot.filter { item ->
+                    item.contentType == cinemaSubTab &&
+                        (selectedOrigin == "ALL" || item.originTag == selectedOrigin) &&
+                        (q.isEmpty() || item.title.contains(q, ignoreCase = true))
+                }
+            }
+            filteredCinemaList = result
+
+            // تحميل نسب المشاهدة للعناصر الظاهرة في الخلفية مرة واحدة
+            val progressMap = withContext(Dispatchers.IO) {
+                val map = HashMap<String, Float>()
+                for (item in result.take(200)) {
+                    val p = DevkanVault.getVodProgressFraction(context, item.id)
+                    if (p > 0.02f) map[item.id] = p
+                }
+                map
+            }
+            vodProgressCache = progressMap
         }
     }
 
@@ -277,6 +348,7 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
             selectedMovieForDetails == null &&
             selectedSeriesForDetails == null &&
             !showEpgSheet &&
+            !showQuickSearch &&
             selectedMatchForChannelPicker == null &&
             selectedGroupedMatchForQuality == null
     ) {
@@ -293,7 +365,6 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
         }
     }
 
-    // الفتح الفوري في 0.1 ثانية + المزامنة الصامتة في الخلفية لـ Catalog و Sports EPG
     LaunchedEffect(Unit) {
         val cached = withContext(Dispatchers.IO) { DevkanVault.getCachedItems(context) }
         if (cached.isNotEmpty()) {
@@ -361,13 +432,9 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
         }
     }
 
-    val liveChannelsForDrawer = remember(allItems.size) {
-        allItems.filter { it.contentType == "LIVE" }
-    }
-
     fun launchGroupedMatchStream(match: GroupedSportsMatch, targetProgram: EpgProgram = match.primaryStream) {
-        val matchedChannel = allItems.firstOrNull {
-            it.contentType == "LIVE" && (it.rawId == targetProgram.channelId || it.title.equals(targetProgram.channelName, ignoreCase = true))
+        val matchedChannel = cachedLiveChannels.firstOrNull {
+            it.rawId == targetProgram.channelId || it.title.equals(targetProgram.channelName, ignoreCase = true)
         }
         isSportsPlayback = true
         if (matchedChannel != null) {
@@ -399,7 +466,7 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
             streamTitle = activeStream!!.title,
             isVodOrSeries = activeStream!!.contentType != "LIVE",
             streamId = activeStream!!.id,
-            quickChannels = liveChannelsForDrawer,
+            quickChannels = cachedLiveChannels,
             onSwitchChannel = { nextCh ->
                 isSportsPlayback = SportsMatchExtractor.isSportsProgram(nextCh.group, nextCh.title, null)
                 activeStream = nextCh
@@ -453,7 +520,7 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
     }
 
     if (showEpgSheet) {
-        val sampleEpg = allItems.filter { it.contentType == "LIVE" }.take(120).mapIndexed { idx, ch ->
+        val sampleEpg = cachedLiveChannels.take(120).mapIndexed { idx, ch ->
             EpgSlot(
                 channelName = ch.title,
                 channelLogo = ch.logo,
@@ -467,7 +534,7 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
             slots = sampleEpg,
             lang = lang,
             onPlayChannel = { chName ->
-                val found = allItems.firstOrNull { it.title == chName }
+                val found = cachedLiveChannels.firstOrNull { it.title == chName }
                 showEpgSheet = false
                 if (found != null) {
                     isSportsPlayback = SportsMatchExtractor.isSportsProgram(found.group, found.title, null)
@@ -483,6 +550,7 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
         containerColor = Color(0xFF07070A),
         topBar = {
             DevkanBrandHeader(
+                onSearchClick = { showQuickSearch = true },
                 onAddClick = { showAddDialog = true },
                 onImportClick = { m3uFileLauncher.launch("*/*") },
                 strings = strings
@@ -532,9 +600,11 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
             }
 
             when (selectedTab) {
-                // 0: الشاشة الرئيسية الهجينة
+                // 0: الشاشة الرئيسية الهجينة الشاملة
                 0 -> {
                     val lastCh = remember { DevkanVault.getLastChannel(context) }
+                    var selectedHomePill by remember { mutableStateOf("الكل") }
+                    val homePills = listOf("الكل", "Live", "رياضة", "أفلام", "مسلسلات", "مفضلة", "EPG")
 
                     val latestMoviesSorted = remember(allItems.size) {
                         allItems.filter { it.contentType == "MOVIE" }
@@ -563,57 +633,178 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
                     val heroFeatured = topSeriesSorted.firstOrNull { it.logo.isNotEmpty() }
                         ?: latestMoviesSorted.firstOrNull { it.logo.isNotEmpty() }
 
+                    val featuredMatch = classifiedSports.liveMatches.firstOrNull()
+                        ?: classifiedSports.upcoming24hMatches.firstOrNull()
+
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
                             .verticalScroll(rememberScrollState())
-                            .padding(14.dp),
+                            .padding(vertical = 10.dp),
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        val epgTopMatch = classifiedSports.liveMatches.firstOrNull()
-                            ?: classifiedSports.upcoming24hMatches.firstOrNull()
-
-                        if (epgTopMatch != null) {
-                            SmartEpgMatchCard(
-                                match = epgTopMatch,
-                                onPlayPrimary = { launchGroupedMatchStream(epgTopMatch) },
-                                onSelectQuality = {
-                                    if (epgTopMatch.streams.size > 1) {
-                                        selectedGroupedMatchForQuality = epgTopMatch
-                                    } else {
-                                        launchGroupedMatchStream(epgTopMatch)
-                                    }
-                                }
-                            )
-                        } else if (todayRealMatches.isNotEmpty()) {
-                            val topMatch = todayRealMatches.first()
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(16.dp))
-                                    .background(Brush.horizontalGradient(listOf(Color(0xFF1A1429), Color(0xFF0F172A))))
-                                    .border(1.dp, gold.copy(alpha = 0.5f), RoundedCornerShape(16.dp))
-                                    .clickable { selectedMatchForChannelPicker = topMatch }
-                                    .padding(12.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                                    Text("⚽ ${topMatch.league} • الناقل: ${topMatch.suggestedBroadcaster}", color = goldLight, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                                    Text("${topMatch.homeTeam}  🆚  ${topMatch.awayTeam}", color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 14.sp)
-                                }
+                        // 1. شريط الكبسولات السريع (Quick Pill Bar)
+                        LazyRow(
+                            contentPadding = PaddingValues(horizontal = 14.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            items(homePills, key = { it }) { pill ->
+                                val isSelected = pill == selectedHomePill
                                 Box(
-                                    modifier = Modifier.background(Color(0xFF16A34A).copy(alpha = 0.25f), RoundedCornerShape(8.dp)).padding(horizontal = 8.dp, vertical = 4.dp)
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(50))
+                                        .background(if (isSelected) gold else Color(0xFF14141F))
+                                        .border(1.dp, if (isSelected) gold else Color(0xFF28283A), RoundedCornerShape(50))
+                                        .clickable {
+                                            selectedHomePill = pill
+                                            when (pill) {
+                                                "Live" -> selectedTab = 1
+                                                "رياضة" -> {
+                                                    selectedSportNetwork = "ALL"
+                                                    selectedTab = 2
+                                                }
+                                                "أفلام" -> {
+                                                    cinemaSubTab = "MOVIE"
+                                                    selectedTab = 3
+                                                }
+                                                "مسلسلات" -> {
+                                                    cinemaSubTab = "SERIES"
+                                                    selectedTab = 3
+                                                }
+                                                "EPG" -> showEpgSheet = true
+                                                "مفضلة" -> {
+                                                    if (watchlistIds.isEmpty()) {
+                                                        Toast.makeText(context, "قائمة المفضلة فارغة حالياً", Toast.LENGTH_SHORT).show()
+                                                    } else {
+                                                        selectedTab = 3
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        .padding(horizontal = 15.dp, vertical = 7.dp)
                                 ) {
-                                    Text(topMatch.matchTime, color = Color(0xFF4ADE80), fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                                    Text(
+                                        text = pill,
+                                        color = if (isSelected) Color.Black else Color.White,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                        fontSize = 12.sp
+                                    )
                                 }
                             }
                         }
 
-                        if (heroFeatured != null) {
+                        // 2. واجهة العرض البطولية الديناميكية (Dynamic Hybrid Hero Banner)
+                        if (featuredMatch != null) {
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
+                                    .padding(horizontal = 14.dp)
+                                    .clip(RoundedCornerShape(20.dp))
+                                    .background(
+                                        Brush.linearGradient(
+                                            colors = listOf(Color(0xFF18192C), Color(0xFF111625), Color(0xFF0A0A0F))
+                                        )
+                                    )
+                                    .border(1.dp, gold.copy(alpha = 0.5f), RoundedCornerShape(20.dp))
+                                    .padding(16.dp)
+                            ) {
+                                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = "🏆 ${featuredMatch.competition ?: "قمة مباريات اليوم"}",
+                                            color = goldLight,
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        val timeTxt = remember(featuredMatch.startTime) {
+                                            SimpleDateFormat("hh:mm a", Locale.getDefault()).format(Date(featuredMatch.startTime))
+                                        }
+                                        Box(
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(6.dp))
+                                                .background(
+                                                    if (featuredMatch.isLive) Color(0xFFEF4444).copy(alpha = 0.22f)
+                                                    else Color(0xFF16A34A).copy(alpha = 0.22f)
+                                                )
+                                                .padding(horizontal = 8.dp, vertical = 3.dp)
+                                        ) {
+                                            Text(
+                                                text = if (featuredMatch.isLive) "🔴 مباشر الآن" else "🟢 $timeTxt",
+                                                color = if (featuredMatch.isLive) Color(0xFFF87171) else Color(0xFF4ADE80),
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 11.sp
+                                            )
+                                        }
+                                    }
+
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = featuredMatch.homeTeam,
+                                            color = Color.White,
+                                            fontWeight = FontWeight.Black,
+                                            fontSize = 17.sp,
+                                            modifier = Modifier.weight(1f),
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                        Text(
+                                            text = "VS",
+                                            color = gold,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            fontSize = 14.sp,
+                                            modifier = Modifier.padding(horizontal = 10.dp)
+                                        )
+                                        Text(
+                                            text = featuredMatch.awayTeam,
+                                            color = Color.White,
+                                            fontWeight = FontWeight.Black,
+                                            fontSize = 17.sp,
+                                            modifier = Modifier.weight(1f),
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+
+                                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                        Button(
+                                            onClick = { launchGroupedMatchStream(featuredMatch) },
+                                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626)),
+                                            shape = RoundedCornerShape(12.dp),
+                                            modifier = Modifier.weight(1f)
+                                        ) {
+                                            Icon(Icons.Default.PlayArrow, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                                            Spacer(Modifier.width(4.dp))
+                                            Text("مشاهدة البث (${featuredMatch.streams.size})", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                        }
+                                        OutlinedButton(
+                                            onClick = {
+                                                if (featuredMatch.streams.size > 1) {
+                                                    selectedGroupedMatchForQuality = featuredMatch
+                                                } else {
+                                                    launchGroupedMatchStream(featuredMatch)
+                                                }
+                                            },
+                                            shape = RoundedCornerShape(12.dp),
+                                            border = BorderStroke(1.dp, gold.copy(alpha = 0.5f))
+                                        ) {
+                                            Text("الجودات", color = goldLight, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                        }
+                                    }
+                                }
+                            }
+                        } else if (heroFeatured != null) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 14.dp)
                                     .height(210.dp)
                                     .clip(RoundedCornerShape(20.dp))
                                     .background(Color(0xFF14141F))
@@ -623,7 +814,11 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
                                     }
                             ) {
                                 AsyncImage(
-                                    model = heroFeatured.logo,
+                                    model = ImageRequest.Builder(context)
+                                        .data(heroFeatured.logo)
+                                        .size(640, 420)
+                                        .crossfade(true)
+                                        .build(),
                                     contentDescription = heroFeatured.title,
                                     contentScale = ContentScale.Crop,
                                     modifier = Modifier.fillMaxSize()
@@ -665,10 +860,153 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
                             }
                         }
 
+                        // 3. صف 🔴 الآن يُبث مباشرة (Live Now)
+                        if (classifiedSports.liveMatches.isNotEmpty()) {
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text(
+                                    text = "🔴 الآن يُبث مباشرة (Live Now)",
+                                    color = Color(0xFFF87171),
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 15.sp,
+                                    modifier = Modifier.padding(horizontal = 14.dp)
+                                )
+                                LazyRow(
+                                    contentPadding = PaddingValues(horizontal = 14.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    itemsIndexed(classifiedSports.liveMatches, key = { idx, it -> "home_live_${idx}_${it.matchKey}" }) { _, match ->
+                                        Box(modifier = Modifier.width(270.dp)) {
+                                            SmartEpgMatchCard(
+                                                match = match,
+                                                onPlayPrimary = { launchGroupedMatchStream(match) },
+                                                onSelectQuality = {
+                                                    if (match.streams.size > 1) selectedGroupedMatchForQuality = match else launchGroupedMatchStream(match)
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // 4. صف 🏆 رياضة اليوم
+                        if (classifiedSports.upcoming24hMatches.isNotEmpty()) {
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text("🏆 رياضة اليوم", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                                    Text(
+                                        text = "كل المباريات",
+                                        color = goldLight,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.clickable {
+                                            selectedSportNetwork = "ALL"
+                                            selectedTab = 2
+                                        }
+                                    )
+                                }
+                                LazyRow(
+                                    contentPadding = PaddingValues(horizontal = 14.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    itemsIndexed(classifiedSports.upcoming24hMatches, key = { idx, it -> "home_up_${idx}_${it.matchKey}" }) { _, match ->
+                                        Box(modifier = Modifier.width(270.dp)) {
+                                            SmartEpgMatchCard(
+                                                match = match,
+                                                onPlayPrimary = { launchGroupedMatchStream(match) },
+                                                onSelectQuality = {
+                                                    if (match.streams.size > 1) selectedGroupedMatchForQuality = match else launchGroupedMatchStream(match)
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        } else if (todayRealMatches.isNotEmpty()) {
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text(
+                                    text = "🏆 رياضة اليوم",
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 16.sp,
+                                    modifier = Modifier.padding(horizontal = 14.dp)
+                                )
+                                LazyRow(
+                                    contentPadding = PaddingValues(horizontal = 14.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    itemsIndexed(todayRealMatches.take(10), key = { idx, it -> "home_real_${idx}_${it.id}" }) { _, match ->
+                                        Column(
+                                            modifier = Modifier
+                                                .width(250.dp)
+                                                .clip(RoundedCornerShape(14.dp))
+                                                .background(Color(0xFF151522))
+                                                .border(1.dp, gold.copy(alpha = 0.4f), RoundedCornerShape(14.dp))
+                                                .clickable { selectedMatchForChannelPicker = match }
+                                                .padding(12.dp),
+                                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                                        ) {
+                                            Text("⚽ ${match.league}", color = goldLight, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                                            Text("${match.homeTeam} vs ${match.awayTeam}", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 1)
+                                            Text("📺 ${match.suggestedBroadcaster} • ${match.matchTime}", color = Color(0xFF4ADE80), fontSize = 11.sp)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // 5. صف 📺 قنوات رياضية مميزة
+                        if (cachedSportsChannels.isNotEmpty()) {
+                            val networkCards = listOf(
+                                "BEIN" to "beIN SPORTS",
+                                "SSC" to "SSC Sports",
+                                "AD" to "AD Sports",
+                                "ALKASS" to "Alkass الكأس",
+                                "RABIAA" to "الرابعة الرياضية"
+                            )
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text(
+                                    text = "📺 قنوات رياضية مميزة",
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 16.sp,
+                                    modifier = Modifier.padding(horizontal = 14.dp)
+                                )
+                                LazyRow(
+                                    contentPadding = PaddingValues(horizontal = 14.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    items(networkCards, key = { it.first }) { (code, title) ->
+                                        Box(
+                                            modifier = Modifier
+                                                .width(135.dp)
+                                                .height(58.dp)
+                                                .clip(RoundedCornerShape(14.dp))
+                                                .background(Color(0xFF13131E))
+                                                .border(1.dp, gold.copy(alpha = 0.35f), RoundedCornerShape(14.dp))
+                                                .clickable {
+                                                    selectedSportNetwork = code
+                                                    selectedTab = 2
+                                                },
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // واصل المشاهدة
                         if (lastCh != null) {
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
+                                    .padding(horizontal = 14.dp)
                                     .clip(RoundedCornerShape(14.dp))
                                     .background(Color(0xFF14141D))
                                     .border(1.dp, gold.copy(alpha = 0.35f), RoundedCornerShape(14.dp))
@@ -688,10 +1026,12 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
                             }
                         }
 
+                        // 6. صفوف السينما
                         if (allItems.isEmpty() && !isSyncing) {
                             Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
+                                    .padding(horizontal = 14.dp)
                                     .clip(RoundedCornerShape(18.dp))
                                     .background(Color(0xFF12121A))
                                     .border(1.dp, gold.copy(alpha = 0.35f), RoundedCornerShape(18.dp))
@@ -707,55 +1047,59 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
                             }
                         } else {
                             if (latestMoviesSorted.isNotEmpty()) {
-                                CinemaHorizontalRow(
-                                    title = strings.latestMovies,
-                                    items = latestMoviesSorted,
-                                    onMoreClick = {
-                                        cinemaSubTab = "MOVIE"
-                                        selectedTab = 3
-                                    },
-                                    onItemClick = { selectedMovieForDetails = it }
-                                )
+                                Box(modifier = Modifier.padding(horizontal = 14.dp)) {
+                                    CinemaHorizontalRow(
+                                        title = strings.latestMovies,
+                                        items = latestMoviesSorted,
+                                        onMoreClick = {
+                                            cinemaSubTab = "MOVIE"
+                                            selectedTab = 3
+                                        },
+                                        onItemClick = { selectedMovieForDetails = it }
+                                    )
+                                }
                             }
 
                             if (topSeriesSorted.isNotEmpty()) {
-                                CinemaHorizontalRow(
-                                    title = strings.featuredSeries,
-                                    items = topSeriesSorted,
-                                    onMoreClick = {
-                                        cinemaSubTab = "SERIES"
-                                        selectedTab = 3
-                                    },
-                                    onItemClick = { selectedSeriesForDetails = it }
-                                )
+                                Box(modifier = Modifier.padding(horizontal = 14.dp)) {
+                                    CinemaHorizontalRow(
+                                        title = strings.featuredSeries,
+                                        items = topSeriesSorted,
+                                        onMoreClick = {
+                                            cinemaSubTab = "SERIES"
+                                            selectedTab = 3
+                                        },
+                                        onItemClick = { selectedSeriesForDetails = it }
+                                    )
+                                }
                             }
 
                             if (true4kMovies.isNotEmpty()) {
-                                CinemaHorizontalRow(
-                                    title = strings.movies4k,
-                                    items = true4kMovies,
-                                    onMoreClick = {
-                                        cinemaSubTab = "MOVIE"
-                                        selectedTab = 3
-                                    },
-                                    onItemClick = { selectedMovieForDetails = it }
-                                )
+                                Box(modifier = Modifier.padding(horizontal = 14.dp)) {
+                                    CinemaHorizontalRow(
+                                        title = strings.movies4k,
+                                        items = true4kMovies,
+                                        onMoreClick = {
+                                            cinemaSubTab = "MOVIE"
+                                            selectedTab = 3
+                                        },
+                                        onItemClick = { selectedMovieForDetails = it }
+                                    )
+                                }
                             }
                         }
                     }
                 }
 
-                // 1: البث المباشر
+                // 1: البث المباشر وقوائم القنوات (خفيف وسريع بدون ثقل)
                 1 -> {
-                    val liveChannels = remember(allItems.size) { allItems.filter { it.contentType == "LIVE" } }
-                    val groups = remember(liveChannels.size) { listOf("ALL") + liveChannels.map { it.group }.distinct() }
                     Column(modifier = Modifier.fillMaxSize().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("${strings.live} (${liveChannels.size})", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                            Text("${strings.live} (${filteredLiveList.size})", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 17.sp)
                             Button(
                                 onClick = { showEpgSheet = true },
                                 colors = ButtonDefaults.buttonColors(containerColor = gold.copy(alpha = 0.2f)),
@@ -768,8 +1112,26 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
                             }
                         }
 
+                        // شريط بحث سريع داخل قوائم القنوات
+                        OutlinedTextField(
+                            value = liveFilterQuery,
+                            onValueChange = { liveFilterQuery = it },
+                            placeholder = { Text("تصفية القنوات بالاسم...", fontSize = 12.sp) },
+                            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = gold, modifier = Modifier.size(18.dp)) },
+                            trailingIcon = {
+                                if (liveFilterQuery.isNotEmpty()) {
+                                    IconButton(onClick = { liveFilterQuery = "" }) {
+                                        Icon(Icons.Default.Close, contentDescription = null, tint = Color.Gray, modifier = Modifier.size(16.dp))
+                                    }
+                                }
+                            },
+                            singleLine = true,
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
                         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            items(groups) { grp ->
+                            items(cachedLiveGroups, key = { it }) { grp ->
                                 FilterChip(
                                     selected = selectedLiveCategory == grp,
                                     onClick = { selectedLiveCategory = grp },
@@ -778,12 +1140,12 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
                             }
                         }
 
-                        val filteredLive = remember(liveChannels.size, selectedLiveCategory) {
-                            if (selectedLiveCategory == "ALL") liveChannels else liveChannels.filter { it.group == selectedLiveCategory }
-                        }
-
                         LazyColumn(state = liveListState, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            items(filteredLive, key = { it.id }) { ch ->
+                            items(
+                                items = filteredLiveList,
+                                key = { it.id },
+                                contentType = { "live_channel" }
+                            ) { ch ->
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -803,7 +1165,14 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
                                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                                     ) {
                                         if (ch.logo.isNotEmpty()) {
-                                            AsyncImage(model = ch.logo, contentDescription = null, modifier = Modifier.size(38.dp).clip(RoundedCornerShape(8.dp)))
+                                            AsyncImage(
+                                                model = ImageRequest.Builder(context)
+                                                    .data(ch.logo)
+                                                    .size(120, 120)
+                                                    .build(),
+                                                contentDescription = null,
+                                                modifier = Modifier.size(38.dp).clip(RoundedCornerShape(8.dp))
+                                            )
                                         } else {
                                             Icon(Icons.Default.Tv, contentDescription = null, tint = gold, modifier = Modifier.size(32.dp))
                                         }
@@ -819,9 +1188,8 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
                     }
                 }
 
-                // 2: مركز الرياضة الذكي (فوري 0ms بفضل المعالجة المسبقة في الخلفية)
+                // 2: مركز الرياضة الذكي
                 2 -> {
-                    var selectedSportNetwork by remember { mutableStateOf("ALL") }
                     val networks = listOf("ALL" to "الكل", "BEIN" to "beIN SPORTS", "SSC" to "SSC", "ALKASS" to "الكأس", "AD" to "أبو ظبي", "RABIAA" to "الرابعة")
 
                     val deduplicatedSports = remember(cachedSportsChannels, selectedSportNetwork) {
@@ -944,7 +1312,11 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
                                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                                     ) {
                                         if (ch.logo.isNotEmpty()) {
-                                            AsyncImage(model = ch.logo, contentDescription = null, modifier = Modifier.size(34.dp).clip(RoundedCornerShape(8.dp)))
+                                            AsyncImage(
+                                                model = ImageRequest.Builder(context).data(ch.logo).size(120, 120).build(),
+                                                contentDescription = null,
+                                                modifier = Modifier.size(34.dp).clip(RoundedCornerShape(8.dp))
+                                            )
                                         } else {
                                             Icon(Icons.Default.SportsSoccer, contentDescription = null, tint = gold)
                                         }
@@ -960,15 +1332,8 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
                     }
                 }
 
-                // 3: السينما
+                // 3: السينما (تمرير 120fps بفضل الفلترة في الخلفية وتحديد أبعاد الصور)
                 3 -> {
-                    val cinemaItems = remember(allItems.size, cinemaSubTab, selectedOrigin) {
-                        allItems.filter {
-                            it.contentType == cinemaSubTab &&
-                                (selectedOrigin == "ALL" || it.originTag == selectedOrigin)
-                        }
-                    }
-
                     Column(modifier = Modifier.fillMaxSize().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             listOf("MOVIE" to strings.moviesTab, "SERIES" to strings.seriesTab).forEach { (type, label) ->
@@ -987,8 +1352,26 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
                             }
                         }
 
+                        // بحث سريع داخل قسم السينما
+                        OutlinedTextField(
+                            value = cinemaFilterQuery,
+                            onValueChange = { cinemaFilterQuery = it },
+                            placeholder = { Text("ابحث في ${if (cinemaSubTab == "MOVIE") strings.moviesTab else strings.seriesTab} (${filteredCinemaList.size})...", fontSize = 12.sp) },
+                            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = gold, modifier = Modifier.size(18.dp)) },
+                            trailingIcon = {
+                                if (cinemaFilterQuery.isNotEmpty()) {
+                                    IconButton(onClick = { cinemaFilterQuery = "" }) {
+                                        Icon(Icons.Default.Close, contentDescription = null, tint = Color.Gray, modifier = Modifier.size(16.dp))
+                                    }
+                                }
+                            },
+                            singleLine = true,
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
                         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            items(listOf("ALL" to strings.all, "عربي" to "عربي", "كوري" to "كوري", "هندي" to "هندي", "أجنبي" to "أجنبي")) { (tag, label) ->
+                            items(listOf("ALL" to strings.all, "عربي" to "عربي", "كوري" to "كوري", "هندي" to "هندي", "أجنبي" to "أجنبي"), key = { it.first }) { (tag, label) ->
                                 FilterChip(
                                     selected = selectedOrigin == tag,
                                     onClick = { selectedOrigin = tag },
@@ -1004,8 +1387,12 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
                             verticalArrangement = Arrangement.spacedBy(10.dp),
                             modifier = Modifier.fillMaxSize()
                         ) {
-                            items(cinemaItems, key = { it.id }) { item ->
-                                val progress = remember(item.id) { DevkanVault.getVodProgressFraction(context, item.id) }
+                            items(
+                                items = filteredCinemaList,
+                                key = { it.id },
+                                contentType = { "cinema_poster" }
+                            ) { item ->
+                                val progress = vodProgressCache[item.id] ?: 0f
                                 Column(
                                     modifier = Modifier
                                         .clip(RoundedCornerShape(16.dp))
@@ -1021,7 +1408,11 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
                                     Box {
                                         if (item.logo.isNotEmpty()) {
                                             AsyncImage(
-                                                model = item.logo,
+                                                model = ImageRequest.Builder(context)
+                                                    .data(item.logo)
+                                                    .size(320, 440)
+                                                    .crossfade(false)
+                                                    .build(),
                                                 contentDescription = item.title,
                                                 contentScale = ContentScale.Crop,
                                                 modifier = Modifier.fillMaxWidth().height(160.dp).clip(RoundedCornerShape(12.dp))
@@ -1104,6 +1495,7 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
                             DevkanVault.clearSubscription(context)
                             currentSub = null
                             allItems.clear()
+                            cachedLiveChannels = emptyList()
                             cachedSportsChannels = emptyList()
                             classifiedSports = ClassifiedSportsData(emptyList(), emptyList(), emptyList(), emptyList())
                             Toast.makeText(context, "تم حذف الاشتراك", Toast.LENGTH_SHORT).show()
@@ -1114,6 +1506,75 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
                 }
             }
         }
+    }
+
+    // نافذة البحث الفوري الشامل
+    if (showQuickSearch) {
+        val searchResults = remember(quickSearchQuery, allItems.size) {
+            if (quickSearchQuery.trim().length < 2) emptyList()
+            else allItems.filter { it.title.contains(quickSearchQuery.trim(), ignoreCase = true) }.take(25)
+        }
+        AlertDialog(
+            onDismissRequest = {
+                showQuickSearch = false
+                quickSearchQuery = ""
+            },
+            containerColor = Color(0xFF14141D),
+            title = {
+                OutlinedTextField(
+                    value = quickSearchQuery,
+                    onValueChange = { quickSearchQuery = it },
+                    placeholder = { Text(strings.searchHint, fontSize = 12.sp) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            text = {
+                if (searchResults.isEmpty()) {
+                    Text("اكتب حرفين على الأقل للبحث في القنوات والأفلام والمسلسلات", color = Color.Gray, fontSize = 12.sp)
+                } else {
+                    LazyColumn(modifier = Modifier.heightIn(max = 320.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        items(searchResults, key = { it.id }) { item ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(Color(0xFF1E1E2B))
+                                    .clickable {
+                                        showQuickSearch = false
+                                        quickSearchQuery = ""
+                                        when (item.contentType) {
+                                            "MOVIE" -> selectedMovieForDetails = item
+                                            "SERIES" -> selectedSeriesForDetails = item
+                                            else -> {
+                                                isSportsPlayback = SportsMatchExtractor.isSportsProgram(item.group, item.title, null)
+                                                activeStream = item
+                                            }
+                                        }
+                                    }
+                                    .padding(10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(item.title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    Text("${item.contentType} • ${item.group}", color = goldLight, fontSize = 11.sp, maxLines = 1)
+                                }
+                                Icon(Icons.Default.PlayArrow, contentDescription = null, tint = gold)
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showQuickSearch = false
+                    quickSearchQuery = ""
+                }) {
+                    Text("إغلاق", color = gold)
+                }
+            }
+        )
     }
 
     // نافذة اختيار الجودة عند وجود أكثر من قناة ناقلة لنفس المباراة
@@ -1344,6 +1805,7 @@ fun CinemaHorizontalRow(
     onMoreClick: () -> Unit,
     onItemClick: (MediaItemModel) -> Unit
 ) {
+    val context = LocalContext.current
     val gold = Color(0xFFD4AF37)
     val goldLight = Color(0xFFFDE047)
 
@@ -1377,7 +1839,10 @@ fun CinemaHorizontalRow(
                     Box {
                         if (item.logo.isNotEmpty()) {
                             AsyncImage(
-                                model = item.logo,
+                                model = ImageRequest.Builder(context)
+                                    .data(item.logo)
+                                    .size(270, 330)
+                                    .build(),
                                 contentDescription = item.title,
                                 contentScale = ContentScale.Crop,
                                 modifier = Modifier.fillMaxWidth().height(165.dp).clip(RoundedCornerShape(10.dp))
