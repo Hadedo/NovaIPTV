@@ -1,4 +1,4 @@
-package com.devkan34.vip.data
+package com.hadedo.novaiptv
 
 import android.content.Context
 import android.net.Uri
