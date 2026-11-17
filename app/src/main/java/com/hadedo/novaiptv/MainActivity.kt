@@ -191,7 +191,6 @@ modifier = Modifier.fillMaxSize()
 Text("DEVKAN", color = Color.White, fontWeight = FontWeight.Black, fontSize = 14.sp, letterSpacing = 0.8.sp)
 }
 
-// زر تبديل الاشتراك السريع بالشريط العلوي (مثل Maya IPTV)
 Row(
 modifier = Modifier
 .clip(RoundedCornerShape(50))
@@ -248,7 +247,6 @@ val strings = remember(lang) { getStrings(lang) }
 val gold = Color(0xFFD4AF37)
 val goldLight = Color(0xFFFDE047)
 
-// 0: الرئيسية | 1: مباشر | 2: الرياضة | 3: أفلام | 4: مسلسلات | 5: الإعدادات
 var selectedTab by remember { mutableIntStateOf(0) }
 var selectedSportNetwork by remember { mutableStateOf("ALL") }
 var activeStream by remember { mutableStateOf<MediaItemModel?>(null) }
@@ -269,13 +267,11 @@ var liveFilterQuery by remember { mutableStateOf("") }
 var isSyncing by remember { mutableStateOf(false) }
 var lastBackPressTime by remember { mutableLongStateOf(0L) }
 
-// حالات قسم الأفلام المستقل
 var movieSmartFilter by remember { mutableStateOf("ALL") }
 var movieServerGroup by remember { mutableStateOf("ALL") }
 var movieQuery by remember { mutableStateOf("") }
 var showMovieGroupsSheet by remember { mutableStateOf(false) }
 
-// حالات قسم المسلسلات المستقل
 var seriesSmartFilter by remember { mutableStateOf("ALL") }
 var seriesServerGroup by remember { mutableStateOf("ALL") }
 var seriesQuery by remember { mutableStateOf("") }
@@ -366,7 +362,6 @@ cachedLiveChannels.filter { ch ->
 }
 }
 
-// فلترة قسم الأفلام المستقل بتفرعاته الذكية والحقيقية
 LaunchedEffect(allItems.size, movieSmartFilter, movieServerGroup, movieQuery, activeStream) {
 if (allItems.isEmpty()) {
 filteredMoviesList = emptyList()
@@ -400,7 +395,6 @@ vodProgressCache = progressMap
 }
 }
 
-// فلترة قسم المسلسلات المستقل بتفرعاته الذكية والحقيقية
 LaunchedEffect(allItems.size, seriesSmartFilter, seriesServerGroup, seriesQuery, activeStream) {
 if (allItems.isEmpty()) {
 filteredSeriesList = emptyList()
@@ -682,9 +676,6 @@ LinearProgressIndicator(color = gold, modifier = Modifier.fillMaxWidth().align(A
 }
 
 when (selectedTab) {
-// ================================================================
-// 0. الشاشة الرئيسية (Home)
-// ================================================================
 0 -> {
 val lastCh = remember { DevkanVault.getLastChannel(context) }
 var selectedHomePill by remember { mutableStateOf("الكل") }
@@ -764,7 +755,6 @@ fontSize = 12.sp
 }
 }
 
-// بطاقة المباراة الرئيسية الحية (ESPN + EPG)
 if (featuredMatch != null) {
 Box(
 modifier = Modifier
@@ -985,7 +975,6 @@ Text("شاهد الآن", color = Color.White, fontWeight = FontWeight.Bold, fon
 }
 }
 
-// شريط ملخص الرياضة الأخضر بالرئيسية (مثل Maya IPTV)
 val liveCount = classifiedSports.liveMatches.size + todayRealMatches.count { it.isLive }
 val totalCount = classifiedSports.liveMatches.size + classifiedSports.upcoming24hMatches.size + todayRealMatches.size
 if (totalCount > 0) {
@@ -1134,9 +1123,6 @@ onItemClick = { selectedMovieForDetails = it }
 }
 }
 
-// ================================================================
-// 1. قسم البث المباشر (Live TV)
-// ================================================================
 1 -> {
 Column(modifier = Modifier.fillMaxSize().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
 Row(
@@ -1221,9 +1207,6 @@ Icon(Icons.Default.PlayArrow, contentDescription = null, tint = gold)
 }
 }
 
-// ================================================================
-// 2. قسم الرياضة (Sports Hub)
-// ================================================================
 2 -> {
 val networks = listOf("ALL" to "الكل", "BEIN" to "beIN SPORTS", "SSC" to "SSC", "ALKASS" to "الكأس", "AD" to "أبو ظبي", "RABIAA" to "الرابعة")
 
@@ -1341,14 +1324,10 @@ Icon(Icons.Default.PlayArrow, contentDescription = null, tint = gold)
 }
 }
 
-// ================================================================
-// 3. قسم الأفلام المستقل (Movies Hub بتفرعات ذكية حقيقية)
-// ================================================================
 3 -> {
 val allMovies = remember(allItems.size) { allItems.filter { it.contentType == "MOVIE" } }
 val movieGroups = remember(allMovies.size) { listOf("ALL") + allMovies.map { it.group }.distinct() }
 
-// بناء قائمة الفلاتر الحقيقية فقط (أي قسم فارغ يختفي تلقائياً)
 val availableMovieFilters = remember(allMovies.size) {
 val list = mutableListOf("ALL" to "الكل", "RECENT" to "مضاف حديثاً", "TOP" to "أعلى تقييماً ⭐")
 if (allMovies.any { it.is4k }) list.add("4K" to "4K UHD")
@@ -1460,9 +1439,6 @@ if (movieServerGroup == grp) Icon(Icons.Default.Check, contentDescription = null
 }
 }
 
-// ================================================================
-// 4. قسم المسلسلات المستقل (Series Hub بتفرعات ذكية حقيقية)
-// ================================================================
 4 -> {
 val allSeries = remember(allItems.size) { allItems.filter { it.contentType == "SERIES" } }
 val seriesGroups = remember(allSeries.size) { listOf("ALL") + allSeries.map { it.group }.distinct() }
@@ -1574,11 +1550,7 @@ if (seriesServerGroup == grp) Icon(Icons.Default.Check, contentDescription = nul
 }
 }
 }
-}
 
-// ================================================================
-// 5. شاشة الإعدادات الخفيفة (Settings)
-// ================================================================
 5 -> {
 DevkanSettingsScreen(
 strings = strings,
@@ -1632,7 +1604,6 @@ sampleTestUrl = allItems.firstOrNull()?.url ?: "https://www.google.com"
 }
 }
 
-// النافذة السفلية السريعة لتبديل الاشتراك من الشريط العلوي (مثل Maya IPTV)
 if (showQuickSubSwitcher) {
 val subsList = remember(currentSub?.id, currentSub?.label) { DevkanVault.getAllSubscriptions(context) }
 ModalBottomSheet(
@@ -2910,7 +2881,6 @@ var passwordVisible by remember { mutableStateOf(false) }
 var m3uUrl by remember { mutableStateOf(editingSub?.m3uUrl ?: "") }
 var macAddress by remember { mutableStateOf(editingSub?.macAddress ?: "00:1A:79:") }
 
-// الملء التلقائي يعمل حصراً للإكستريم فقط
 fun parseXtreamOnly(raw: String) {
 smartPasteInput = raw
 if (selectedMode != "XTREAM") return
