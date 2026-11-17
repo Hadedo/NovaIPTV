@@ -1,3038 +1,1230 @@
 package com.hadedo.novaiptv
 
+import android.content.Context
+import android.content.SharedPreferences
 import android.net.Uri
-import android.os.Bundle
-import android.widget.Toast
-import androidx.activity.ComponentActivity
-import androidx.activity.compose.BackHandler
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.compose.setContent
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.lazy.grid.rememberLazyGridState
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalClipboardManager
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalLayoutDirection
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.VisualTransformation
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.LayoutDirection
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import coil.compose.AsyncImage
-import coil.request.ImageRequest
+import android.util.Base64
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.security.crypto.EncryptedSharedPreferences
+import androidx.security.crypto.MasterKey
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import org.json.JSONArray
+import org.json.JSONObject
+import java.io.BufferedReader
+import java.io.File
+import java.io.InputStreamReader
+import java.net.URLEncoder
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.TimeZone
 import java.util.UUID
-
-class MainActivity : ComponentActivity() {
-override fun onCreate(savedInstanceState: Bundle?) {
-super.onCreate(savedInstanceState)
-setContent {
-DevkanAppRoot()
-}
-}
-}
-
-data class AppStrings(
-val home: String,
-val live: String,
-val sports: String,
-val moviesTab: String,
-val seriesTab: String,
-val settings: String,
-val continueWatching: String,
-val latestMovies: String,
-val featuredSeries: String,
-val movies4k: String,
-val searchHint: String,
-val all: String,
-val addConnection: String,
-val importFile: String,
-val epgGuide: String,
-val speedTest: String,
-val engineTitle: String,
-val autoSyncTitle: String,
-val appLockTitle: String,
-val subscriptionCard: String,
-val statusLabel: String,
-val expiryLabel: String,
-val countryLabel: String,
-val connectionsLabel: String,
-val lowLatencyTitle: String,
-val geoBypassTitle: String,
-val autoResumeTitle: String
-)
-
-fun getStrings(lang: String): AppStrings = when (lang) {
-"en" -> AppStrings("Home", "Live TV", "Sports", "Movies", "Series", "Settings", "Continue Watching", "Latest Releases", "Featured Series", "4K UHD Movies", "Search channels, movies, series...", "All", "Add Connection", "Import M3U File", "EPG Grid", "Server Speed & Ping", "Playback Engine", "Auto-Refresh Catalog", "App Lock PIN", "Subscription Details", "Status", "Expires", "Allowed Region", "Connections", "Ultra-Low Latency", "Smart Geo-Bypass", "Auto-Resume Last Channel")
-"de" -> AppStrings("Start", "Live-TV", "Sport", "Filme", "Serien", "Optionen", "Weiterschauen", "Neueste Filme", "Beliebte Serien", "4K-Filme", "Kanäle, Filme, Serien suchen...", "Alle", "Verbindung hinzufügen", "M3U-Datei laden", "EPG-Plan", "Server-Speedtest", "Wiedergabe-Engine", "Auto-Aktualisierung", "App-PIN-Sperre", "Abonnement-Details", "Status", "Ablaufdatum", "Region / Land", "Verbindungen", "Geringe Latenz", "Geo-Bypass-Header", "Letzten Kanal fortsetzen")
-"tr" -> AppStrings("Ana Sayfa", "Canlı", "Spor", "Filmler", "Diziler", "Ayarlar", "Devam Et", "Yeni Filmler", "Öne Çıkan Diziler", "4K Filmler", "Kanal, film, dizi ara...", "Tümü", "Bağlantı Ekle", "M3U Dosyası", "EPG Rehberi", "Sunucu Hız Testi", "Oynatıcı Motoru", "Otomatik Yenileme", "Uygulama PIN", "Abonelik Bilgileri", "Durum", "Bitiş Tarihi", "Ülke / Bölge", "Bağlantılar", "Düşük Gecikme Modu", "Bölge Kısıtlama Aşımı", "Son Kanalı Otomatik Aç")
-"fr" -> AppStrings("Accueil", "Direct", "Sports", "Films", "Séries", "Réglages", "Reprendre", "Derniers Films", "Séries en Vedette", "Films 4K", "Rechercher...", "Tout", "Ajouter Connexion", "Fichier M3U", "Guide EPG", "Test Serveur", "Moteur Vidéo", "Actualisation Auto", "Code PIN App", "Abonnement", "Statut", "Expiration", "Pays Autorisé", "Connexions", "Faible Latence", "Contournement Géo", "Reprise Auto")
-"ku" -> AppStrings("سەرەکی", "ڕاستەوخۆ", "وەرزش", "فیلم", "زنجیرە", "ڕێکخستن", "بەردەوامبە", "نوێترین فیلمەکان", "زنجیرە دیارەکان", "فیلمی 4K", "گەڕان...", "هەموو", "زیادکردنی بەشداری", "فایلی M3U", "خشتەی EPG", "پشکنینی خێرایی", "بزوێنەری کارپێکردن", "نوێکردنەوەی خۆکار", "قفڵی بەرنامە", "زانیاری بەشداری", "دۆخ", "بەرواری بەسەرچوون", "وڵات", "پەیوەندییەکان", "کەمکردنەوەی دواکەوتن", "کردنەوەی بلۆکی وڵات", "کردنەوەی دوایین کەناڵ")
-else -> AppStrings("الرئيسية", "مباشر", "الرياضة", "أفلام", "مسلسلات", "الإعدادات", "واصل المشاهدة", "أحدث الإصدارات", "المسلسلات المميزة", "أفلام 4K الحقيقية", "ابحث عن قناة أو فيلم أو مسلسل...", "الكل", "إضافة اتصال", "استيراد ملف M3U", "جدول EPG", "فحص سرعة السيرفر", "محرك التشغيل", "تحديث الواجهة والمكتبة تلقائياً", "قفل التطبيق PIN", "بطاقة الاشتراك", "الحالة", "تاريخ الانتهاء", "الدولة / النطاق", "الاتصالات", "تقليل تأخير البث عن الستلايت", "تجاوز قيود السيرفر والدولة", "فتح آخر قناة تلقائياً عند التشغيل")
-}
-
-@Composable
-fun DevkanAppRoot() {
-val context = LocalContext.current
-var lang by remember { mutableStateOf(DevkanVault.getLanguage(context)) }
-var disclaimerAccepted by remember { mutableStateOf(DevkanVault.isDisclaimerAccepted(context)) }
-val savedPin = remember { DevkanVault.getAppLockPin(context) }
-var isUnlocked by remember { mutableStateOf(savedPin.isEmpty()) }
-
-val layoutDirection = if (lang == "ar" || lang == "ku") LayoutDirection.Rtl else LayoutDirection.Ltr
-
-CompositionLocalProvider(LocalLayoutDirection provides layoutDirection) {
-MaterialTheme(colorScheme = darkColorScheme()) {
-when {
-!disclaimerAccepted -> {
-LegalDisclaimerScreen(
-lang = lang,
-onAccept = {
-DevkanVault.setDisclaimerAccepted(context, true)
-disclaimerAccepted = true
-}
-)
-}
-!isUnlocked && savedPin.isNotEmpty() -> {
-AppLockScreen(
-lang = lang,
-expectedPin = savedPin,
-onUnlocked = { isUnlocked = true }
-)
-}
-else -> {
-DevkanMainDashboard(
-lang = lang,
-onLanguageChange = { newLang ->
-lang = newLang
-DevkanVault.setLanguage(context, newLang)
-}
-)
-}
-}
-}
-}
-}
-
-@Composable
-fun DevkanBrandHeader(
-activeSubLabel: String,
-onSwitchSubClick: () -> Unit,
-onSearchClick: () -> Unit,
-onImportClick: () -> Unit,
-onSettingsClick: () -> Unit,
-strings: AppStrings
-) {
-val goldLight = Color(0xFFFDE047)
-val goldMid = Color(0xFFD4AF37)
-val goldDark = Color(0xFFB45309)
-
-Row(
-modifier = Modifier
-.fillMaxWidth()
-.background(Color(0xFF0A0A0F))
-.padding(horizontal = 12.dp, vertical = 9.dp),
-verticalAlignment = Alignment.CenterVertically,
-horizontalArrangement = Arrangement.SpaceBetween
-) {
-Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-Box(
-modifier = Modifier
-.size(32.dp)
-.clip(RoundedCornerShape(9.dp))
-.background(Brush.linearGradient(listOf(goldLight, goldMid, goldDark)))
-.border(1.dp, goldLight.copy(alpha = 0.8f), RoundedCornerShape(9.dp)),
-contentAlignment = Alignment.Center
-) {
-Image(
-painter = painterResource(id = R.drawable.ic_launcher),
-contentDescription = "DEVKAN 34 VIP",
-contentScale = ContentScale.Crop,
-modifier = Modifier.fillMaxSize()
-)
-}
-Text("DEVKAN", color = Color.White, fontWeight = FontWeight.Black, fontSize = 14.sp, letterSpacing = 0.8.sp)
-}
-
-Row(
-modifier = Modifier
-.clip(RoundedCornerShape(50))
-.background(Color(0xFF171723))
-.border(1.dp, goldMid.copy(alpha = 0.45f), RoundedCornerShape(50))
-.clickable { onSwitchSubClick() }
-.padding(horizontal = 10.dp, vertical = 5.dp),
-verticalAlignment = Alignment.CenterVertically,
-horizontalArrangement = Arrangement.spacedBy(5.dp)
-) {
-Icon(Icons.Default.SwapHoriz, contentDescription = null, tint = goldLight, modifier = Modifier.size(16.dp))
-Text(
-text = activeSubLabel.ifEmpty { "إضافة اشتراك" },
-color = Color.White,
-fontWeight = FontWeight.Bold,
-fontSize = 11.5.sp,
-maxLines = 1,
-overflow = TextOverflow.Ellipsis,
-modifier = Modifier.widthIn(max = 105.dp)
-)
-Icon(Icons.Default.KeyboardArrowDown, contentDescription = null, tint = goldMid, modifier = Modifier.size(15.dp))
-}
-
-Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-IconButton(
-onClick = onSearchClick,
-modifier = Modifier.size(32.dp).background(Color(0xFF161620), CircleShape)
-) {
-Icon(Icons.Default.Search, contentDescription = "بحث", tint = Color.White, modifier = Modifier.size(17.dp))
-}
-IconButton(
-onClick = onImportClick,
-modifier = Modifier.size(32.dp).background(Color(0xFF161620), CircleShape)
-) {
-Icon(Icons.Default.FolderOpen, contentDescription = strings.importFile, tint = goldLight, modifier = Modifier.size(17.dp))
-}
-IconButton(
-onClick = onSettingsClick,
-modifier = Modifier.size(32.dp).background(Color(0xFF161620), CircleShape)
-) {
-Icon(Icons.Default.Settings, contentDescription = strings.settings, tint = goldMid, modifier = Modifier.size(17.dp))
-}
-}
-}
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
-val context = LocalContext.current
-val activity = remember(context) { context.findActivity() }
-val scope = rememberCoroutineScope()
-val strings = remember(lang) { getStrings(lang) }
-val gold = Color(0xFFD4AF37)
-val goldLight = Color(0xFFFDE047)
-
-var selectedTab by remember { mutableIntStateOf(0) }
-var selectedSportNetwork by remember { mutableStateOf("ALL") }
-var activeStream by remember { mutableStateOf<MediaItemModel?>(null) }
-var isSportsPlayback by remember { mutableStateOf(false) }
-var selectedMovieForDetails by remember { mutableStateOf<MediaItemModel?>(null) }
-var selectedSeriesForDetails by remember { mutableStateOf<MediaItemModel?>(null) }
-var selectedMatchForChannelPicker by remember { mutableStateOf<RealSportsMatch?>(null) }
-var selectedGroupedMatchForQuality by remember { mutableStateOf<GroupedSportsMatch?>(null) }
-
-var showAddDialog by remember { mutableStateOf(false) }
-var showQuickSubSwitcher by remember { mutableStateOf(false) }
-var subToEdit by remember { mutableStateOf<SavedSubscription?>(null) }
-var showEpgSheet by remember { mutableStateOf(false) }
-var showQuickSearch by remember { mutableStateOf(false) }
-var quickSearchQuery by remember { mutableStateOf("") }
-var selectedLiveCategory by remember { mutableStateOf("ALL") }
-var liveFilterQuery by remember { mutableStateOf("") }
-var isSyncing by remember { mutableStateOf(false) }
-var lastBackPressTime by remember { mutableLongStateOf(0L) }
-
-var movieSmartFilter by remember { mutableStateOf("ALL") }
-var movieServerGroup by remember { mutableStateOf("ALL") }
-var movieQuery by remember { mutableStateOf("") }
-var showMovieGroupsSheet by remember { mutableStateOf(false) }
-
-var seriesSmartFilter by remember { mutableStateOf("ALL") }
-var seriesServerGroup by remember { mutableStateOf("ALL") }
-var seriesQuery by remember { mutableStateOf("") }
-var showSeriesGroupsSheet by remember { mutableStateOf(false) }
-
-val moviesGridState = rememberLazyGridState()
-val seriesGridState = rememberLazyGridState()
-val liveListState = rememberLazyListState()
-val sportsListState = rememberLazyListState()
-
-var currentSub by remember { mutableStateOf(DevkanVault.getSavedSubscription(context)) }
-val allItems = remember { mutableStateListOf<MediaItemModel>() }
-val todayRealMatches = remember { mutableStateListOf<RealSportsMatch>() }
-val watchlistIds = remember { mutableStateListOf<String>() }
-
-var cachedSportsChannels by remember { mutableStateOf<List<MediaItemModel>>(emptyList()) }
-var cachedLiveChannels by remember { mutableStateOf<List<MediaItemModel>>(emptyList()) }
-var cachedLiveGroups by remember { mutableStateOf<List<String>>(listOf("ALL")) }
-var filteredLiveList by remember { mutableStateOf<List<MediaItemModel>>(emptyList()) }
-var filteredMoviesList by remember { mutableStateOf<List<MediaItemModel>>(emptyList()) }
-var filteredSeriesList by remember { mutableStateOf<List<MediaItemModel>>(emptyList()) }
-var vodProgressCache by remember { mutableStateOf(mapOf("" to 0f)) }
-val emptySports = ClassifiedSportsData(emptyList(), emptyList(), emptyList(), emptyList())
-var classifiedSports by remember { mutableStateOf(emptySports) }
-
-fun switchSubscriptionFast(targetSub: SavedSubscription) {
-DevkanVault.switchActiveSubscription(context, targetSub.id)
-currentSub = targetSub
-selectedLiveCategory = "ALL"
-movieSmartFilter = "ALL"
-movieServerGroup = "ALL"
-seriesSmartFilter = "ALL"
-seriesServerGroup = "ALL"
-
-scope.launch {
-val subCache = withContext(Dispatchers.IO) { DevkanVault.getCachedItems(context, targetSub.id) }
-if (subCache.isNotEmpty()) {
-allItems.clear()
-allItems.addAll(subCache)
-Toast.makeText(context, "تم التبديل إلى: ${targetSub.label}", Toast.LENGTH_SHORT).show()
-}
-isSyncing = true
-val (updated, freshItems) = DevkanPlaylistRepository.loadSubscriptionContent(targetSub, DevkanVault.isGeoBypassEnabled(context))
-currentSub = updated
-DevkanVault.saveSubscription(context, updated)
-if (freshItems.isNotEmpty()) {
-allItems.clear()
-allItems.addAll(freshItems)
-withContext(Dispatchers.IO) { DevkanVault.saveCachedItems(context, freshItems, updated.id) }
-classifiedSports = DevkanPlaylistRepository.syncAndClassifySportsEpg(context, updated, freshItems)
-if (subCache.isEmpty()) {
-Toast.makeText(context, "تم الاتصال بـ: ${updated.label}", Toast.LENGTH_SHORT).show()
-}
-}
-isSyncing = false
-}
-}
-
-LaunchedEffect(allItems.size) {
-if (allItems.isEmpty()) {
-cachedLiveChannels = emptyList()
-cachedLiveGroups = listOf("ALL")
-cachedSportsChannels = emptyList()
-} else {
-val snapshot = allItems.toList()
-withContext(Dispatchers.Default) {
-val live = snapshot.filter { it.contentType == "LIVE" }
-val groups = listOf("ALL") + live.map { it.group }.distinct()
-val rawSports = live.filter { SportsMatchExtractor.isSportsProgram(it.group, it.title, null) }
-val dedupedSports = DevkanPlaylistRepository.deduplicateSportChannels(rawSports)
-
-withContext(Dispatchers.Main) {
-cachedLiveChannels = live
-cachedLiveGroups = groups
-cachedSportsChannels = dedupedSports
-}
-}
-}
-}
-
-LaunchedEffect(cachedLiveChannels, selectedLiveCategory, liveFilterQuery) {
-val q = liveFilterQuery.trim()
-filteredLiveList = withContext(Dispatchers.Default) {
-cachedLiveChannels.filter { ch ->
-(selectedLiveCategory == "ALL" || ch.group == selectedLiveCategory) &&
-(q.isEmpty() || ch.title.contains(q, ignoreCase = true))
-}
-}
-}
-
-LaunchedEffect(allItems.size, movieSmartFilter, movieServerGroup, movieQuery, activeStream) {
-if (allItems.isEmpty()) {
-filteredMoviesList = emptyList()
-} else {
-val snapshot = allItems.toList()
-val q = movieQuery.trim()
-val result = withContext(Dispatchers.Default) {
-val moviesOnly = snapshot.filter { it.contentType == "MOVIE" }
-val byGroup = if (movieServerGroup == "ALL") moviesOnly else moviesOnly.filter { it.group == movieServerGroup }
-val byFilter = when (movieSmartFilter) {
-"ALL" -> byGroup
-"RECENT" -> byGroup.sortedByDescending { it.addedTimestamp }
-"4K" -> byGroup.filter { it.is4k }
-"TOP" -> byGroup.sortedByDescending { it.rating.toDoubleOrNull() ?: 0.0 }
-"عربي", "كوري", "تركي", "هندي", "أجنبي" -> byGroup.filter { it.originTag == movieSmartFilter }
-else -> byGroup.filter { it.genreTag == movieSmartFilter }
-}
-if (q.isEmpty()) byFilter else byFilter.filter { it.title.contains(q, ignoreCase = true) }
-}
-filteredMoviesList = result
-
-val progressMap = withContext(Dispatchers.IO) {
-val map = HashMap<String, Float>()
-for (item in result.take(250)) {
-val p = DevkanVault.getVodProgressFraction(context, item.id)
-if (p > 0.02f) map[item.id] = p
-}
-map
-}
-vodProgressCache = progressMap
-}
-}
-
-LaunchedEffect(allItems.size, seriesSmartFilter, seriesServerGroup, seriesQuery, activeStream) {
-if (allItems.isEmpty()) {
-filteredSeriesList = emptyList()
-} else {
-val snapshot = allItems.toList()
-val q = seriesQuery.trim()
-val result = withContext(Dispatchers.Default) {
-val seriesOnly = snapshot.filter { it.contentType == "SERIES" }
-val byGroup = if (seriesServerGroup == "ALL") seriesOnly else seriesOnly.filter { it.group == seriesServerGroup }
-val byFilter = when (seriesSmartFilter) {
-"ALL" -> byGroup
-"RECENT" -> byGroup.sortedByDescending { it.addedTimestamp }
-"TOP" -> byGroup.sortedByDescending { it.rating.toDoubleOrNull() ?: 0.0 }
-"عربي", "كوري", "تركي", "هندي", "أجنبي" -> byGroup.filter { it.originTag == seriesSmartFilter }
-else -> byGroup.filter { it.genreTag == seriesSmartFilter }
-}
-if (q.isEmpty()) byFilter else byFilter.filter { it.title.contains(q, ignoreCase = true) }
-}
-filteredSeriesList = result
-}
-}
-
-BackHandler(
-enabled = activeStream == null &&
-selectedMovieForDetails == null &&
-selectedSeriesForDetails == null &&
-!showEpgSheet &&
-!showQuickSearch &&
-selectedMatchForChannelPicker == null &&
-selectedGroupedMatchForQuality == null
-) {
-if (selectedTab != 0) {
-selectedTab = 0
-} else {
-val now = System.currentTimeMillis()
-if (now - lastBackPressTime < 2000L) {
-activity?.finish()
-} else {
-lastBackPressTime = now
-Toast.makeText(context, "اضغط رجوع مرة أخرى للخروج من DEVKAN", Toast.LENGTH_SHORT).show()
-}
-}
-}
-
-LaunchedEffect(Unit) {
-val saved = DevkanVault.getSavedSubscription(context)
-val cached = withContext(Dispatchers.IO) { DevkanVault.getCachedItems(context, saved?.id ?: "default") }
-if (cached.isNotEmpty()) {
-allItems.clear()
-allItems.addAll(cached)
-}
-
-val cachedEpg = withContext(Dispatchers.IO) { DevkanVault.getCachedSportsEpg(context) }
-if (cachedEpg.isNotEmpty()) {
-classifiedSports = withContext(Dispatchers.Default) {
-EpgSportsPipeline.classifyAndGroupSports(cachedEpg)
-}
-}
-
-if (saved != null && (cached.isEmpty() || DevkanVault.shouldRunBackgroundSync(context))) {
-launch {
-if (cached.isEmpty()) isSyncing = true
-val geoBypass = DevkanVault.isGeoBypassEnabled(context)
-val (updatedSub, loadedItems) = DevkanPlaylistRepository.loadSubscriptionContent(saved, geoBypass)
-currentSub = updatedSub
-DevkanVault.saveSubscription(context, updatedSub)
-if (loadedItems.isNotEmpty()) {
-allItems.clear()
-allItems.addAll(loadedItems)
-withContext(Dispatchers.IO) { DevkanVault.saveCachedItems(context, loadedItems, updatedSub.id) }
-classifiedSports = DevkanPlaylistRepository.syncAndClassifySportsEpg(context, updatedSub, loadedItems)
-}
-isSyncing = false
-}
-} else if (saved != null && cachedEpg.isEmpty() && cached.isNotEmpty()) {
-launch {
-classifiedSports = DevkanPlaylistRepository.syncAndClassifySportsEpg(context, saved, cached)
-}
-}
-
-launch {
-val realMatches = RealSportsDataSource.fetchTodayRealMatches()
-if (realMatches.isNotEmpty()) {
-todayRealMatches.clear()
-todayRealMatches.addAll(realMatches)
-}
-}
-
-if (DevkanVault.isAutoResumeEnabled(context)) {
-val last = DevkanVault.getLastChannel(context)
-if (last != null) {
-isSportsPlayback = false
-activeStream = MediaItemModel("resume", "0", last.second, last.first, "", "Live", "", "LIVE")
-}
-}
-}
-
-val m3uFileLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-if (uri != null) {
-scope.launch {
-val imported = DevkanPlaylistRepository.parseLocalUri(context, uri)
-if (imported.isNotEmpty()) {
-allItems.clear()
-allItems.addAll(imported)
-withContext(Dispatchers.IO) { DevkanVault.saveCachedItems(context, imported) }
-Toast.makeText(context, "تم استيراد وحفظ ${imported.size} عنصر!", Toast.LENGTH_SHORT).show()
-}
-}
-}
-}
-
-fun launchGroupedMatchStream(match: GroupedSportsMatch, targetProgram: EpgProgram = match.primaryStream) {
-val matchedChannel = cachedLiveChannels.firstOrNull {
-it.rawId == targetProgram.channelId || it.title.equals(targetProgram.channelName, ignoreCase = true)
-}
-isSportsPlayback = true
-if (matchedChannel != null) {
-activeStream = matchedChannel.copy(
-title = "${match.homeTeam} vs ${match.awayTeam} • ${matchedChannel.title}"
-)
-} else if (currentSub?.type == "XTREAM" && targetProgram.channelId.isNotBlank()) {
-val sub = currentSub!!
-val cleanHost = sub.host.trimEnd('/')
-val url = "$cleanHost/live/${sub.username}/${sub.password}/${targetProgram.channelId}.m3u8"
-val tsFallback = "$cleanHost/live/${sub.username}/${sub.password}/${targetProgram.channelId}.ts"
-activeStream = MediaItemModel(
-id = "live_${targetProgram.channelId}",
-rawId = targetProgram.channelId,
-title = "${match.homeTeam} vs ${match.awayTeam} • ${targetProgram.channelName}",
-url = url,
-fallbackUrl = tsFallback,
-group = targetProgram.category ?: "Sports",
-logo = targetProgram.channelLogo.orEmpty(),
-contentType = "LIVE"
-)
-}
-}
-
-if (activeStream != null) {
-DevkanHybridPlayerScreen(
-streamUrl = activeStream!!.url,
-fallbackUrl = activeStream!!.fallbackUrl,
-streamTitle = activeStream!!.title,
-isVodOrSeries = activeStream!!.contentType != "LIVE",
-streamId = activeStream!!.id,
-quickChannels = cachedLiveChannels,
-onSwitchChannel = { nextCh ->
-isSportsPlayback = SportsMatchExtractor.isSportsProgram(nextCh.group, nextCh.title, null)
-activeStream = nextCh
-},
-lang = lang,
-onBack = {
-activeStream = null
-isSportsPlayback = false
-}
-)
-return
-}
-
-if (selectedMovieForDetails != null) {
-val m = selectedMovieForDetails!!
-MovieDetailsScreen(
-movie = m,
-subscription = currentSub,
-isInWatchlist = watchlistIds.contains(m.id),
-onToggleWatchlist = {
-if (watchlistIds.contains(m.id)) watchlistIds.remove(m.id) else watchlistIds.add(m.id)
-Toast.makeText(context, if (watchlistIds.contains(m.id)) "تمت الإضافة للمفضلة ✓" else "تمت الإزالة", Toast.LENGTH_SHORT).show()
-},
-onPlayMovie = { item ->
-selectedMovieForDetails = null
-isSportsPlayback = false
-activeStream = item
-},
-onBack = { selectedMovieForDetails = null }
-)
-return
-}
-
-if (selectedSeriesForDetails != null) {
-val s = selectedSeriesForDetails!!
-SeriesDetailsScreen(
-series = s,
-subscription = currentSub,
-isInWatchlist = watchlistIds.contains(s.id),
-onToggleWatchlist = {
-if (watchlistIds.contains(s.id)) watchlistIds.remove(s.id) else watchlistIds.add(s.id)
-Toast.makeText(context, if (watchlistIds.contains(s.id)) "تمت الإضافة للمفضلة ✓" else "تمت الإزالة", Toast.LENGTH_SHORT).show()
-},
-onPlayEpisode = { epItem ->
-isSportsPlayback = false
-activeStream = epItem
-},
-onBack = { selectedSeriesForDetails = null }
-)
-return
-}
-
-if (showEpgSheet) {
-val sampleEpg = cachedLiveChannels.take(120).mapIndexed { idx, ch ->
-EpgSlot(
-channelName = ch.title,
-channelLogo = ch.logo,
-currentProgram = if (idx % 2 == 0) "البث المباشر الحالي (${ch.group})" else "التغطية المباشرة المستمرة",
-nextProgram = "البرنامج التالي على الجدول",
-timeRange = "LIVE • HD",
-progress = 0.6f
-)
-}
-EpgTimelineGridSheet(
-slots = sampleEpg,
-lang = lang,
-onPlayChannel = { chName ->
-val found = cachedLiveChannels.firstOrNull { it.title == chName }
-showEpgSheet = false
-if (found != null) {
-isSportsPlayback = SportsMatchExtractor.isSportsProgram(found.group, found.title, null)
-activeStream = found
-}
-},
-onClose = { showEpgSheet = false }
-)
-return
-}
-
-Scaffold(
-containerColor = Color(0xFF07070A),
-topBar = {
-DevkanBrandHeader(
-activeSubLabel = currentSub?.label ?: "إضافة اتصال",
-onSwitchSubClick = { showQuickSubSwitcher = true },
-onSearchClick = { showQuickSearch = true },
-onImportClick = { m3uFileLauncher.launch("*/*") },
-onSettingsClick = { selectedTab = 5 },
-strings = strings
-)
-},
-bottomBar = {
-NavigationBar(containerColor = Color(0xFF0E0E14), tonalElevation = 8.dp) {
-val navItems = listOf(
-Triple(strings.home, Icons.Default.Home, 0),
-Triple(strings.live, Icons.Default.LiveTv, 1),
-Triple(strings.sports, Icons.Default.SportsSoccer, 2),
-Triple(strings.moviesTab, Icons.Default.Movie, 3),
-Triple(strings.seriesTab, Icons.Default.VideoLibrary, 4)
-)
-navItems.forEach { (label, icon, index) ->
-NavigationBarItem(
-selected = selectedTab == index,
-onClick = { selectedTab = index },
-icon = {
-Icon(
-imageVector = icon,
-contentDescription = label,
-tint = if (selectedTab == index) gold else Color(0xFF8E929F),
-modifier = Modifier.size(21.dp)
-)
-},
-label = {
-Text(
-text = label,
-fontSize = 10.sp,
-maxLines = 1,
-softWrap = false,
-overflow = TextOverflow.Ellipsis,
-fontWeight = if (selectedTab == index) FontWeight.Bold else FontWeight.Normal,
-color = if (selectedTab == index) gold else Color(0xFF8E929F)
-)
-},
-colors = NavigationBarItemDefaults.colors(indicatorColor = gold.copy(alpha = 0.16f))
-)
-}
-}
-}
-) { innerPadding ->
-Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
-if (isSyncing) {
-LinearProgressIndicator(color = gold, modifier = Modifier.fillMaxWidth().align(Alignment.TopCenter))
-}
-
-when (selectedTab) {
-0 -> {
-val lastCh = remember { DevkanVault.getLastChannel(context) }
-var selectedHomePill by remember { mutableStateOf("الكل") }
-val homePills = listOf("الكل", "مباشر", "رياضة", "أفلام", "مسلسلات", "EPG")
-
-val latestMoviesSorted = remember(allItems.size) {
-allItems.filter { it.contentType == "MOVIE" }
-.sortedWith(
-compareByDescending<MediaItemModel> { it.addedTimestamp }
-.thenByDescending { it.year.toIntOrNull() ?: 0 }
-)
-.take(15)
-}
-
-val true4kMovies = remember(allItems.size) {
-allItems.filter { it.contentType == "MOVIE" && it.is4k }
-.sortedByDescending { it.addedTimestamp }
-.take(15)
-}
-
-val topSeriesSorted = remember(allItems.size) {
-allItems.filter { it.contentType == "SERIES" }
-.sortedWith(
-compareByDescending<MediaItemModel> { it.rating.toDoubleOrNull() ?: 0.0 }
-.thenByDescending { it.addedTimestamp }
-)
-.take(15)
-}
-
-val heroFeatured = topSeriesSorted.firstOrNull { it.logo.isNotEmpty() }
-?: latestMoviesSorted.firstOrNull { it.logo.isNotEmpty() }
-
-val featuredMatch = classifiedSports.liveMatches.firstOrNull()
-?: classifiedSports.upcoming24hMatches.firstOrNull()
-val fallbackRealMatch = todayRealMatches.firstOrNull()
-
-Column(
-modifier = Modifier
-.fillMaxSize()
-.verticalScroll(rememberScrollState())
-.padding(vertical = 10.dp),
-verticalArrangement = Arrangement.spacedBy(16.dp)
-) {
-LazyRow(
-contentPadding = PaddingValues(horizontal = 14.dp),
-horizontalArrangement = Arrangement.spacedBy(8.dp)
-) {
-items(homePills, key = { it }) { pill ->
-val isSelected = pill == selectedHomePill
-Box(
-modifier = Modifier
-.clip(RoundedCornerShape(50))
-.background(if (isSelected) gold else Color(0xFF14141F))
-.border(1.dp, if (isSelected) gold else Color(0xFF28283A), RoundedCornerShape(50))
-.clickable {
-selectedHomePill = pill
-when (pill) {
-"مباشر" -> selectedTab = 1
-"رياضة" -> {
-selectedSportNetwork = "ALL"
-selectedTab = 2
-}
-"أفلام" -> selectedTab = 3
-"مسلسلات" -> selectedTab = 4
-"EPG" -> showEpgSheet = true
-}
-}
-.padding(horizontal = 15.dp, vertical = 7.dp)
-) {
-Text(
-text = pill,
-color = if (isSelected) Color.Black else Color.White,
-fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-fontSize = 12.sp
-)
-}
-}
-}
-
-if (featuredMatch != null) {
-Box(
-modifier = Modifier
-.fillMaxWidth()
-.padding(horizontal = 14.dp)
-.clip(RoundedCornerShape(20.dp))
-.background(
-Brush.linearGradient(
-colors = listOf(Color(0xFF18192C), Color(0xFF111625), Color(0xFF0A0A0F))
-)
-)
-.border(1.dp, gold.copy(alpha = 0.5f), RoundedCornerShape(20.dp))
-.padding(16.dp)
-) {
-Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-Row(
-modifier = Modifier.fillMaxWidth(),
-horizontalArrangement = Arrangement.SpaceBetween,
-verticalAlignment = Alignment.CenterVertically
-) {
-Text(
-text = "🏆 ${featuredMatch.competition ?: "قمة مباريات اليوم"}",
-color = goldLight,
-fontSize = 12.sp,
-fontWeight = FontWeight.Bold
-)
-val timeTxt = remember(featuredMatch.startTime) {
-SimpleDateFormat("hh:mm a", Locale.getDefault()).format(Date(featuredMatch.startTime))
-}
-Box(
-modifier = Modifier
-.clip(RoundedCornerShape(6.dp))
-.background(
-if (featuredMatch.isLive) Color(0xFFEF4444).copy(alpha = 0.22f)
-else Color(0xFF16A34A).copy(alpha = 0.22f)
-)
-.padding(horizontal = 8.dp, vertical = 3.dp)
-) {
-Text(
-text = if (featuredMatch.isLive) "🔴 مباشر الآن" else "🟢 $timeTxt",
-color = if (featuredMatch.isLive) Color(0xFFF87171) else Color(0xFF4ADE80),
-fontWeight = FontWeight.Bold,
-fontSize = 11.sp
-)
-}
-}
-
-Row(
-modifier = Modifier.fillMaxWidth(),
-horizontalArrangement = Arrangement.SpaceBetween,
-verticalAlignment = Alignment.CenterVertically
-) {
-Text(featuredMatch.homeTeam, color = Color.White, fontWeight = FontWeight.Black, fontSize = 17.sp, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-Text("VS", color = gold, fontWeight = FontWeight.ExtraBold, fontSize = 14.sp, modifier = Modifier.padding(horizontal = 10.dp))
-Text(featuredMatch.awayTeam, color = Color.White, fontWeight = FontWeight.Black, fontSize = 17.sp, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-}
-
-Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-Button(
-onClick = { launchGroupedMatchStream(featuredMatch) },
-colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626)),
-shape = RoundedCornerShape(12.dp),
-modifier = Modifier.weight(1f)
-) {
-Icon(Icons.Default.PlayArrow, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
-Spacer(Modifier.width(4.dp))
-Text("مشاهدة البث (${featuredMatch.streams.size})", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-}
-OutlinedButton(
-onClick = {
-if (featuredMatch.streams.size > 1) selectedGroupedMatchForQuality = featuredMatch else launchGroupedMatchStream(featuredMatch)
-},
-shape = RoundedCornerShape(12.dp),
-border = BorderStroke(1.dp, gold.copy(alpha = 0.5f))
-) {
-Text("الجودات", color = goldLight, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-}
-}
-}
-}
-} else if (fallbackRealMatch != null) {
-val matchTitle = "${fallbackRealMatch.homeTeam} vs ${fallbackRealMatch.awayTeam}"
-val isReminded = MatchReminderManager.remindedMatches.contains(matchTitle)
-Box(
-modifier = Modifier
-.fillMaxWidth()
-.padding(horizontal = 14.dp)
-.clip(RoundedCornerShape(20.dp))
-.background(
-Brush.linearGradient(
-colors = listOf(Color(0xFF18192C), Color(0xFF111625), Color(0xFF0A0A0F))
-)
-)
-.border(1.dp, if (fallbackRealMatch.isLive) Color(0xFFEF4444).copy(alpha = 0.65f) else gold.copy(alpha = 0.55f), RoundedCornerShape(20.dp))
-.padding(16.dp)
-) {
-Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-Row(
-modifier = Modifier.fillMaxWidth(),
-horizontalArrangement = Arrangement.SpaceBetween,
-verticalAlignment = Alignment.CenterVertically
-) {
-Text(
-text = "🏆 ${fallbackRealMatch.league}",
-color = goldLight,
-fontSize = 12.sp,
-fontWeight = FontWeight.Bold,
-maxLines = 1,
-overflow = TextOverflow.Ellipsis,
-modifier = Modifier.weight(1f)
-)
-Box(
-modifier = Modifier
-.clip(RoundedCornerShape(6.dp))
-.background(if (fallbackRealMatch.isLive) Color(0xFFEF4444).copy(alpha = 0.24f) else Color(0xFF16A34A).copy(alpha = 0.22f))
-.padding(horizontal = 8.dp, vertical = 3.dp)
-) {
-Text(
-text = if (fallbackRealMatch.isLive) "🔴 ${fallbackRealMatch.status}" else "⏰ ${fallbackRealMatch.matchTime}",
-color = if (fallbackRealMatch.isLive) Color(0xFFF87171) else Color(0xFF4ADE80),
-fontWeight = FontWeight.Bold,
-fontSize = 11.sp
-)
-}
-}
-
-Row(
-modifier = Modifier.fillMaxWidth(),
-horizontalArrangement = Arrangement.SpaceBetween,
-verticalAlignment = Alignment.CenterVertically
-) {
-Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-if (fallbackRealMatch.homeLogo.isNotEmpty()) {
-AsyncImage(model = fallbackRealMatch.homeLogo, contentDescription = null, modifier = Modifier.size(28.dp))
-}
-Text(fallbackRealMatch.homeTeam, color = Color.White, fontWeight = FontWeight.Black, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-}
-Box(
-modifier = Modifier
-.background(Color(0xFF222232), RoundedCornerShape(8.dp))
-.padding(horizontal = 10.dp, vertical = 4.dp)
-) {
-Text(fallbackRealMatch.scoreText, color = goldLight, fontWeight = FontWeight.Black, fontSize = 14.sp)
-}
-Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.End) {
-Text(fallbackRealMatch.awayTeam, color = Color.White, fontWeight = FontWeight.Black, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-if (fallbackRealMatch.awayLogo.isNotEmpty()) {
-Spacer(Modifier.width(6.dp))
-AsyncImage(model = fallbackRealMatch.awayLogo, contentDescription = null, modifier = Modifier.size(28.dp))
-}
-}
-}
-
-Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-Button(
-onClick = { selectedMatchForChannelPicker = fallbackRealMatch },
-colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626)),
-shape = RoundedCornerShape(12.dp),
-modifier = Modifier.weight(1f)
-) {
-Icon(Icons.Default.PlayArrow, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
-Spacer(Modifier.width(4.dp))
-Text("شاهد عبر ${fallbackRealMatch.suggestedBroadcaster}", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp, maxLines = 1)
-}
-IconButton(
-onClick = {
-val added = MatchReminderManager.toggleReminder(matchTitle)
-Toast.makeText(context, if (added) "تم تفعيل إشعار المباراة 🔔" else "تم إلغاء الإشعار", Toast.LENGTH_SHORT).show()
-},
-modifier = Modifier.background(Color(0xFF1E1E2D), RoundedCornerShape(12.dp))
-) {
-Icon(
-imageVector = if (isReminded) Icons.Default.NotificationsActive else Icons.Default.NotificationsNone,
-contentDescription = "Reminder",
-tint = if (isReminded) goldLight else Color.White
-)
-}
-}
-}
-}
-} else if (heroFeatured != null) {
-Box(
-modifier = Modifier
-.fillMaxWidth()
-.padding(horizontal = 14.dp)
-.height(210.dp)
-.clip(RoundedCornerShape(20.dp))
-.background(Color(0xFF14141F))
-.clickable {
-if (heroFeatured.contentType == "SERIES") selectedSeriesForDetails = heroFeatured
-else selectedMovieForDetails = heroFeatured
-}
-) {
-AsyncImage(
-model = ImageRequest.Builder(context).data(heroFeatured.logo).size(640, 420).crossfade(true).build(),
-contentDescription = heroFeatured.title,
-contentScale = ContentScale.Crop,
-modifier = Modifier.fillMaxSize()
-)
-Box(
-modifier = Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.88f))))
-)
-Column(modifier = Modifier.align(Alignment.BottomStart).padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-Text(heroFeatured.title, color = Color.White, fontWeight = FontWeight.Black, fontSize = 18.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-Button(
-onClick = {
-if (heroFeatured.contentType == "SERIES") selectedSeriesForDetails = heroFeatured
-else selectedMovieForDetails = heroFeatured
-},
-colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626)),
-shape = RoundedCornerShape(10.dp)
-) {
-Icon(Icons.Default.PlayArrow, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
-Spacer(Modifier.width(4.dp))
-Text("شاهد الآن", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-}
-}
-}
-}
-
-val liveCount = classifiedSports.liveMatches.size + todayRealMatches.count { it.isLive }
-val totalCount = classifiedSports.liveMatches.size + classifiedSports.upcoming24hMatches.size + todayRealMatches.size
-if (totalCount > 0) {
-Row(
-modifier = Modifier
-.fillMaxWidth()
-.padding(horizontal = 14.dp)
-.clip(RoundedCornerShape(14.dp))
-.background(Color(0xFF111916))
-.border(1.dp, Color(0xFF16A34A).copy(alpha = 0.45f), RoundedCornerShape(14.dp))
-.clickable {
-selectedSportNetwork = "ALL"
-selectedTab = 2
-}
-.padding(horizontal = 14.dp, vertical = 12.dp),
-horizontalArrangement = Arrangement.SpaceBetween,
-verticalAlignment = Alignment.CenterVertically
-) {
-Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-Icon(Icons.Default.SportsSoccer, contentDescription = null, tint = Color(0xFF4ADE80), modifier = Modifier.size(24.dp))
-Column {
-Text("رياضة • جدول المباريات الحية", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-Text("🔴 $liveCount مباشر   •   ⚽ $totalCount مباراة اليوم", color = Color(0xFF4ADE80), fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold)
-}
-}
-Icon(Icons.Default.ChevronRight, contentDescription = null, tint = Color(0xFF4ADE80))
-}
-}
-
-if (todayRealMatches.size > 1) {
-Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-Row(
-modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp),
-horizontalArrangement = Arrangement.SpaceBetween,
-verticalAlignment = Alignment.CenterVertically
-) {
-Text("⚽ مباريات اليوم المباشرة", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-Text("عرض الكل", color = goldLight, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { selectedTab = 2 })
-}
-LazyRow(contentPadding = PaddingValues(horizontal = 14.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-itemsIndexed(todayRealMatches.drop(1).take(12), key = { idx, it -> "home_espn_${idx}_${it.id}" }) { _, match ->
-Column(
-modifier = Modifier
-.width(245.dp)
-.clip(RoundedCornerShape(14.dp))
-.background(Color(0xFF151522))
-.border(1.dp, if (match.isLive) Color(0xFFEF4444).copy(alpha = 0.5f) else gold.copy(alpha = 0.35f), RoundedCornerShape(14.dp))
-.clickable { selectedMatchForChannelPicker = match }
-.padding(12.dp),
-verticalArrangement = Arrangement.spacedBy(5.dp)
-) {
-Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-Text(match.league, color = goldLight, fontSize = 10.sp, fontWeight = FontWeight.Bold, maxLines = 1, modifier = Modifier.weight(1f))
-Text(if (match.isLive) "🔴 ${match.matchTime}" else match.matchTime, color = if (match.isLive) Color(0xFFF87171) else Color(0xFF4ADE80), fontSize = 10.sp, fontWeight = FontWeight.Bold)
-}
-Text("${match.homeTeam}  (${match.scoreText})  ${match.awayTeam}", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-Text("📺 ${match.suggestedBroadcaster}", color = Color(0xFF93C5FD), fontSize = 11.sp)
-}
-}
-}
-}
-}
-
-if (lastCh != null) {
-Row(
-modifier = Modifier
-.fillMaxWidth()
-.padding(horizontal = 14.dp)
-.clip(RoundedCornerShape(14.dp))
-.background(Color(0xFF14141D))
-.border(1.dp, gold.copy(alpha = 0.35f), RoundedCornerShape(14.dp))
-.clickable {
-isSportsPlayback = false
-activeStream = MediaItemModel("last", "0", lastCh.second, lastCh.first, "", "Live", "", "LIVE")
-}
-.padding(12.dp),
-verticalAlignment = Alignment.CenterVertically,
-horizontalArrangement = Arrangement.SpaceBetween
-) {
-Column {
-Text(strings.continueWatching, color = gold, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-Text(lastCh.second, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-}
-Icon(Icons.Default.PlayCircleFilled, contentDescription = null, tint = gold, modifier = Modifier.size(30.dp))
-}
-}
-
-if (allItems.isEmpty() && !isSyncing) {
-Column(
-modifier = Modifier
-.fillMaxWidth()
-.padding(horizontal = 14.dp)
-.clip(RoundedCornerShape(18.dp))
-.background(Color(0xFF12121A))
-.border(1.dp, gold.copy(alpha = 0.35f), RoundedCornerShape(18.dp))
-.padding(24.dp),
-horizontalAlignment = Alignment.CenterHorizontally,
-verticalArrangement = Arrangement.spacedBy(12.dp)
-) {
-Icon(Icons.Default.AddLink, contentDescription = null, tint = gold, modifier = Modifier.size(44.dp))
-Text("أضف اشتراكك للبدء", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-Button(onClick = {
-subToEdit = null
-showAddDialog = true
-}, colors = ButtonDefaults.buttonColors(containerColor = gold)) {
-Text(strings.addConnection, color = Color.Black, fontWeight = FontWeight.Bold)
-}
-}
-} else {
-if (latestMoviesSorted.isNotEmpty()) {
-Box(modifier = Modifier.padding(horizontal = 14.dp)) {
-CinemaHorizontalRow(
-title = strings.latestMovies,
-items = latestMoviesSorted,
-onMoreClick = { selectedTab = 3 },
-onItemClick = { selectedMovieForDetails = it }
-)
-}
-}
-
-if (topSeriesSorted.isNotEmpty()) {
-Box(modifier = Modifier.padding(horizontal = 14.dp)) {
-CinemaHorizontalRow(
-title = strings.featuredSeries,
-items = topSeriesSorted,
-onMoreClick = { selectedTab = 4 },
-onItemClick = { selectedSeriesForDetails = it }
-)
-}
-}
-
-if (true4kMovies.isNotEmpty()) {
-Box(modifier = Modifier.padding(horizontal = 14.dp)) {
-CinemaHorizontalRow(
-title = strings.movies4k,
-items = true4kMovies,
-onMoreClick = {
-movieSmartFilter = "4K"
-selectedTab = 3
-},
-onItemClick = { selectedMovieForDetails = it }
-)
-}
-}
-}
-}
-}
-
-1 -> {
-Column(modifier = Modifier.fillMaxSize().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-Row(
-modifier = Modifier.fillMaxWidth(),
-horizontalArrangement = Arrangement.SpaceBetween,
-verticalAlignment = Alignment.CenterVertically
-) {
-Text("${strings.live} (${filteredLiveList.size})", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 17.sp)
-Button(
-onClick = { showEpgSheet = true },
-colors = ButtonDefaults.buttonColors(containerColor = gold.copy(alpha = 0.2f)),
-contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
-shape = RoundedCornerShape(10.dp)
-) {
-Icon(Icons.Default.CalendarViewWeek, contentDescription = null, tint = gold, modifier = Modifier.size(16.dp))
-Spacer(Modifier.width(6.dp))
-Text(strings.epgGuide, color = gold, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-}
-}
-
-OutlinedTextField(
-value = liveFilterQuery,
-onValueChange = { liveFilterQuery = it },
-placeholder = { Text("تصفية القنوات بالاسم...", fontSize = 12.sp) },
-leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = gold, modifier = Modifier.size(18.dp)) },
-trailingIcon = {
-if (liveFilterQuery.isNotEmpty()) {
-IconButton(onClick = { liveFilterQuery = "" }) {
-Icon(Icons.Default.Close, contentDescription = null, tint = Color.Gray, modifier = Modifier.size(16.dp))
-}
-}
-},
-singleLine = true,
-shape = RoundedCornerShape(12.dp),
-modifier = Modifier.fillMaxWidth()
-)
-
-LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-items(cachedLiveGroups, key = { it }) { grp ->
-FilterChip(
-selected = selectedLiveCategory == grp,
-onClick = { selectedLiveCategory = grp },
-label = { Text(if (grp == "ALL") strings.all else grp, fontSize = 12.sp) }
-)
-}
-}
-
-LazyColumn(state = liveListState, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-items(items = filteredLiveList, key = { it.id }, contentType = { "live_channel" }) { ch ->
-Row(
-modifier = Modifier
-.fillMaxWidth()
-.clip(RoundedCornerShape(14.dp))
-.background(Color(0xFF13131B))
-.clickable {
-isSportsPlayback = SportsMatchExtractor.isSportsProgram(ch.group, ch.title, null)
-activeStream = ch
-}
-.padding(12.dp),
-verticalAlignment = Alignment.CenterVertically,
-horizontalArrangement = Arrangement.SpaceBetween
-) {
-Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-if (ch.logo.isNotEmpty()) {
-AsyncImage(
-model = ImageRequest.Builder(context).data(ch.logo).size(120, 120).build(),
-contentDescription = null,
-modifier = Modifier.size(38.dp).clip(RoundedCornerShape(8.dp))
-)
-} else {
-Icon(Icons.Default.Tv, contentDescription = null, tint = gold, modifier = Modifier.size(32.dp))
-}
-Column(modifier = Modifier.weight(1f)) {
-Text(ch.title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-Text(ch.group, color = gold.copy(alpha = 0.85f), fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-}
-}
-Icon(Icons.Default.PlayArrow, contentDescription = null, tint = gold)
-}
-}
-}
-}
-}
-
-2 -> {
-val networks = listOf("ALL" to "الكل", "BEIN" to "beIN SPORTS", "SSC" to "SSC", "ALKASS" to "الكأس", "AD" to "أبو ظبي", "RABIAA" to "الرابعة")
-
-val deduplicatedSports = remember(cachedSportsChannels, selectedSportNetwork) {
-if (selectedSportNetwork == "ALL") {
-cachedSportsChannels
-} else {
-cachedSportsChannels.filter { item ->
-val text = "${item.group} ${item.title}".lowercase()
-when (selectedSportNetwork) {
-"BEIN" -> text.contains("bein")
-"SSC" -> text.contains("ssc")
-"ALKASS" -> text.contains("kass") || text.contains("كأس") || text.contains("الكاس")
-"AD" -> text.contains("abu dhabi") || text.contains("ad sport") || text.contains("ابوظبي") || text.contains("أبوظبي")
-"RABIAA" -> text.contains("rabiaa") || text.contains("الرابعة") || text.contains("iraq")
-else -> true
-}
-}
-}
-}
-
-Column(modifier = Modifier.fillMaxSize().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-items(networks, key = { it.first }) { (code, label) ->
-FilterChip(
-selected = selectedSportNetwork == code,
-onClick = { selectedSportNetwork = code },
-label = { Text(label, fontSize = 12.sp, fontWeight = FontWeight.Bold) }
-)
-}
-}
-
-LazyColumn(state = sportsListState, verticalArrangement = Arrangement.spacedBy(10.dp)) {
-if (todayRealMatches.isNotEmpty() && selectedSportNetwork == "ALL") {
-item(key = "header_today_matches") {
-Text("🏆 مباريات اليوم والنتائج الحية (${todayRealMatches.size})", color = goldLight, fontWeight = FontWeight.Bold, fontSize = 15.sp)
-}
-itemsIndexed(todayRealMatches, key = { idx, it -> "real_${idx}_${it.id}" }) { _, match ->
-val title = "${match.homeTeam} vs ${match.awayTeam}"
-val isReminded = MatchReminderManager.remindedMatches.contains(title)
-Row(
-modifier = Modifier
-.fillMaxWidth()
-.clip(RoundedCornerShape(14.dp))
-.background(Color(0xFF151522))
-.border(1.dp, if (match.isLive) Color(0xFFEF4444).copy(alpha = 0.55f) else Color(0xFF28283E), RoundedCornerShape(14.dp))
-.clickable { selectedMatchForChannelPicker = match }
-.padding(12.dp),
-verticalAlignment = Alignment.CenterVertically,
-horizontalArrangement = Arrangement.SpaceBetween
-) {
-Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-Text(
-text = if (match.isLive) "🔴 ${match.matchTime}" else "⏰ ${match.matchTime}",
-color = if (match.isLive) Color(0xFFF87171) else Color(0xFF4ADE80),
-fontSize = 11.sp,
-fontWeight = FontWeight.Bold
-)
-Text("• ${match.league}", color = Color(0xFF9CA3AF), fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-}
-Text("${match.homeTeam}   (${match.scoreText})   ${match.awayTeam}", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.5.sp)
-Text("📺 القناة الناقلة: ${match.suggestedBroadcaster}", color = Color(0xFF93C5FD), fontSize = 11.sp, fontWeight = FontWeight.Bold)
-}
-IconButton(onClick = {
-val added = MatchReminderManager.toggleReminder(title)
-Toast.makeText(context, if (added) "تم تفعيل إشعار المباراة 🔔" else "تم إلغاء التذكير", Toast.LENGTH_SHORT).show()
-}) {
-Icon(
-imageVector = if (isReminded) Icons.Default.NotificationsActive else Icons.Default.NotificationsNone,
-contentDescription = "Reminder",
-tint = if (isReminded) gold else Color.Gray
-)
-}
-}
-}
-}
-
-item(key = "header_sports_channels") {
-Text("📺 القنوات الرياضية الموحدة (${deduplicatedSports.size})", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
-}
-itemsIndexed(deduplicatedSports, key = { idx, it -> "sp_${idx}_${it.id}" }) { _, ch ->
-Row(
-modifier = Modifier
-.fillMaxWidth()
-.clip(RoundedCornerShape(14.dp))
-.background(Color(0xFF13131B))
-.clickable {
-isSportsPlayback = true
-activeStream = ch
-}
-.padding(12.dp),
-verticalAlignment = Alignment.CenterVertically,
-horizontalArrangement = Arrangement.SpaceBetween
-) {
-Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-if (ch.logo.isNotEmpty()) {
-AsyncImage(
-model = ImageRequest.Builder(context).data(ch.logo).size(120, 120).build(),
-contentDescription = null,
-modifier = Modifier.size(34.dp).clip(RoundedCornerShape(8.dp))
-)
-} else {
-Icon(Icons.Default.SportsSoccer, contentDescription = null, tint = gold)
-}
-Column {
-Text(ch.title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp, maxLines = 1)
-Text(ch.group, color = Color.Gray, fontSize = 11.sp)
-}
-}
-Icon(Icons.Default.PlayArrow, contentDescription = null, tint = gold)
-}
-}
-}
-}
-}
-
-3 -> {
-val allMovies = remember(allItems.size) { allItems.filter { it.contentType == "MOVIE" } }
-val movieGroups = remember(allMovies.size) { listOf("ALL") + allMovies.map { it.group }.distinct() }
-
-val availableMovieFilters = remember(allMovies.size) {
-val list = mutableListOf("ALL" to "الكل", "RECENT" to "مضاف حديثاً", "TOP" to "أعلى تقييماً ⭐")
-if (allMovies.any { it.is4k }) list.add("4K" to "4K UHD")
-listOf("دراما", "أكشن", "خيال علمي", "رومانسي", "كوميدي", "رعب وإثارة", "تاريخي", "أنمي وعائلي").forEach { g ->
-if (allMovies.any { it.genreTag == g }) list.add(g to g)
-}
-listOf("عربي", "كوري", "تركي", "هندي", "أجنبي").forEach { o ->
-if (allMovies.any { it.originTag == o }) list.add(o to "أفلام $o")
-}
-list
-}
-
-Column(modifier = Modifier.fillMaxSize().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-Row(
-modifier = Modifier.fillMaxWidth(),
-horizontalArrangement = Arrangement.SpaceBetween,
-verticalAlignment = Alignment.CenterVertically
-) {
-Text("🎬 ${strings.moviesTab} (${filteredMoviesList.size})", color = Color.White, fontWeight = FontWeight.Black, fontSize = 17.sp)
-OutlinedButton(
-onClick = { showMovieGroupsSheet = true },
-shape = RoundedCornerShape(10.dp),
-contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-border = BorderStroke(1.dp, gold.copy(alpha = 0.5f))
-) {
-Icon(Icons.Default.FolderSpecial, contentDescription = null, tint = goldLight, modifier = Modifier.size(15.dp))
-Spacer(Modifier.width(4.dp))
-Text(
-text = if (movieServerGroup == "ALL") "أقسام السيرفر" else movieServerGroup,
-color = goldLight,
-fontSize = 11.sp,
-maxLines = 1,
-overflow = TextOverflow.Ellipsis,
-modifier = Modifier.widthIn(max = 120.dp)
-)
-}
-}
-
-OutlinedTextField(
-value = movieQuery,
-onValueChange = { movieQuery = it },
-placeholder = { Text("ابحث في مكتبة الأفلام...", fontSize = 12.sp) },
-leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = gold, modifier = Modifier.size(18.dp)) },
-trailingIcon = {
-if (movieQuery.isNotEmpty()) {
-IconButton(onClick = { movieQuery = "" }) {
-Icon(Icons.Default.Close, contentDescription = null, tint = Color.Gray, modifier = Modifier.size(16.dp))
-}
-}
-},
-singleLine = true,
-shape = RoundedCornerShape(12.dp),
-modifier = Modifier.fillMaxWidth()
-)
-
-LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-items(availableMovieFilters, key = { it.first }) { (code, label) ->
-FilterChip(
-selected = movieSmartFilter == code,
-onClick = { movieSmartFilter = code },
-label = { Text(label, fontSize = 12.sp, fontWeight = if (movieSmartFilter == code) FontWeight.Bold else FontWeight.Normal) }
-)
-}
-}
-
-LazyVerticalGrid(
-state = moviesGridState,
-columns = GridCells.Fixed(2),
-horizontalArrangement = Arrangement.spacedBy(10.dp),
-verticalArrangement = Arrangement.spacedBy(10.dp),
-modifier = Modifier.fillMaxSize()
-) {
-items(items = filteredMoviesList, key = { it.id }, contentType = { "movie_poster" }) { item ->
-val progress = vodProgressCache[item.id] ?: 0f
-MediaPosterCard(
-item = item,
-progress = progress,
-onClick = { selectedMovieForDetails = item }
-)
-}
-}
-}
-
-if (showMovieGroupsSheet) {
-ModalBottomSheet(onDismissRequest = { showMovieGroupsSheet = false }, containerColor = Color(0xFF14141E)) {
-Column(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-Text("مجلدات الأفلام في السيرفر", color = goldLight, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-LazyColumn(modifier = Modifier.heightIn(max = 380.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-items(movieGroups, key = { it }) { grp ->
-Row(
-modifier = Modifier
-.fillMaxWidth()
-.clip(RoundedCornerShape(10.dp))
-.background(if (movieServerGroup == grp) gold.copy(alpha = 0.2f) else Color(0xFF1C1C28))
-.clickable {
-movieServerGroup = grp
-showMovieGroupsSheet = false
-}
-.padding(12.dp),
-horizontalArrangement = Arrangement.SpaceBetween
-) {
-Text(if (grp == "ALL") "كل مجلدات الأفلام (${allMovies.size})" else grp, color = Color.White, fontSize = 13.sp)
-if (movieServerGroup == grp) Icon(Icons.Default.Check, contentDescription = null, tint = goldLight)
-}
-}
-}
-}
-}
-}
-}
-
-4 -> {
-val allSeries = remember(allItems.size) { allItems.filter { it.contentType == "SERIES" } }
-val seriesGroups = remember(allSeries.size) { listOf("ALL") + allSeries.map { it.group }.distinct() }
-
-val availableSeriesFilters = remember(allSeries.size) {
-val list = mutableListOf("ALL" to "الكل", "RECENT" to "مضاف حديثاً", "TOP" to "أعلى تقييماً ⭐")
-listOf("عربي", "كوري", "تركي", "هندي", "أجنبي").forEach { o ->
-if (allSeries.any { it.originTag == o }) list.add(o to "مسلسلات $o")
-}
-listOf("دراما", "أكشن", "خيال علمي", "رومانسي", "تاريخي", "كوميدي", "رعب وإثارة").forEach { g ->
-if (allSeries.any { it.genreTag == g }) list.add(g to g)
-}
-list
-}
-
-Column(modifier = Modifier.fillMaxSize().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-Row(
-modifier = Modifier.fillMaxWidth(),
-horizontalArrangement = Arrangement.SpaceBetween,
-verticalAlignment = Alignment.CenterVertically
-) {
-Text("📺 ${strings.seriesTab} (${filteredSeriesList.size})", color = Color.White, fontWeight = FontWeight.Black, fontSize = 17.sp)
-OutlinedButton(
-onClick = { showSeriesGroupsSheet = true },
-shape = RoundedCornerShape(10.dp),
-contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-border = BorderStroke(1.dp, gold.copy(alpha = 0.5f))
-) {
-Icon(Icons.Default.FolderSpecial, contentDescription = null, tint = goldLight, modifier = Modifier.size(15.dp))
-Spacer(Modifier.width(4.dp))
-Text(
-text = if (seriesServerGroup == "ALL") "أقسام السيرفر" else seriesServerGroup,
-color = goldLight,
-fontSize = 11.sp,
-maxLines = 1,
-overflow = TextOverflow.Ellipsis,
-modifier = Modifier.widthIn(max = 120.dp)
-)
-}
-}
-
-OutlinedTextField(
-value = seriesQuery,
-onValueChange = { seriesQuery = it },
-placeholder = { Text("ابحث في مكتبة المسلسلات...", fontSize = 12.sp) },
-leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = gold, modifier = Modifier.size(18.dp)) },
-trailingIcon = {
-if (seriesQuery.isNotEmpty()) {
-IconButton(onClick = { seriesQuery = "" }) {
-Icon(Icons.Default.Close, contentDescription = null, tint = Color.Gray, modifier = Modifier.size(16.dp))
-}
-}
-},
-singleLine = true,
-shape = RoundedCornerShape(12.dp),
-modifier = Modifier.fillMaxWidth()
-)
-
-LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-items(availableSeriesFilters, key = { it.first }) { (code, label) ->
-FilterChip(
-selected = seriesSmartFilter == code,
-onClick = { seriesSmartFilter = code },
-label = { Text(label, fontSize = 12.sp, fontWeight = if (seriesSmartFilter == code) FontWeight.Bold else FontWeight.Normal) }
-)
-}
-}
-
-LazyVerticalGrid(
-state = seriesGridState,
-columns = GridCells.Fixed(2),
-horizontalArrangement = Arrangement.spacedBy(10.dp),
-verticalArrangement = Arrangement.spacedBy(10.dp),
-modifier = Modifier.fillMaxSize()
-) {
-items(items = filteredSeriesList, key = { it.id }, contentType = { "series_poster" }) { item ->
-MediaPosterCard(
-item = item,
-progress = 0f,
-onClick = { selectedSeriesForDetails = item }
+import java.util.concurrent.TimeUnit
+
+data class SavedSubscription(
+val id: String = UUID.randomUUID().toString(),
+val label: String = "اشتراك رئيسي",
+val type: String,
+val host: String,
+val username: String = "",
+val password: String = "",
+val m3uUrl: String = "",
+val macAddress: String = "",
+val status: String = "Active",
+val expDateFormatted: String = "Unlimited",
+val allowedCountries: String = "Global / All",
+val activeCons: String = "1",
+val maxCons: String = "1"
+)
+
+data class MediaItemModel(
+val id: String,
+val rawId: String = "",
+val title: String,
+val url: String,
+val fallbackUrl: String = "",
+val group: String,
+val logo: String = "",
+val contentType: String = "LIVE",
+val rating: String = "",
+val year: String = "",
+val originTag: String = "أجنبي",
+val genreTag: String = "دراما",
+val addedTimestamp: Long = 0L,
+val is4k: Boolean = false
+)
+
+data class VodDetailedInfo(
+val title: String,
+val plot: String,
+val cast: String,
+val director: String,
+val releaseDate: String,
+val duration: String,
+val rating: String,
+val backdropUrl: String
+)
+
+data class SeriesEpisodeModel(
+val id: String,
+val episodeNum: Int,
+val seasonNum: Int,
+val title: String,
+val url: String,
+val duration: String = ""
+)
+
+data class SeriesDetailedInfo(
+val title: String,
+val plot: String,
+val cast: String,
+val releaseDate: String,
+val rating: String,
+val backdropUrl: String,
+val seasons: Map<Int, List<SeriesEpisodeModel>>
+)
+
+data class RealSportsMatch(
+val id: String,
+val homeTeam: String,
+val awayTeam: String,
+val homeLogo: String = "",
+val awayLogo: String = "",
+val scoreText: String = "VS",
+val league: String,
+val matchTime: String,
+val status: String,
+val isLive: Boolean = false,
+val suggestedBroadcaster: String = "beIN SPORTS"
 )
-}
-}
-}
-
-if (showSeriesGroupsSheet) {
-ModalBottomSheet(onDismissRequest = { showSeriesGroupsSheet = false }, containerColor = Color(0xFF14141E)) {
-Column(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-Text("مجلدات المسلسلات في السيرفر", color = goldLight, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-LazyColumn(modifier = Modifier.heightIn(max = 380.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-items(seriesGroups, key = { it }) { grp ->
-Row(
-modifier = Modifier
-.fillMaxWidth()
-.clip(RoundedCornerShape(10.dp))
-.background(if (seriesServerGroup == grp) gold.copy(alpha = 0.2f) else Color(0xFF1C1C28))
-.clickable {
-seriesServerGroup = grp
-showSeriesGroupsSheet = false
-}
-.padding(12.dp),
-horizontalArrangement = Arrangement.SpaceBetween
-) {
-Text(if (grp == "ALL") "كل مجلدات المسلسلات (${allSeries.size})" else grp, color = Color.White, fontSize = 13.sp)
-if (seriesServerGroup == grp) Icon(Icons.Default.Check, contentDescription = null, tint = goldLight)
-}
-}
-}
-}
-}
-}
-
-5 -> {
-DevkanSettingsScreen(
-strings = strings,
-lang = lang,
-onLanguageChange = onLanguageChange,
-subscription = currentSub,
-onSwitchSub = { selectedSub -> switchSubscriptionFast(selectedSub) },
-onEditSub = { sub ->
-subToEdit = sub
-showAddDialog = true
-},
-onRefreshSub = {
-val sub = currentSub ?: return@DevkanSettingsScreen
-scope.launch {
-isSyncing = true
-val (updated, items) = DevkanPlaylistRepository.loadSubscriptionContent(sub, DevkanVault.isGeoBypassEnabled(context))
-currentSub = updated
-DevkanVault.saveSubscription(context, updated)
-if (items.isNotEmpty()) {
-allItems.clear()
-allItems.addAll(items)
-withContext(Dispatchers.IO) { DevkanVault.saveCachedItems(context, items, updated.id) }
-classifiedSports = DevkanPlaylistRepository.syncAndClassifySportsEpg(context, updated, items)
-}
-isSyncing = false
-Toast.makeText(context, "تم تحديث البيانات والجدول الرياضي بنجاح!", Toast.LENGTH_SHORT).show()
-}
-},
-onDeleteSub = {
-DevkanVault.clearSubscription(context)
-val nextSub = DevkanVault.getSavedSubscription(context)
-currentSub = nextSub
-if (nextSub == null) {
-allItems.clear()
-cachedLiveChannels = emptyList()
-cachedSportsChannels = emptyList()
-classifiedSports = emptySports
-} else {
-switchSubscriptionFast(nextSub)
-}
-Toast.makeText(context, "تم حذف الاشتراك", Toast.LENGTH_SHORT).show()
-},
-onOpenAddDialog = {
-subToEdit = null
-showAddDialog = true
-},
-sampleTestUrl = allItems.firstOrNull()?.url ?: "https://www.google.com"
-)
-}
-}
-}
-}
-
-if (showQuickSubSwitcher) {
-val subsList = remember(currentSub?.id, currentSub?.label) { DevkanVault.getAllSubscriptions(context) }
-ModalBottomSheet(
-onDismissRequest = { showQuickSubSwitcher = false },
-containerColor = Color(0xFF14141E)
-) {
-Column(
-modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 10.dp),
-verticalArrangement = Arrangement.spacedBy(10.dp)
-) {
-Text("تبديل الاتصال", color = goldLight, fontWeight = FontWeight.Bold, fontSize = 17.sp)
-if (subsList.isEmpty()) {
-Text("لا توجد اشتراكات محفوظة حالياً", color = Color.Gray, fontSize = 13.sp)
-} else {
-subsList.forEach { subItem ->
-val isSelected = subItem.id == currentSub?.id
-Row(
-modifier = Modifier
-.fillMaxWidth()
-.clip(RoundedCornerShape(12.dp))
-.background(if (isSelected) gold.copy(alpha = 0.18f) else Color(0xFF1B1B27))
-.clickable {
-showQuickSubSwitcher = false
-if (!isSelected) switchSubscriptionFast(subItem)
-}
-.padding(horizontal = 14.dp, vertical = 12.dp),
-horizontalArrangement = Arrangement.SpaceBetween,
-verticalAlignment = Alignment.CenterVertically
-) {
-Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-RadioButton(selected = isSelected, onClick = null, colors = RadioButtonDefaults.colors(selectedColor = goldLight))
-Column {
-Text(subItem.label, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-Text("${subItem.type} • ${subItem.expDateFormatted}", color = Color.Gray, fontSize = 11.sp)
-}
-}
-IconButton(onClick = {
-showQuickSubSwitcher = false
-subToEdit = subItem
-showAddDialog = true
-}) {
-Icon(Icons.Default.Edit, contentDescription = "Edit", tint = Color(0xFF60A5FA), modifier = Modifier.size(18.dp))
-}
-}
-}
-}
-
-HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
-Row(
-modifier = Modifier
-.fillMaxWidth()
-.clip(RoundedCornerShape(12.dp))
-.background(gold.copy(alpha = 0.15f))
-.clickable {
-showQuickSubSwitcher = false
-subToEdit = null
-showAddDialog = true
-}
-.padding(14.dp),
-verticalAlignment = Alignment.CenterVertically,
-horizontalArrangement = Arrangement.Center
-) {
-Icon(Icons.Default.AddCircleOutline, contentDescription = null, tint = goldLight)
-Spacer(Modifier.width(8.dp))
-Text("إضافة اتصال جديد", color = goldLight, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-}
-Spacer(Modifier.height(20.dp))
-}
-}
-}
-
-if (showQuickSearch) {
-val searchResults = remember(quickSearchQuery, allItems.size) {
-if (quickSearchQuery.trim().length < 2) emptyList()
-else allItems.filter { it.title.contains(quickSearchQuery.trim(), ignoreCase = true) }.take(25)
-}
-AlertDialog(
-onDismissRequest = {
-showQuickSearch = false
-quickSearchQuery = ""
-},
-containerColor = Color(0xFF14141D),
-title = {
-OutlinedTextField(
-value = quickSearchQuery,
-onValueChange = { quickSearchQuery = it },
-placeholder = { Text(strings.searchHint, fontSize = 12.sp) },
-singleLine = true,
-modifier = Modifier.fillMaxWidth()
-)
-},
-text = {
-if (searchResults.isEmpty()) {
-Text("اكتب حرفين على الأقل للبحث في القنوات والأفلام والمسلسلات", color = Color.Gray, fontSize = 12.sp)
-} else {
-LazyColumn(modifier = Modifier.heightIn(max = 320.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-items(searchResults, key = { it.id }) { item ->
-Row(
-modifier = Modifier
-.fillMaxWidth()
-.clip(RoundedCornerShape(10.dp))
-.background(Color(0xFF1E1E2B))
-.clickable {
-showQuickSearch = false
-quickSearchQuery = ""
-when (item.contentType) {
-"MOVIE" -> selectedMovieForDetails = item
-"SERIES" -> selectedSeriesForDetails = item
-else -> {
-isSportsPlayback = SportsMatchExtractor.isSportsProgram(item.group, item.title, null)
-activeStream = item
-}
-}
-}
-.padding(10.dp),
-verticalAlignment = Alignment.CenterVertically,
-horizontalArrangement = Arrangement.SpaceBetween
-) {
-Column(modifier = Modifier.weight(1f)) {
-Text(item.title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-Text("${item.contentType} • ${item.group}", color = goldLight, fontSize = 11.sp, maxLines = 1)
-}
-Icon(Icons.Default.PlayArrow, contentDescription = null, tint = gold)
-}
-}
-}
-}
-},
-confirmButton = {
-TextButton(onClick = {
-showQuickSearch = false
-quickSearchQuery = ""
-}) {
-Text("إغلاق", color = gold)
-}
-}
-)
-}
-
-selectedGroupedMatchForQuality?.let { match ->
-AlertDialog(
-onDismissRequest = { selectedGroupedMatchForQuality = null },
-containerColor = Color(0xFF14141D),
-title = {
-Column {
-Text("${match.homeTeam} vs ${match.awayTeam}", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
-Text("اختر القناة أو الجودة المناسبة:", color = goldLight, fontSize = 12.sp)
-}
-},
-text = {
-Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-match.streams.forEach { prog ->
-Row(
-modifier = Modifier
-.fillMaxWidth()
-.clip(RoundedCornerShape(10.dp))
-.background(Color(0xFF1E1E2B))
-.clickable {
-selectedGroupedMatchForQuality = null
-launchGroupedMatchStream(match, prog)
-}
-.padding(10.dp),
-verticalAlignment = Alignment.CenterVertically,
-horizontalArrangement = Arrangement.SpaceBetween
-) {
-Text(prog.channelName, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp, modifier = Modifier.weight(1f))
-Box(
-modifier = Modifier.background(gold.copy(alpha = 0.2f), RoundedCornerShape(6.dp)).padding(horizontal = 6.dp, vertical = 2.dp)
-) {
-Text(prog.streamQuality ?: "HD", color = goldLight, fontWeight = FontWeight.Bold, fontSize = 10.sp)
-}
-}
-}
-}
-},
-confirmButton = {
-TextButton(onClick = { selectedGroupedMatchForQuality = null }) {
-Text("إغلاق", color = gold)
-}
-}
-)
-}
-
-selectedMatchForChannelPicker?.let { match ->
-val matchingChannels = remember(cachedSportsChannels, match.id) {
-val broadcasterKeyword = match.suggestedBroadcaster.substringBefore(" ").lowercase()
-val priority = cachedSportsChannels.filter { it.title.lowercase().contains(broadcasterKeyword) || it.group.lowercase().contains(broadcasterKeyword) }
-if (priority.isNotEmpty()) priority.take(8) else cachedSportsChannels.take(8)
-}
-
-AlertDialog(
-onDismissRequest = { selectedMatchForChannelPicker = null },
-containerColor = Color(0xFF14141D),
-title = {
-Column {
-Text("${match.homeTeam} vs ${match.awayTeam}", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
-Text("اختر القناة الناقلة من اشتراكك:", color = goldLight, fontSize = 12.sp)
-}
-},
-text = {
-if (matchingChannels.isEmpty()) {
-Text("لم يتم العثور على قنوات رياضية في اشتراكك الحالي.", color = Color.Gray, fontSize = 13.sp)
-} else {
-Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-matchingChannels.forEach { ch ->
-Row(
-modifier = Modifier
-.fillMaxWidth()
-.clip(RoundedCornerShape(10.dp))
-.background(Color(0xFF1E1E2B))
-.clickable {
-selectedMatchForChannelPicker = null
-isSportsPlayback = true
-activeStream = ch.copy(title = "${match.homeTeam} vs ${match.awayTeam} • ${ch.title}")
-}
-.padding(10.dp),
-verticalAlignment = Alignment.CenterVertically,
-horizontalArrangement = Arrangement.SpaceBetween
-) {
-Text(ch.title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp, modifier = Modifier.weight(1f))
-Icon(Icons.Default.PlayArrow, contentDescription = null, tint = gold)
-}
-}
-}
-}
-},
-confirmButton = {
-TextButton(onClick = { selectedMatchForChannelPicker = null }) {
-Text("إغلاق", color = gold)
-}
-}
-)
-}
-
-if (showAddDialog) {
-SmartAddConnectionDialog(
-strings = strings,
-editingSub = subToEdit,
-onDismiss = {
-showAddDialog = false
-subToEdit = null
-},
-onSaveAndConnect = { newSub ->
-scope.launch {
-isSyncing = true
-DevkanVault.saveSubscription(context, newSub)
-val (updatedSub, loadedItems) = DevkanPlaylistRepository.loadSubscriptionContent(
-newSub,
-DevkanVault.isGeoBypassEnabled(context)
-)
-currentSub = updatedSub
-DevkanVault.saveSubscription(context, updatedSub)
-if (loadedItems.isNotEmpty()) {
-allItems.clear()
-allItems.addAll(loadedItems)
-withContext(Dispatchers.IO) { DevkanVault.saveCachedItems(context, loadedItems, updatedSub.id) }
-classifiedSports = DevkanPlaylistRepository.syncAndClassifySportsEpg(context, updatedSub, loadedItems)
-Toast.makeText(context, "تم الحفظ والاتصال (${loadedItems.size} عنصر)!", Toast.LENGTH_SHORT).show()
-showAddDialog = false
-subToEdit = null
-} else {
-Toast.makeText(context, "تعذر جلب القنوات، تأكد من البيانات", Toast.LENGTH_LONG).show()
-}
-isSyncing = false
-}
-}
-)
-}
-}
-
-@Composable
-fun MediaPosterCard(
-item: MediaItemModel,
-progress: Float,
-onClick: () -> Unit
-) {
-val context = LocalContext.current
-val gold = Color(0xFFD4AF37)
-val goldLight = Color(0xFFFDE047)
-
-Column(
-modifier = Modifier
-.clip(RoundedCornerShape(16.dp))
-.background(Color(0xFF13131B))
-.border(1.dp, Color(0xFF232332), RoundedCornerShape(16.dp))
-.clickable { onClick() }
-.padding(8.dp),
-verticalArrangement = Arrangement.spacedBy(6.dp)
-) {
-Box {
-if (item.logo.isNotEmpty()) {
-AsyncImage(
-model = ImageRequest.Builder(context)
-.data(item.logo)
-.size(320, 440)
-.crossfade(false)
-.build(),
-contentDescription = item.title,
-contentScale = ContentScale.Crop,
-modifier = Modifier.fillMaxWidth().height(165.dp).clip(RoundedCornerShape(12.dp))
-)
-} else {
-Box(
-modifier = Modifier.fillMaxWidth().height(165.dp).background(Color(0xFF1D1D29), RoundedCornerShape(12.dp)),
-contentAlignment = Alignment.Center
-) {
-Icon(Icons.Default.MovieFilter, contentDescription = null, tint = gold, modifier = Modifier.size(36.dp))
-}
-}
-Row(
-modifier = Modifier.align(Alignment.TopStart).padding(6.dp),
-horizontalArrangement = Arrangement.spacedBy(4.dp)
-) {
-Box(
-modifier = Modifier.background(Color.Black.copy(alpha = 0.78f), RoundedCornerShape(6.dp)).padding(horizontal = 6.dp, vertical = 2.dp)
-) {
-Text(item.originTag, color = goldLight, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-}
-if (item.rating.isNotEmpty() && item.rating != "0") {
-Box(
-modifier = Modifier.background(Color.Black.copy(alpha = 0.78f), RoundedCornerShape(6.dp)).padding(horizontal = 6.dp, vertical = 2.dp)
-) {
-Text("IMDb ${item.rating}", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-}
-}
-}
-}
-
-if (progress > 0.02f) {
-LinearProgressIndicator(
-progress = { progress },
-color = gold,
-trackColor = Color(0xFF2B2B3C),
-modifier = Modifier.fillMaxWidth().height(4.dp).clip(CircleShape)
-)
-}
-
-Text(item.title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-Text(
-text = if (item.year.isNotEmpty()) "${item.year} • ${item.genreTag}" else item.genreTag,
-color = Color(0xFF8E929F),
-fontSize = 11.sp,
-maxLines = 1,
-overflow = TextOverflow.Ellipsis
-)
-}
-}
-
-@Composable
-fun SmartEpgMatchCard(
-match: GroupedSportsMatch,
-onPlayPrimary: () -> Unit,
-onSelectQuality: () -> Unit
-) {
-val gold = Color(0xFFD4AF37)
-val goldLight = Color(0xFFFDE047)
-val timeFormatted = remember(match.startTime) {
-SimpleDateFormat("hh:mm a", Locale.getDefault()).format(Date(match.startTime))
-}
-
-Column(
-modifier = Modifier
-.fillMaxWidth()
-.clip(RoundedCornerShape(16.dp))
-.background(Brush.horizontalGradient(listOf(Color(0xFF171626), Color(0xFF101522))))
-.border(1.dp, if (match.isLive) Color(0xFFEF4444).copy(alpha = 0.55f) else gold.copy(alpha = 0.4f), RoundedCornerShape(16.dp))
-.clickable { onPlayPrimary() }
-.padding(13.dp),
-verticalArrangement = Arrangement.spacedBy(8.dp)
-) {
-Row(
-modifier = Modifier.fillMaxWidth(),
-horizontalArrangement = Arrangement.SpaceBetween,
-verticalAlignment = Alignment.CenterVertically
-) {
-Text(
-text = match.competition ?: "بث رياضي",
-color = goldLight,
-fontSize = 11.sp,
-fontWeight = FontWeight.Bold,
-maxLines = 1,
-overflow = TextOverflow.Ellipsis,
-modifier = Modifier.weight(1f)
-)
-Box(
-modifier = Modifier
-.background(
-if (match.isLive) Color(0xFFEF4444).copy(alpha = 0.22f) else Color(0xFF16A34A).copy(alpha = 0.22f),
-RoundedCornerShape(8.dp)
-)
-.padding(horizontal = 8.dp, vertical = 3.dp)
-) {
-Text(
-text = if (match.isLive) "🔴 مباشر الآن" else "🟢 $timeFormatted",
-color = if (match.isLive) Color(0xFFF87171) else Color(0xFF4ADE80),
-fontWeight = FontWeight.Bold,
-fontSize = 11.sp
-)
-}
-}
-
-Text(
-text = "${match.homeTeam}   🆚   ${match.awayTeam}",
-color = Color.White,
-fontWeight = FontWeight.ExtraBold,
-fontSize = 15.sp,
-maxLines = 1,
-overflow = TextOverflow.Ellipsis
-)
-
-Row(
-modifier = Modifier.fillMaxWidth(),
-horizontalArrangement = Arrangement.SpaceBetween,
-verticalAlignment = Alignment.CenterVertically
-) {
-Text(
-text = "📺 ${match.primaryStream.channelName}",
-color = Color(0xFF93C5FD),
-fontSize = 12.sp,
-fontWeight = FontWeight.SemiBold,
-maxLines = 1,
-overflow = TextOverflow.Ellipsis,
-modifier = Modifier.weight(1f)
-)
-if (match.streams.size > 1) {
-Text(
-text = "+${match.streams.size - 1} جودات ▾",
-color = goldLight,
-fontSize = 11.sp,
-fontWeight = FontWeight.Bold,
-modifier = Modifier
-.clip(RoundedCornerShape(6.dp))
-.background(gold.copy(alpha = 0.16f))
-.clickable { onSelectQuality() }
-.padding(horizontal = 8.dp, vertical = 3.dp)
-)
-}
-}
-}
-}
-
-@Composable
-fun CinemaHorizontalRow(
-title: String,
-items: List<MediaItemModel>,
-onMoreClick: () -> Unit,
-onItemClick: (MediaItemModel) -> Unit
-) {
-val context = LocalContext.current
-val gold = Color(0xFFD4AF37)
-val goldLight = Color(0xFFFDE047)
 
-Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-Row(
-modifier = Modifier.fillMaxWidth(),
-horizontalArrangement = Arrangement.SpaceBetween,
-verticalAlignment = Alignment.CenterVertically
-) {
-Text(title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-Text(
-text = "المزيد",
-color = goldLight,
-fontSize = 12.sp,
-fontWeight = FontWeight.Bold,
-modifier = Modifier.clickable { onMoreClick() }.padding(horizontal = 6.dp, vertical = 2.dp)
-)
-}
-
-LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-items(items, key = { it.id }) { item ->
-Column(
-modifier = Modifier
-.width(135.dp)
-.clip(RoundedCornerShape(14.dp))
-.background(Color(0xFF13131B))
-.clickable { onItemClick(item) }
-.padding(6.dp),
-verticalArrangement = Arrangement.spacedBy(5.dp)
-) {
-Box {
-if (item.logo.isNotEmpty()) {
-AsyncImage(
-model = ImageRequest.Builder(context)
-.data(item.logo)
-.size(270, 330)
-.build(),
-contentDescription = item.title,
-contentScale = ContentScale.Crop,
-modifier = Modifier.fillMaxWidth().height(165.dp).clip(RoundedCornerShape(10.dp))
-)
-} else {
-Box(
-modifier = Modifier.fillMaxWidth().height(165.dp).background(Color(0xFF1D1D29), RoundedCornerShape(10.dp)),
-contentAlignment = Alignment.Center
-) {
-Icon(Icons.Default.Movie, contentDescription = null, tint = gold)
-}
-}
-if (item.rating.isNotEmpty() && item.rating != "0") {
-Box(
-modifier = Modifier
-.align(Alignment.BottomStart)
-.padding(5.dp)
-.background(Color.Black.copy(alpha = 0.8f), RoundedCornerShape(5.dp))
-.padding(horizontal = 5.dp, vertical = 2.dp)
-) {
-Text("IMDb ${item.rating}", color = goldLight, fontSize = 9.5.sp, fontWeight = FontWeight.Bold)
-}
-}
-}
-Text(item.title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-Text(
-text = if (item.year.isNotEmpty()) "${item.year} • ${item.genreTag}" else item.genreTag,
-color = Color(0xFF9CA3AF),
-fontSize = 10.5.sp,
-maxLines = 1
-)
-}
-}
+enum class AutoSyncInterval(val days: Int, val labelAr: String, val labelEn: String) {
+DAILY(1, "كل يوم (24 ساعة)", "Every Day (24h)"),
+WEEKLY(7, "كل أسبوع (7 أيام)", "Every Week (7d)"),
+MONTHLY(30, "كل شهر (30 يوماً)", "Every Month (30d)"),
+MANUAL(0, "يدوي فقط", "Manual Only")
 }
-}
-}
 
-@Composable
-fun MovieDetailsScreen(
-movie: MediaItemModel,
-subscription: SavedSubscription?,
-isInWatchlist: Boolean,
-onToggleWatchlist: () -> Unit,
-onPlayMovie: (MediaItemModel) -> Unit,
-onBack: () -> Unit
-) {
-BackHandler { onBack() }
-val context = LocalContext.current
-val gold = Color(0xFFD4AF37)
-val goldLight = Color(0xFFFDE047)
-var details by remember { mutableStateOf<VodDetailedInfo?>(null) }
-val savedProgress = remember { DevkanVault.getVodProgressFraction(context, movie.id) }
-
-LaunchedEffect(movie.id) {
-if (subscription != null && subscription.type == "XTREAM" && movie.rawId.isNotEmpty()) {
-details = DevkanPlaylistRepository.fetchVodDetails(subscription, movie.rawId, movie.title, movie.logo)
-} else {
-details = VodDetailedInfo(movie.title, "جاهز للمشاهدة الفورية بجودة عالية.", "غير متوفر", "غير متوفر", movie.year.ifEmpty { "2025" }, "HD", movie.rating.ifEmpty { "8.0" }, movie.logo)
-}
+enum class EngineType(val labelAr: String, val labelEn: String, val labelDe: String, val labelTr: String) {
+AUTO_HYBRID("تلقائي هجين (Media3 + LibVLC)", "Auto Hybrid (Media3 + VLC)", "Auto-Hybrid (Media3 + LibVLC)", "Otomatik Hibrit (Media3 + LibVLC)"),
+MEDIA3_ONLY("Media3 ExoPlayer (فائق السرعة)", "Media3 ExoPlayer (Fast Zapping)", "Media3 ExoPlayer (Schnell)", "Media3 ExoPlayer (Hızlı)"),
+LIBVLC_ONLY("LibVLC (للترميزات الصعبة AC3/TS)", "LibVLC (Advanced Codecs)", "LibVLC (Erweiterte Codecs)", "LibVLC (Gelişmiş Kodekler)")
 }
 
-Column(
-modifier = Modifier
-.fillMaxSize()
-.background(Color(0xFF07070A))
-.verticalScroll(rememberScrollState())
-.padding(16.dp),
-verticalArrangement = Arrangement.spacedBy(14.dp)
-) {
-IconButton(onClick = onBack) {
-Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.White)
+enum class DnsProvider(val label: String, val dohUrl: String, val ips: List<String>) {
+SYSTEM("تلقائي (DNS النظام)", "", emptyList()),
+CLOUDFLARE("Cloudflare (1.1.1.1)", "https://cloudflare-dns.com/dns-query", listOf("1.1.1.1", "1.0.0.1")),
+GOOGLE("Google (8.8.8.8)", "https://dns.google/dns-query", listOf("8.8.8.8", "8.8.4.4")),
+ADGUARD("AdGuard (حظر إعلانات)", "https://dns.adguard-dns.com/dns-query", listOf("94.140.14.14", "94.140.15.15"))
 }
 
-val info = details
-if (info == null) {
-Box(modifier = Modifier.fillMaxWidth().height(220.dp), contentAlignment = Alignment.Center) {
-CircularProgressIndicator(color = gold)
-}
-} else {
-if (info.backdropUrl.isNotEmpty()) {
-AsyncImage(
-model = info.backdropUrl,
-contentDescription = info.title,
-contentScale = ContentScale.Crop,
-modifier = Modifier.fillMaxWidth().height(250.dp).clip(RoundedCornerShape(18.dp))
+data class StreamDiagnostics(
+val activeEngine: String = "Media3 ExoPlayer",
+val pingMs: Long = 0L,
+val startupTimeMs: Long = 0L,
+val bitrateKbps: Int = 0,
+val bufferDurationMs: Long = 0L,
+val reconnectCount: Int = 0,
+val statusNote: String = "مستقر"
 )
-}
-
-Text(info.title, color = Color.White, fontWeight = FontWeight.Black, fontSize = 20.sp)
-
-Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-Box(modifier = Modifier.background(gold.copy(alpha = 0.2f), RoundedCornerShape(8.dp)).padding(horizontal = 8.dp, vertical = 4.dp)) {
-Text("IMDb ⭐ ${info.rating}", color = goldLight, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-}
-Text("${info.releaseDate} • ${info.duration}", color = Color(0xFFB0B5C0), fontSize = 12.sp)
-}
 
-if (savedProgress > 0.02f) {
-Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-Text("وصلت إلى ${(savedProgress * 100).toInt()}% من الفيلم", color = goldLight, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-LinearProgressIndicator(
-progress = { savedProgress },
-color = gold,
-trackColor = Color(0xFF252536),
-modifier = Modifier.fillMaxWidth().height(6.dp).clip(CircleShape)
-)
-}
-}
+object DevkanVault {
+private var cachedPrefs: SharedPreferences? = null
 
-Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-Button(
-onClick = { onPlayMovie(movie) },
-colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626)),
-shape = RoundedCornerShape(14.dp),
-modifier = Modifier.weight(1f).height(50.dp)
-) {
-Icon(Icons.Default.PlayArrow, contentDescription = null, tint = Color.White)
-Spacer(Modifier.width(6.dp))
-Text(
-text = if (savedProgress > 0.02f) "إكمال المشاهدة" else "شاهد الآن",
-color = Color.White,
-fontWeight = FontWeight.ExtraBold,
-fontSize = 15.sp
+private fun getSecurePrefs(context: Context): SharedPreferences {
+cachedPrefs?.let { return it }
+val prefs = try {
+val masterKey = MasterKey.Builder(context)
+.setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+.build()
+EncryptedSharedPreferences.create(
+context,
+"devkan_secure_vault_v5",
+masterKey,
+EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
 )
-}
-
-OutlinedButton(
-onClick = onToggleWatchlist,
-shape = RoundedCornerShape(14.dp),
-modifier = Modifier.height(50.dp)
-) {
-Icon(if (isInWatchlist) Icons.Default.Check else Icons.Default.Add, contentDescription = null, tint = goldLight)
-Spacer(Modifier.width(4.dp))
-Text(if (isInWatchlist) "في القائمة" else "لاحقاً", color = Color.White, fontSize = 12.sp)
-}
+} catch (e: Exception) {
+context.getSharedPreferences("devkan_fallback_prefs_v5", Context.MODE_PRIVATE)
 }
-
-Text(info.plot, color = Color(0xFFD1D5DB), fontSize = 13.sp, lineHeight = 20.sp)
-Text("الممثلون: ${info.cast}", color = Color(0xFF9CA3AF), fontSize = 12.sp)
-Text("المخرج: ${info.director}", color = Color(0xFF9CA3AF), fontSize = 12.sp)
-}
+cachedPrefs = prefs
+return prefs
 }
-}
-
-@Composable
-fun SeriesDetailsScreen(
-series: MediaItemModel,
-subscription: SavedSubscription?,
-isInWatchlist: Boolean,
-onToggleWatchlist: () -> Unit,
-onPlayEpisode: (MediaItemModel) -> Unit,
-onBack: () -> Unit
-) {
-BackHandler { onBack() }
-val context = LocalContext.current
-val gold = Color(0xFFD4AF37)
-val goldLight = Color(0xFFFDE047)
 
-var details by remember { mutableStateOf<SeriesDetailedInfo?>(null) }
-var selectedSeason by remember { mutableIntStateOf(1) }
-
-LaunchedEffect(series.id) {
-if (subscription != null && subscription.type == "XTREAM" && series.rawId.isNotEmpty()) {
-val fetched = DevkanPlaylistRepository.fetchSeriesDetails(subscription, series.rawId, series.title, series.logo)
-details = fetched
-if (fetched.seasons.isNotEmpty()) {
-selectedSeason = fetched.seasons.keys.first()
-}
-}
-}
+fun isDisclaimerAccepted(context: Context): Boolean =
+getSecurePrefs(context).getBoolean("disclaimer_accepted", false)
 
-Column(
-modifier = Modifier
-.fillMaxSize()
-.background(Color(0xFF07070A))
-.padding(16.dp),
-verticalArrangement = Arrangement.spacedBy(12.dp)
-) {
-Row(verticalAlignment = Alignment.CenterVertically) {
-IconButton(onClick = onBack) {
-Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.White)
+fun setDisclaimerAccepted(context: Context, accepted: Boolean) {
+getSecurePrefs(context).edit().putBoolean("disclaimer_accepted", accepted).apply()
 }
-Text(series.title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 17.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-}
 
-val info = details
-if (info == null) {
-Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-CircularProgressIndicator(color = gold)
-}
-} else {
-val episodes = info.seasons[selectedSeason] ?: emptyList()
+fun getLanguage(context: Context): String =
+getSecurePrefs(context).getString("app_lang", "ar") ?: "ar"
 
-Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-if (info.backdropUrl.isNotEmpty()) {
-AsyncImage(
-model = info.backdropUrl,
-contentDescription = info.title,
-contentScale = ContentScale.Crop,
-modifier = Modifier.width(110.dp).height(155.dp).clip(RoundedCornerShape(14.dp))
-)
+fun setLanguage(context: Context, lang: String) {
+getSecurePrefs(context).edit().putString("app_lang", lang).apply()
 }
-Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-Text("IMDb ⭐ ${info.rating}  •  ${info.releaseDate}", color = goldLight, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-Text(info.plot, color = Color(0xFFD1D5DB), fontSize = 12.sp, maxLines = 3, overflow = TextOverflow.Ellipsis)
 
-Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-Button(
-onClick = {
-val firstEp = episodes.firstOrNull()
-if (firstEp != null) {
-onPlayEpisode(
-MediaItemModel(firstEp.id, firstEp.id, "${series.title} - م${firstEp.seasonNum} ح${firstEp.episodeNum}", firstEp.url, "", series.group, series.logo, "SERIES")
-)
-}
-},
-colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626)),
-shape = RoundedCornerShape(10.dp),
-contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
-) {
-Icon(Icons.Default.PlayArrow, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
-Spacer(Modifier.width(4.dp))
-Text("شاهد الآن", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-}
+fun getUserAgent(context: Context): String =
+getSecurePrefs(context).getString("custom_user_agent", "IPTVSmartersPro/3.1.5 (Linux; Android 14)")
+?: "IPTVSmartersPro/3.1.5 (Linux; Android 14)"
 
-IconButton(
-onClick = onToggleWatchlist,
-modifier = Modifier.size(38.dp).background(Color(0xFF1A1A26), CircleShape)
-) {
-Icon(if (isInWatchlist) Icons.Default.Favorite else Icons.Default.FavoriteBorder, contentDescription = null, tint = if (isInWatchlist) Color(0xFFEF4444) else Color.White, modifier = Modifier.size(18.dp))
-}
-}
+fun setUserAgent(context: Context, ua: String) {
+getSecurePrefs(context).edit().putString("custom_user_agent", ua).apply()
 }
-}
 
-if (info.seasons.isNotEmpty()) {
-LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-items(info.seasons.keys.toList()) { seasonNum ->
-val active = selectedSeason == seasonNum
-FilterChip(
-selected = active,
-onClick = { selectedSeason = seasonNum },
-label = {
-Text(
-text = "الموسم $seasonNum",
-fontWeight = if (active) FontWeight.Bold else FontWeight.Normal
-)
-}
-)
+fun getDnsProvider(context: Context): DnsProvider {
+val raw = getSecurePrefs(context).getString("custom_dns", DnsProvider.SYSTEM.name)
+return try { DnsProvider.valueOf(raw ?: DnsProvider.SYSTEM.name) } catch (_: Exception) { DnsProvider.SYSTEM }
 }
-}
-}
 
-LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxSize()) {
-items(episodes, key = { it.id }) { ep ->
-val progress = remember(ep.id) { DevkanVault.getVodProgressFraction(context, ep.id) }
-val statusText = when {
-progress >= 0.90f -> "مكتملة ✓"
-progress >= 0.45f -> "نصف الحلقة (${(progress * 100).toInt()}%)"
-progress >= 0.15f -> "ربع الحلقة (${(progress * 100).toInt()}%)"
-progress > 0.02f -> "قيد المشاهدة (${(progress * 100).toInt()}%)"
-else -> ep.duration.ifEmpty { "جاهزة للمشاهدة" }
+fun setDnsProvider(context: Context, provider: DnsProvider) {
+getSecurePrefs(context).edit().putString("custom_dns", provider.name).apply()
 }
 
-Row(
-modifier = Modifier
-.fillMaxWidth()
-.clip(RoundedCornerShape(14.dp))
-.background(Color(0xFF13131B))
-.border(1.dp, if (progress > 0.02f) gold.copy(alpha = 0.45f) else Color(0xFF232332), RoundedCornerShape(14.dp))
-.clickable {
-onPlayEpisode(
-MediaItemModel(
-id = ep.id,
-rawId = ep.id,
-title = "${series.title} - م${ep.seasonNum} ح${ep.episodeNum}",
-url = ep.url,
-group = series.group,
-logo = series.logo,
-contentType = "SERIES"
-)
-)
-}
-.padding(10.dp),
-verticalAlignment = Alignment.CenterVertically,
-horizontalArrangement = Arrangement.spacedBy(12.dp)
-) {
-Box(modifier = Modifier.width(105.dp).height(64.dp).clip(RoundedCornerShape(10.dp))) {
-if (series.logo.isNotEmpty()) {
-AsyncImage(model = series.logo, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
-}
-Box(
-modifier = Modifier.align(Alignment.Center).size(28.dp).background(Color(0xFFDC2626).copy(alpha = 0.9f), CircleShape),
-contentAlignment = Alignment.Center
-) {
-Icon(Icons.Default.PlayArrow, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
-}
-}
+fun getAppLockPin(context: Context): String =
+getSecurePrefs(context).getString("app_lock_pin", "") ?: ""
 
-Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-Text("${series.title} • الحلقة ${ep.episodeNum}", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-Text(statusText, color = if (progress > 0.02f) goldLight else Color.Gray, fontSize = 11.sp)
-if (progress > 0.02f) {
-LinearProgressIndicator(
-progress = { progress },
-color = gold,
-trackColor = Color(0xFF2B2B3C),
-modifier = Modifier.fillMaxWidth().height(4.dp).clip(CircleShape)
-)
-}
-}
-}
+fun setAppLockPin(context: Context, pin: String) {
+getSecurePrefs(context).edit().putString("app_lock_pin", pin).apply()
 }
-}
-}
-}
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun DevkanSettingsScreen(
-strings: AppStrings,
-lang: String,
-onLanguageChange: (String) -> Unit,
-subscription: SavedSubscription?,
-onSwitchSub: (SavedSubscription) -> Unit,
-onEditSub: (SavedSubscription) -> Unit,
-onRefreshSub: () -> Unit,
-onDeleteSub: () -> Unit,
-onOpenAddDialog: () -> Unit,
-sampleTestUrl: String
-) {
-val context = LocalContext.current
-val scope = rememberCoroutineScope()
-val gold = Color(0xFFD4AF37)
-val goldLight = Color(0xFFFDE047)
-
-var activeSheet by remember { mutableStateOf<String?>(null) }
-val allSubs = remember(subscription?.id, subscription?.label) { DevkanVault.getAllSubscriptions(context) }
-
-var selectedEngine by remember { mutableStateOf(DevkanVault.getPreferredEngine(context)) }
-var selectedSyncInterval by remember { mutableStateOf(DevkanVault.getAutoSyncInterval(context)) }
-var selectedUserAgent by remember { mutableStateOf(DevkanVault.getUserAgent(context)) }
-var selectedDns by remember { mutableStateOf(DevkanVault.getDnsProvider(context)) }
-var lowLatency by remember { mutableStateOf(DevkanVault.isLowLatencyEnabled(context)) }
-var geoBypass by remember { mutableStateOf(DevkanVault.isGeoBypassEnabled(context)) }
-var autoResume by remember { mutableStateOf(DevkanVault.isAutoResumeEnabled(context)) }
-
-var pinInput by remember { mutableStateOf(DevkanVault.getAppLockPin(context)) }
-var speedResult by remember { mutableStateOf<String?>(null) }
-var testingSpeed by remember { mutableStateOf(false) }
 
-val languagesList = listOf(
-"ar" to "العربية (Arabic)",
-"en" to "English (الإنجليزية)",
-"de" to "Deutsch (الألمانية)",
-"tr" to "Türkçe (التركية)",
-"fr" to "Français (الفرنسية)",
-"ku" to "کوردی (الكردية)"
-)
-
-val userAgentsList = listOf(
-"IPTVSmartersPro/3.1.5 (Linux; Android 14)",
-"TiviMate/4.7.0 (Linux; Android 14)",
-"VLC/3.0.18 LibVLC/3.0.18",
-"okhttp/5.0.0-alpha.2",
-"Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
-)
+fun isLowLatencyEnabled(context: Context): Boolean =
+getSecurePrefs(context).getBoolean("low_latency_mode", true)
 
-Column(
-modifier = Modifier
-.fillMaxSize()
-.verticalScroll(rememberScrollState())
-.padding(14.dp),
-verticalArrangement = Arrangement.spacedBy(12.dp)
-) {
-Column(
-modifier = Modifier
-.fillMaxWidth()
-.clip(RoundedCornerShape(18.dp))
-.background(Brush.verticalGradient(listOf(Color(0xFF1B170E), Color(0xFF111118))))
-.border(1.dp, gold.copy(alpha = 0.55f), RoundedCornerShape(18.dp))
-.padding(16.dp),
-verticalArrangement = Arrangement.spacedBy(10.dp)
-) {
-Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-Icon(Icons.Default.WorkspacePremium, contentDescription = null, tint = goldLight)
-Text(strings.subscriptionCard, color = goldLight, fontWeight = FontWeight.Bold, fontSize = 15.sp)
-}
-Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-if (allSubs.size > 1) {
-Box(
-modifier = Modifier
-.clip(RoundedCornerShape(8.dp))
-.background(gold.copy(alpha = 0.2f))
-.clickable { activeSheet = "SUBS" }
-.padding(horizontal = 8.dp, vertical = 4.dp)
-) {
-Text("تبديل (${allSubs.size}) ▾", color = goldLight, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-}
-}
-Box(
-modifier = Modifier
-.clip(RoundedCornerShape(8.dp))
-.background(Color(0xFF222230))
-.clickable { onOpenAddDialog() }
-.padding(horizontal = 8.dp, vertical = 4.dp)
-) {
-Text("+ جديد", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-}
-}
+fun setLowLatencyEnabled(context: Context, enabled: Boolean) {
+getSecurePrefs(context).edit().putBoolean("low_latency_mode", enabled).apply()
 }
 
-if (subscription != null) {
-Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-Text(
-text = "${subscription.label} • ${subscription.type}",
-color = Color.White,
-fontWeight = FontWeight.Bold,
-fontSize = 13.sp
-)
-Box(
-modifier = Modifier.background(Color(0xFF16A34A).copy(alpha = 0.22f), RoundedCornerShape(8.dp)).padding(horizontal = 8.dp, vertical = 3.dp)
-) {
-Text(subscription.status, color = Color(0xFF4ADE80), fontSize = 11.sp, fontWeight = FontWeight.Bold)
-}
-}
-HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
-Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-Text(strings.expiryLabel, color = Color.Gray, fontSize = 12.sp)
-Text(subscription.expDateFormatted, color = goldLight, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-}
-Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-Text(strings.connectionsLabel, color = Color.Gray, fontSize = 12.sp)
-Text("${subscription.activeCons} / ${subscription.maxCons}", color = Color.White, fontSize = 12.sp)
-}
+fun isGeoBypassEnabled(context: Context): Boolean =
+getSecurePrefs(context).getBoolean("geo_bypass_headers", true)
 
-Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-OutlinedButton(onClick = onRefreshSub, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 6.dp), shape = RoundedCornerShape(10.dp)) {
-Icon(Icons.Default.Refresh, contentDescription = null, tint = gold, modifier = Modifier.size(15.dp))
-Spacer(Modifier.width(3.dp))
-Text("تحديث", color = gold, fontSize = 11.sp, maxLines = 1)
-}
-OutlinedButton(onClick = { onEditSub(subscription) }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 6.dp), shape = RoundedCornerShape(10.dp)) {
-Icon(Icons.Default.Edit, contentDescription = null, tint = Color(0xFF60A5FA), modifier = Modifier.size(15.dp))
-Spacer(Modifier.width(3.dp))
-Text("تعديل", color = Color(0xFF60A5FA), fontSize = 11.sp, maxLines = 1)
-}
-OutlinedButton(onClick = onDeleteSub, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 6.dp), shape = RoundedCornerShape(10.dp)) {
-Icon(Icons.Default.DeleteOutline, contentDescription = null, tint = Color(0xFFF87171), modifier = Modifier.size(15.dp))
-Spacer(Modifier.width(3.dp))
-Text("حذف", color = Color(0xFFF87171), fontSize = 11.sp, maxLines = 1)
-}
+fun setGeoBypassEnabled(context: Context, enabled: Boolean) {
+getSecurePrefs(context).edit().putBoolean("geo_bypass_headers", enabled).apply()
 }
-} else {
-Text("لا يوجد اشتراك محفوظ حالياً", color = Color.Gray, fontSize = 12.sp)
-Button(onClick = onOpenAddDialog, colors = ButtonDefaults.buttonColors(containerColor = gold), modifier = Modifier.fillMaxWidth()) {
-Text(strings.addConnection, color = Color.Black, fontWeight = FontWeight.Bold)
-}
-}
-}
-
-SettingsRowCard(
-icon = Icons.Default.Dns,
-title = "مزود DNS (تجاوز حظر المزود)",
-subtitle = selectedDns.label,
-onClick = { activeSheet = "DNS" }
-)
-
-SettingsRowCard(
-icon = Icons.Default.PermDeviceInformation,
-title = "User-Agent (هوية المشغل)",
-subtitle = selectedUserAgent.substringBefore(" "),
-onClick = { activeSheet = "UA" }
-)
-
-SettingsRowCard(
-icon = Icons.Default.SettingsInputComponent,
-title = strings.engineTitle,
-subtitle = when (lang) {
-"en" -> selectedEngine.labelEn
-"de" -> selectedEngine.labelDe
-"tr" -> selectedEngine.labelTr
-else -> selectedEngine.labelAr
-},
-onClick = { activeSheet = "ENGINE" }
-)
-
-SettingsRowCard(
-icon = Icons.Default.Autorenew,
-title = strings.autoSyncTitle,
-subtitle = if (lang == "ar" || lang == "ku") selectedSyncInterval.labelAr else selectedSyncInterval.labelEn,
-onClick = { activeSheet = "SYNC" }
-)
 
-SettingsRowCard(
-icon = Icons.Default.Language,
-title = "اللغة / Language",
-subtitle = languagesList.firstOrNull { it.first == lang }?.second ?: "العربية",
-onClick = { activeSheet = "LANG" }
-)
+fun isAutoResumeEnabled(context: Context): Boolean =
+getSecurePrefs(context).getBoolean("auto_resume_last", false)
 
-Column(
-modifier = Modifier
-.fillMaxWidth()
-.clip(RoundedCornerShape(14.dp))
-.background(Color(0xFF13131B))
-.padding(horizontal = 14.dp, vertical = 6.dp)
-) {
-Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-Text(strings.lowLatencyTitle, color = Color.White, fontSize = 13.sp, modifier = Modifier.weight(1f))
-Switch(checked = lowLatency, onCheckedChange = {
-lowLatency = it
-DevkanVault.setLowLatencyEnabled(context, it)
-})
+fun setAutoResumeEnabled(context: Context, enabled: Boolean) {
+getSecurePrefs(context).edit().putBoolean("auto_resume_last", enabled).apply()
 }
-HorizontalDivider(color = Color.White.copy(alpha = 0.06f))
-Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-Text(strings.geoBypassTitle, color = Color.White, fontSize = 13.sp, modifier = Modifier.weight(1f))
-Switch(checked = geoBypass, onCheckedChange = {
-geoBypass = it
-DevkanVault.setGeoBypassEnabled(context, it)
-})
-}
-HorizontalDivider(color = Color.White.copy(alpha = 0.06f))
-Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-Text(strings.autoResumeTitle, color = Color.White, fontSize = 13.sp, modifier = Modifier.weight(1f))
-Switch(checked = autoResume, onCheckedChange = {
-autoResume = it
-DevkanVault.setAutoResumeEnabled(context, it)
-})
-}
-}
 
-Button(
-onClick = {
-testingSpeed = true
-scope.launch {
-val (ping, mbps) = EngineCoordinator.runServerSpeedAndPingTest(sampleTestUrl)
-speedResult = "Ping: ${ping} ms   •   Speed: ${mbps} Mbps"
-testingSpeed = false
-}
-},
-colors = ButtonDefaults.buttonColors(containerColor = gold),
-shape = RoundedCornerShape(12.dp),
-modifier = Modifier.fillMaxWidth().height(46.dp)
-) {
-Text(if (testingSpeed) "جاري الفحص..." else strings.speedTest, color = Color.Black, fontWeight = FontWeight.Bold)
+fun getAutoSyncInterval(context: Context): AutoSyncInterval {
+val raw = getSecurePrefs(context).getString("auto_sync_interval", AutoSyncInterval.DAILY.name)
+return try { AutoSyncInterval.valueOf(raw ?: AutoSyncInterval.DAILY.name) } catch (_: Exception) { AutoSyncInterval.DAILY }
 }
-speedResult?.let {
-Text(it, color = Color(0xFF4ADE80), fontWeight = FontWeight.Bold, fontSize = 13.sp)
-}
 
-Column(
-modifier = Modifier
-.fillMaxWidth()
-.clip(RoundedCornerShape(14.dp))
-.background(Color(0xFF13131B))
-.padding(14.dp),
-verticalArrangement = Arrangement.spacedBy(8.dp)
-) {
-Text(strings.appLockTitle, color = gold, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-OutlinedTextField(
-value = pinInput,
-onValueChange = { if (it.length <= 6) pinInput = it },
-placeholder = { Text("4-6 digits (فارغ = معطل)", fontSize = 12.sp) },
-singleLine = true,
-modifier = Modifier.weight(1f)
-)
-Button(
-onClick = {
-DevkanVault.setAppLockPin(context, pinInput)
-Toast.makeText(context, if (pinInput.isEmpty()) "تم إيقاف القفل" else "تم حفظ رمز القفل", Toast.LENGTH_SHORT).show()
-},
-colors = ButtonDefaults.buttonColors(containerColor = gold)
-) {
-Text("حفظ", color = Color.Black, fontWeight = FontWeight.Bold)
-}
-}
+fun setAutoSyncInterval(context: Context, interval: AutoSyncInterval) {
+getSecurePrefs(context).edit().putString("auto_sync_interval", interval.name).apply()
 }
-}
 
-if (activeSheet != null) {
-ModalBottomSheet(
-onDismissRequest = { activeSheet = null },
-containerColor = Color(0xFF14141E)
-) {
-Column(
-modifier = Modifier
-.fillMaxWidth()
-.padding(horizontal = 18.dp, vertical = 10.dp),
-verticalArrangement = Arrangement.spacedBy(10.dp)
-) {
-when (activeSheet) {
-"SUBS" -> {
-Text("اختر الاشتراك النشط", color = goldLight, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-allSubs.forEach { subItem ->
-val isCurrent = subItem.id == subscription?.id
-Row(
-modifier = Modifier
-.fillMaxWidth()
-.clip(RoundedCornerShape(12.dp))
-.background(if (isCurrent) gold.copy(alpha = 0.2f) else Color(0xFF1C1C28))
-.clickable {
-activeSheet = null
-if (!isCurrent) onSwitchSub(subItem)
-}
-.padding(14.dp),
-horizontalArrangement = Arrangement.SpaceBetween,
-verticalAlignment = Alignment.CenterVertically
-) {
-Column {
-Text(subItem.label, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-Text("${subItem.type} • ${subItem.expDateFormatted}", color = Color.Gray, fontSize = 11.sp)
-}
-if (isCurrent) Icon(Icons.Default.CheckCircle, contentDescription = null, tint = goldLight)
-}
+fun shouldRunBackgroundSync(context: Context): Boolean {
+val interval = getAutoSyncInterval(context)
+if (interval == AutoSyncInterval.MANUAL || interval.days <= 0) return false
+val activeId = getSavedSubscription(context)?.id ?: "default"
+val lastSync = getSecurePrefs(context).getLong("last_catalog_sync_ms_$activeId", 0L)
+return (System.currentTimeMillis() - lastSync) >= interval.days * 86400000L
 }
-}
-"DNS" -> {
-Text("اختر مزود DNS", color = goldLight, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-DnsProvider.entries.forEach { dns ->
-Row(
-modifier = Modifier
-.fillMaxWidth()
-.clip(RoundedCornerShape(12.dp))
-.background(if (selectedDns == dns) gold.copy(alpha = 0.2f) else Color(0xFF1C1C28))
-.clickable {
-selectedDns = dns
-DevkanVault.setDnsProvider(context, dns)
-activeSheet = null
-}
-.padding(14.dp),
-horizontalArrangement = Arrangement.SpaceBetween
-) {
-Text(dns.label, color = Color.White, fontSize = 14.sp)
-if (selectedDns == dns) Icon(Icons.Default.Check, contentDescription = null, tint = goldLight)
-}
-}
-}
-"UA" -> {
-Text("اختر User-Agent", color = goldLight, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-userAgentsList.forEach { ua ->
-Row(
-modifier = Modifier
-.fillMaxWidth()
-.clip(RoundedCornerShape(12.dp))
-.background(if (selectedUserAgent == ua) gold.copy(alpha = 0.2f) else Color(0xFF1C1C28))
-.clickable {
-selectedUserAgent = ua
-DevkanVault.setUserAgent(context, ua)
-activeSheet = null
-}
-.padding(14.dp),
-horizontalArrangement = Arrangement.SpaceBetween
-) {
-Text(ua, color = Color.White, fontSize = 12.sp, modifier = Modifier.weight(1f))
-if (selectedUserAgent == ua) Icon(Icons.Default.Check, contentDescription = null, tint = goldLight)
-}
-}
-}
-"ENGINE" -> {
-Text(strings.engineTitle, color = goldLight, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-EngineType.entries.forEach { eng ->
-val label = when (lang) {
-"en" -> eng.labelEn
-"de" -> eng.labelDe
-"tr" -> eng.labelTr
-else -> eng.labelAr
-}
-Row(
-modifier = Modifier
-.fillMaxWidth()
-.clip(RoundedCornerShape(12.dp))
-.background(if (selectedEngine == eng) gold.copy(alpha = 0.2f) else Color(0xFF1C1C28))
-.clickable {
-selectedEngine = eng
-DevkanVault.savePreferredEngine(context, eng)
-activeSheet = null
-}
-.padding(14.dp),
-horizontalArrangement = Arrangement.SpaceBetween
-) {
-Text(label, color = Color.White, fontSize = 13.sp)
-if (selectedEngine == eng) Icon(Icons.Default.Check, contentDescription = null, tint = goldLight)
-}
-}
-}
-"SYNC" -> {
-Text(strings.autoSyncTitle, color = goldLight, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-AutoSyncInterval.entries.forEach { interval ->
-val label = if (lang == "ar" || lang == "ku") interval.labelAr else interval.labelEn
-Row(
-modifier = Modifier
-.fillMaxWidth()
-.clip(RoundedCornerShape(12.dp))
-.background(if (selectedSyncInterval == interval) gold.copy(alpha = 0.2f) else Color(0xFF1C1C28))
-.clickable {
-selectedSyncInterval = interval
-DevkanVault.setAutoSyncInterval(context, interval)
-activeSheet = null
-}
-.padding(14.dp),
-horizontalArrangement = Arrangement.SpaceBetween
-) {
-Text(label, color = Color.White, fontSize = 14.sp)
-if (selectedSyncInterval == interval) Icon(Icons.Default.Check, contentDescription = null, tint = goldLight)
-}
-}
-}
-"LANG" -> {
-Text("اللغة / Language", color = goldLight, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-languagesList.forEach { (code, title) ->
-Row(
-modifier = Modifier
-.fillMaxWidth()
-.clip(RoundedCornerShape(12.dp))
-.background(if (lang == code) gold.copy(alpha = 0.2f) else Color(0xFF1C1C28))
-.clickable {
-onLanguageChange(code)
-activeSheet = null
-}
-.padding(14.dp),
-horizontalArrangement = Arrangement.SpaceBetween
-) {
-Text(title, color = Color.White, fontSize = 14.sp)
-if (lang == code) Icon(Icons.Default.Check, contentDescription = null, tint = goldLight)
-}
-}
-}
-}
-Spacer(Modifier.height(24.dp))
-}
-}
-}
-}
 
-@Composable
-private fun SettingsRowCard(
-icon: ImageVector,
-title: String,
-subtitle: String,
-onClick: () -> Unit
-) {
-val gold = Color(0xFFD4AF37)
-val goldLight = Color(0xFFFDE047)
-Row(
-modifier = Modifier
-.fillMaxWidth()
-.clip(RoundedCornerShape(14.dp))
-.background(Color(0xFF13131B))
-.clickable { onClick() }
-.padding(14.dp),
-horizontalArrangement = Arrangement.SpaceBetween,
-verticalAlignment = Alignment.CenterVertically
-) {
-Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.weight(1f)) {
-Icon(icon, contentDescription = null, tint = gold)
-Column {
-Text(title, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-Text(subtitle, color = goldLight, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-}
+fun markCatalogSyncedNow(context: Context, subId: String = getSavedSubscription(context)?.id ?: "default") {
+getSecurePrefs(context).edit().putLong("last_catalog_sync_ms_$subId", System.currentTimeMillis()).apply()
 }
-Icon(Icons.Default.KeyboardArrowDown, contentDescription = null, tint = gold)
-}
-}
-
-@Composable
-fun SmartAddConnectionDialog(
-strings: AppStrings,
-editingSub: SavedSubscription? = null,
-onDismiss: () -> Unit,
-onSaveAndConnect: (SavedSubscription) -> Unit
-) {
-val clipboardManager = LocalClipboardManager.current
-val gold = Color(0xFFD4AF37)
-
-var selectedMode by remember { mutableStateOf(editingSub?.type ?: "XTREAM") }
-var subLabel by remember { mutableStateOf(editingSub?.label ?: "") }
-var smartPasteInput by remember { mutableStateOf("") }
-var autoDetectedBanner by remember { mutableStateOf(false) }
-
-var host by remember { mutableStateOf(editingSub?.host ?: "") }
-var username by remember { mutableStateOf(editingSub?.username ?: "") }
-var password by remember { mutableStateOf(editingSub?.password ?: "") }
-var passwordVisible by remember { mutableStateOf(false) }
-var m3uUrl by remember { mutableStateOf(editingSub?.m3uUrl ?: "") }
-var macAddress by remember { mutableStateOf(editingSub?.macAddress ?: "00:1A:79:") }
 
-fun parseXtreamOnly(raw: String) {
-smartPasteInput = raw
-if (selectedMode != "XTREAM") return
+fun getAllSubscriptions(context: Context): MutableList<SavedSubscription> {
+val prefs = getSecurePrefs(context)
+val raw = prefs.getString("multi_subs_json", null)
+val list = mutableListOf<SavedSubscription>()
+if (!raw.isNullOrEmpty()) {
 try {
-val uri = Uri.parse(raw.trim())
-val u = uri.getQueryParameter("username")
-val p = uri.getQueryParameter("password")
-val scheme = uri.scheme
-val auth = uri.authority
-if (!u.isNullOrEmpty() && !p.isNullOrEmpty() && !scheme.isNullOrEmpty() && !auth.isNullOrEmpty()) {
-host = "$scheme://$auth"
-username = u
-password = p
-if (subLabel.isEmpty()) subLabel = u
-autoDetectedBanner = true
+val arr = JSONArray(raw)
+for (i in 0 until arr.length()) {
+val o = arr.getJSONObject(i)
+list.add(
+SavedSubscription(
+id = o.optString("id", UUID.randomUUID().toString()),
+label = o.optString("label", "اشتراك ${i + 1}"),
+type = o.optString("type", "XTREAM"),
+host = o.optString("host"),
+username = o.optString("username"),
+password = o.optString("password"),
+m3uUrl = o.optString("m3uUrl"),
+macAddress = o.optString("macAddress"),
+status = o.optString("status", "Active"),
+expDateFormatted = o.optString("expDateFormatted", "Unlimited"),
+allowedCountries = o.optString("allowedCountries", "Global / All"),
+activeCons = o.optString("activeCons", "1"),
+maxCons = o.optString("maxCons", "1")
+)
+)
+}
+} catch (_: Exception) { }
+}
+if (list.isEmpty()) {
+val oldType = prefs.getString("sub_type", null)
+if (oldType != null) {
+val migrated = SavedSubscription(
+id = "default_sub",
+label = prefs.getString("sub_user", "اشتراك 1")?.ifEmpty { "اشتراك 1" } ?: "اشتراك 1",
+type = oldType,
+host = prefs.getString("sub_host", "") ?: "",
+username = prefs.getString("sub_user", "") ?: "",
+password = prefs.getString("sub_pass", "") ?: "",
+m3uUrl = prefs.getString("sub_m3u", "") ?: "",
+macAddress = prefs.getString("sub_mac", "") ?: "",
+status = prefs.getString("sub_status", "Active") ?: "Active",
+expDateFormatted = prefs.getString("sub_exp", "Unlimited") ?: "Unlimited",
+allowedCountries = prefs.getString("sub_countries", "Global") ?: "Global",
+activeCons = prefs.getString("sub_active_cons", "1") ?: "1",
+maxCons = prefs.getString("sub_max_cons", "1") ?: "1"
+)
+list.add(migrated)
+saveAllSubscriptions(context, list, migrated.id)
+}
+}
+return list
+}
+
+private fun saveAllSubscriptions(context: Context, list: List<SavedSubscription>, activeId: String?) {
+val arr = JSONArray()
+list.forEach { s ->
+arr.put(JSONObject().apply {
+put("id", s.id)
+put("label", s.label)
+put("type", s.type)
+put("host", s.host)
+put("username", s.username)
+put("password", s.password)
+put("m3uUrl", s.m3uUrl)
+put("macAddress", s.macAddress)
+put("status", s.status)
+put("expDateFormatted", s.expDateFormatted)
+put("allowedCountries", s.allowedCountries)
+put("activeCons", s.activeCons)
+put("maxCons", s.maxCons)
+})
+}
+val ed = getSecurePrefs(context).edit().putString("multi_subs_json", arr.toString())
+if (activeId != null) ed.putString("active_sub_id", activeId)
+ed.apply()
+}
+
+fun saveSubscription(context: Context, sub: SavedSubscription) {
+val list = getAllSubscriptions(context)
+val idx = list.indexOfFirst { it.id == sub.id }
+if (idx != -1) list[idx] = sub else list.add(sub)
+saveAllSubscriptions(context, list, sub.id)
+}
+
+fun switchActiveSubscription(context: Context, subId: String) {
+getSecurePrefs(context).edit().putString("active_sub_id", subId).apply()
+}
+
+fun getSavedSubscription(context: Context): SavedSubscription? {
+val list = getAllSubscriptions(context)
+if (list.isEmpty()) return null
+val activeId = getSecurePrefs(context).getString("active_sub_id", null)
+return list.find { it.id == activeId } ?: list.first()
+}
+
+fun deleteSubscriptionById(context: Context, subId: String) {
+val list = getAllSubscriptions(context).filterNot { it.id == subId }
+val nextId = list.firstOrNull()?.id ?: ""
+saveAllSubscriptions(context, list, nextId)
+try {
+File(context.filesDir, "devkan_cache_$subId.json").delete()
+if (list.isEmpty()) {
+File(context.filesDir, "devkan_cached_playlist_v5.json").delete()
+File(context.filesDir, "devkan_cached_sports_epg_v5.json").delete()
 }
 } catch (_: Exception) { }
 }
 
-AlertDialog(
-onDismissRequest = onDismiss,
-containerColor = Color(0xFF14141D),
-title = {
-Text(
-text = if (editingSub != null) "تعديل الاشتراك" else strings.addConnection,
-color = Color.White,
-fontWeight = FontWeight.Bold,
-fontSize = 18.sp
-)
-},
-text = {
-Column(modifier = Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-listOf("XTREAM" to "Xtream Codes", "M3U" to "قائمة M3U", "STALKER" to "Stalker MAC").forEach { (mode, label) ->
-val active = selectedMode == mode
-Box(
-modifier = Modifier
-.weight(1f)
-.clip(RoundedCornerShape(10.dp))
-.background(if (active) gold else Color(0xFF1F1F2C))
-.clickable {
-selectedMode = mode
-autoDetectedBanner = false
+fun clearSubscription(context: Context) {
+val active = getSavedSubscription(context)
+if (active != null) deleteSubscriptionById(context, active.id)
 }
-.padding(vertical = 8.dp),
-contentAlignment = Alignment.Center
-) {
-Text(label, color = if (active) Color.Black else Color.White, fontWeight = FontWeight.Bold, fontSize = 11.sp, maxLines = 1)
+
+fun saveLastChannel(context: Context, url: String, title: String) {
+getSecurePrefs(context).edit()
+.putString("last_channel_url", url)
+.putString("last_channel_title", title)
+.apply()
+}
+
+fun getLastChannel(context: Context): Pair<String, String>? {
+val prefs = getSecurePrefs(context)
+val url = prefs.getString("last_channel_url", null) ?: return null
+val title = prefs.getString("last_channel_title", "Last Channel") ?: "Last Channel"
+return url to title
+}
+
+fun saveVodProgress(context: Context, streamId: String, positionMs: Long, durationMs: Long) {
+val progressFraction = if (durationMs > 0L) (positionMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f) else 0f
+getSecurePrefs(context).edit()
+.putLong("vod_pos_$streamId", positionMs)
+.putFloat("vod_frac_$streamId", progressFraction)
+.apply()
+}
+
+fun getVodPosition(context: Context, streamId: String): Long =
+getSecurePrefs(context).getLong("vod_pos_$streamId", 0L)
+
+fun getVodProgressFraction(context: Context, streamId: String): Float =
+getSecurePrefs(context).getFloat("vod_frac_$streamId", 0f)
+
+fun savePreferredEngine(context: Context, engine: EngineType) {
+getSecurePrefs(context).edit().putString("preferred_engine", engine.name).apply()
+}
+
+fun getPreferredEngine(context: Context): EngineType {
+val raw = getSecurePrefs(context).getString("preferred_engine", EngineType.AUTO_HYBRID.name)
+return try { EngineType.valueOf(raw ?: EngineType.AUTO_HYBRID.name) } catch (e: Exception) { EngineType.AUTO_HYBRID }
+}
+
+fun saveCachedItems(context: Context, items: List<MediaItemModel>, subId: String = getSavedSubscription(context)?.id ?: "default") {
+try {
+val arr = JSONArray()
+items.forEach { item ->
+arr.put(JSONObject().apply {
+put("id", item.id)
+put("rawId", item.rawId)
+put("title", item.title)
+put("url", item.url)
+put("fallbackUrl", item.fallbackUrl)
+put("group", item.group)
+put("logo", item.logo)
+put("contentType", item.contentType)
+put("rating", item.rating)
+put("year", item.year)
+put("originTag", item.originTag)
+put("genreTag", item.genreTag)
+put("addedTimestamp", item.addedTimestamp)
+put("is4k", item.is4k)
+})
+}
+File(context.filesDir, "devkan_cache_$subId.json").writeText(arr.toString())
+markCatalogSyncedNow(context, subId)
+} catch (_: Exception) { }
+}
+
+fun getCachedItems(context: Context, subId: String = getSavedSubscription(context)?.id ?: "default"): List<MediaItemModel> {
+return try {
+var file = File(context.filesDir, "devkan_cache_$subId.json")
+if (!file.exists()) {
+file = File(context.filesDir, "devkan_cached_playlist_v5.json")
+}
+if (!file.exists()) return emptyList()
+val arr = JSONArray(file.readText())
+val list = ArrayList<MediaItemModel>(arr.length())
+for (i in 0 until arr.length()) {
+val obj = arr.getJSONObject(i)
+list.add(
+MediaItemModel(
+id = obj.optString("id"),
+rawId = obj.optString("rawId"),
+title = obj.optString("title"),
+url = obj.optString("url"),
+fallbackUrl = obj.optString("fallbackUrl"),
+group = obj.optString("group"),
+logo = obj.optString("logo"),
+contentType = obj.optString("contentType", "LIVE"),
+rating = obj.optString("rating"),
+year = obj.optString("year"),
+originTag = obj.optString("originTag", "أجنبي"),
+genreTag = obj.optString("genreTag", "دراما"),
+addedTimestamp = obj.optLong("addedTimestamp", 0L),
+is4k = obj.optBoolean("is4k", false)
+)
+)
+}
+list
+} catch (_: Exception) { emptyList() }
+}
+
+fun saveCachedSportsEpg(context: Context, programs: List<EpgProgram>) {
+try {
+val arr = JSONArray()
+programs.forEach { p ->
+arr.put(JSONObject().apply {
+put("id", p.id)
+put("channelId", p.channelId)
+put("channelName", p.channelName)
+put("channelLogo", p.channelLogo ?: "")
+put("streamQuality", p.streamQuality ?: "")
+put("title", p.title)
+put("description", p.description ?: "")
+put("startTime", p.startTime)
+put("endTime", p.endTime)
+put("category", p.category ?: "")
+put("isSports", p.isSports)
+put("homeTeam", p.homeTeam ?: "")
+put("awayTeam", p.awayTeam ?: "")
+put("competition", p.competition ?: "")
+})
+}
+File(context.filesDir, "devkan_cached_sports_epg_v5.json").writeText(arr.toString())
+} catch (_: Exception) { }
+}
+
+fun getCachedSportsEpg(context: Context): List<EpgProgram> {
+return try {
+val file = File(context.filesDir, "devkan_cached_sports_epg_v5.json")
+if (!file.exists()) return emptyList()
+val arr = JSONArray(file.readText())
+val list = ArrayList<EpgProgram>(arr.length())
+for (i in 0 until arr.length()) {
+val obj = arr.getJSONObject(i)
+list.add(
+EpgProgram(
+id = obj.optString("id"),
+channelId = obj.optString("channelId"),
+channelName = obj.optString("channelName"),
+channelLogo = obj.optString("channelLogo").ifEmpty { null },
+streamQuality = obj.optString("streamQuality").ifEmpty { null },
+title = obj.optString("title"),
+description = obj.optString("description").ifEmpty { null },
+startTime = obj.optLong("startTime"),
+endTime = obj.optLong("endTime"),
+category = obj.optString("category").ifEmpty { null },
+isSports = obj.optBoolean("isSports", false),
+homeTeam = obj.optString("homeTeam").ifEmpty { null },
+awayTeam = obj.optString("awayTeam").ifEmpty { null },
+competition = obj.optString("competition").ifEmpty { null }
+)
+)
+}
+list
+} catch (_: Exception) { emptyList() }
+}
+}
+
+object EngineCoordinator {
+val currentDiagnostics = mutableStateOf(StreamDiagnostics())
+
+fun selectInitialEngine(
+url: String,
+preferred: EngineType,
+isSportsSection: Boolean = false
+): EngineType {
+val manualOverride = when (preferred) {
+EngineType.MEDIA3_ONLY -> PlayerEngine.MEDIA3_EXOPLAYER
+EngineType.LIBVLC_ONLY -> PlayerEngine.LIB_VLC
+EngineType.AUTO_HYBRID -> null
+}
+if (isSportsSection) {
+val config = PlayerEngineRouter.resolvePlaybackConfig(
+isSportsSection = true,
+manualOverrideEngine = manualOverride
+)
+return if (config.engine == PlayerEngine.LIB_VLC) EngineType.LIBVLC_ONLY else EngineType.MEDIA3_ONLY
+}
+if (preferred != EngineType.AUTO_HYBRID) return preferred
+val lower = url.lowercase()
+return if (lower.endsWith(".ts") || lower.endsWith(".avi") || lower.contains("mpegts") || lower.contains("rtsp://")) {
+EngineType.LIBVLC_ONLY
+} else {
+EngineType.MEDIA3_ONLY
+}
+}
+
+fun getAdaptiveBufferMs(lowLatency: Boolean): Triple<Int, Int, Int> {
+return if (lowLatency) Triple(1800, 6000, 450) else Triple(6000, 20000, 1200)
+}
+
+fun buildSmartHeaders(geoBypass: Boolean, customUserAgent: String = "IPTVSmartersPro/3.1.5 (Linux; Android 14)"): Map<String, String> {
+val headers = mutableMapOf(
+"User-Agent" to customUserAgent,
+"Accept" to "*/*",
+"Connection" to "keep-alive"
+)
+if (geoBypass) {
+headers["X-Forwarded-For"] = "104.28.14.12"
+headers["CF-IPCountry"] = "US"
+}
+return headers
+}
+
+suspend fun runServerSpeedAndPingTest(serverUrl: String): Pair<Long, Double> = withContext(Dispatchers.IO) {
+val client = OkHttpClient.Builder()
+.connectTimeout(6, TimeUnit.SECONDS)
+.readTimeout(6, TimeUnit.SECONDS)
+.build()
+val cleanUrl = if (serverUrl.startsWith("http")) serverUrl else "https://www.google.com"
+return@withContext try {
+val startPing = System.currentTimeMillis()
+client.newCall(Request.Builder().url(cleanUrl).head().build()).execute().use { }
+val ping = (System.currentTimeMillis() - startPing).coerceAtLeast(12L)
+val startDl = System.currentTimeMillis()
+var bytesRead = 0L
+client.newCall(Request.Builder().url(cleanUrl).get().build()).execute().use { resp ->
+val stream = resp.body?.byteStream()
+val buf = ByteArray(8192)
+var read = 0
+while (stream != null && stream.read(buf).also { read = it } != -1 && bytesRead < 250_000) {
+bytesRead += read
+}
+}
+val elapsedSec = ((System.currentTimeMillis() - startDl).coerceAtLeast(50L)) / 1000.0
+val mbps = ((bytesRead * 8.0) / 1_000_000.0) / elapsedSec
+ping to String.format(Locale.US, "%.1f", mbps.coerceIn(1.5, 150.0)).toDouble()
+} catch (e: Exception) {
+999L to 0.0
 }
 }
 }
 
-OutlinedTextField(
-value = subLabel,
-onValueChange = { subLabel = it },
-label = { Text("اسم الاشتراك (اختياري)", fontSize = 11.sp) },
-singleLine = true,
-modifier = Modifier.fillMaxWidth()
-)
+object DevkanPlaylistRepository {
+private fun buildClient(geoBypass: Boolean, userAgent: String = "IPTVSmartersPro/3.1.5 (Linux; Android 14)"): OkHttpClient {
+return OkHttpClient.Builder()
+.connectTimeout(12, TimeUnit.SECONDS)
+.readTimeout(25, TimeUnit.SECONDS)
+.addInterceptor { chain ->
+val builder = chain.request().newBuilder()
+.header("User-Agent", userAgent)
+if (geoBypass) {
+builder.header("X-Forwarded-For", "104.28.14.12")
+builder.header("CF-IPCountry", "US")
+}
+chain.proceed(builder.build())
+}
+.build()
+}
 
-when (selectedMode) {
+private fun detectOriginTag(group: String, title: String): String {
+val text = "$group $title".lowercase()
+return when {
+text.contains("korean") || text.contains("كوري") || text.contains("كوريا") || text.contains("korea") || text.contains("kdrama") || text.contains("آسيوي") || text.contains("asian") -> "كوري"
+text.contains("indian") || text.contains("bollywood") || text.contains("هندي") || text.contains("بوليوود") || text.contains("hindi") -> "هندي"
+text.contains("turkish") || text.contains("تركي") || text.contains("تركيا") || text.contains("مترجم تركي") || text.contains("مدبلج تركي") -> "تركي"
+text.contains("arab") || text.contains("عربي") || text.contains("عربية") || text.contains("egypt") || text.contains("مصري") || text.contains("خليجي") || text.contains("سوري") || text.contains("عراقي") || text.contains("رمضان") || Regex("[\\u0600-\\u06FF]").containsMatchIn(title) -> "عربي"
+else -> "أجنبي"
+}
+}
+
+private fun detectGenreTag(group: String, title: String): String {
+val text = "$group $title".lowercase()
+return when {
+text.contains("sci-fi") || text.contains("scifi") || text.contains("science") || text.contains("fantasy") || text.contains("خيال") || text.contains("فانتازيا") -> "خيال علمي"
+text.contains("romance") || text.contains("romantic") || text.contains("رومانسي") || text.contains("حب") -> "رومانسي"
+text.contains("horror") || text.contains("thriller") || text.contains("رعب") || text.contains("إثارة") || text.contains("غموض") -> "رعب وإثارة"
+text.contains("action") || text.contains("أكشن") || text.contains("اكشن") || text.contains("war") || text.contains("حرب") || text.contains("قتال") -> "أكشن"
+text.contains("comedy") || text.contains("كوميد") -> "كوميدي"
+text.contains("history") || text.contains("historical") || text.contains("تاريخ") -> "تاريخي"
+text.contains("anime") || text.contains("cartoon") || text.contains("kids") || text.contains("انمي") || text.contains("أنمي") || text.contains("أطفال") -> "أنمي وعائلي"
+else -> "دراما"
+}
+}
+
+private fun checkIs4K(group: String, title: String): Boolean {
+val text = "$group $title".uppercase()
+return text.contains("4K") || text.contains("UHD") || text.contains("2160P")
+}
+
+private fun detectStreamQuality(title: String): String {
+val t = title.uppercase()
+return when {
+t.contains("4K") || t.contains("UHD") -> "4K"
+t.contains("FHD") || t.contains("1080") -> "FHD"
+t.contains("HD") || t.contains("720") -> "HD"
+else -> "SD"
+}
+}
+
+fun deduplicateSportChannels(channels: List<MediaItemModel>): List<MediaItemModel> {
+val seenNormalized = mutableSetOf<String>()
+val result = mutableListOf<MediaItemModel>()
+val sorted = channels.sortedByDescending { ch ->
+val t = ch.title.uppercase()
+when {
+t.contains("4K") || t.contains("UHD") -> 4
+t.contains("FHD") || t.contains("1080") -> 3
+t.contains("HD") -> 2
+else -> 1
+}
+}
+for (ch in sorted) {
+val cleanKey = ch.title.uppercase()
+.replace(Regex("\\b(4K|UHD|FHD|HD|SD|LOW|HEVC|H265|VIP|BACKUP|BK|1080P|720P)\\b"), "")
+.replace(Regex("[^A-Z0-9\\u0600-\\u06FF]"), "")
+.trim()
+if (cleanKey.isNotEmpty() && !seenNormalized.contains(cleanKey)) {
+seenNormalized.add(cleanKey)
+result.add(ch)
+}
+}
+return result
+}
+
+suspend fun syncAndClassifySportsEpg(
+context: Context,
+sub: SavedSubscription,
+liveChannels: List<MediaItemModel>
+): ClassifiedSportsData = withContext(Dispatchers.IO) {
+if (sub.type != "XTREAM") {
+val cached = DevkanVault.getCachedSportsEpg(context)
+return@withContext EpgSportsPipeline.classifyAndGroupSports(cached)
+}
+val sportsChannels = liveChannels.filter {
+it.contentType == "LIVE" && SportsMatchExtractor.isSportsProgram(it.group, it.title, null)
+}.take(30)
+val client = buildClient(true)
+val cleanHost = sub.host.trimEnd('/')
+val u = URLEncoder.encode(sub.username, "UTF-8")
+val p = URLEncoder.encode(sub.password, "UTF-8")
+val enrichedList = coroutineScope {
+sportsChannels.filter { it.rawId.isNotBlank() }.map { ch ->
+async {
+val localList = mutableListOf<EpgProgram>()
+try {
+val url = "$cleanHost/player_api.php?username=$u&password=$p&action=get_short_epg&stream_id=${ch.rawId}&limit=4"
+client.newCall(Request.Builder().url(url).build()).execute().use { resp ->
+val listings = JSONObject(resp.body?.string() ?: "{}").optJSONArray("epg_listings") ?: JSONArray()
+for (i in 0 until listings.length()) {
+val item = listings.getJSONObject(i)
+val startMs = EpgSportsPipeline.resolveXtreamTimestamp(
+unixSeconds = item.optLong("start_timestamp", 0L),
+rawDateStr = item.optString("start", "")
+)
+val endMs = EpgSportsPipeline.resolveXtreamTimestamp(
+unixSeconds = item.optLong("stop_timestamp", 0L),
+rawDateStr = item.optString("end", "")
+)
+if (startMs > 0L && endMs > startMs) {
+localList.add(
+EpgSportsPipeline.enrichProgramForStorage(
+EpgProgram(
+id = item.optString("id", "${ch.rawId}_$i"),
+channelId = ch.rawId,
+channelName = ch.title,
+channelLogo = ch.logo.ifEmpty { null },
+streamQuality = detectStreamQuality(ch.title),
+title = item.optString("title", ""),
+description = item.optString("description", ""),
+startTime = startMs,
+endTime = endMs,
+category = ch.group
+)
+)
+)
+}
+}
+}
+} catch (_: Exception) { }
+localList
+}
+}.awaitAll().flatten()
+}
+if (enrichedList.isNotEmpty()) {
+DevkanVault.saveCachedSportsEpg(context, enrichedList)
+return@withContext EpgSportsPipeline.classifyAndGroupSports(enrichedList)
+}
+EpgSportsPipeline.classifyAndGroupSports(DevkanVault.getCachedSportsEpg(context))
+}
+
+suspend fun fetchChannelShortEpg(sub: SavedSubscription, streamRawId: String): Pair<String, String> = withContext(Dispatchers.IO) {
+if (sub.type != "XTREAM" || streamRawId.isEmpty()) return@withContext ("البث المباشر المستمر" to "البرنامج التالي")
+val client = buildClient(true)
+try {
+val cleanHost = sub.host.trimEnd('/')
+val url = "$cleanHost/player_api.php?username=${URLEncoder.encode(sub.username, "UTF-8")}&password=${URLEncoder.encode(sub.password, "UTF-8")}&action=get_short_epg&stream_id=$streamRawId&limit=2"
+client.newCall(Request.Builder().url(url).build()).execute().use { resp ->
+val listings = JSONObject(resp.body?.string() ?: "{}").optJSONArray("epg_listings") ?: JSONArray()
+if (listings.length() > 0) {
+val nowRaw = listings.getJSONObject(0).optString("title", "")
+val nowTitle = try { String(Base64.decode(nowRaw, Base64.DEFAULT)) } catch (_: Exception) { nowRaw }
+val nextRaw = if (listings.length() > 1) listings.getJSONObject(1).optString("title", "") else ""
+val nextTitle = try { String(Base64.decode(nextRaw, Base64.DEFAULT)) } catch (_: Exception) { nextRaw }
+if (nowTitle.isNotBlank()) return@withContext (nowTitle.trim() to nextTitle.trim().ifEmpty { "البث المستمر" })
+}
+}
+} catch (_: Exception) { }
+"البث المباشر المستمر" to "البرنامج التالي على الجدول"
+}
+
+suspend fun loadSubscriptionContent(
+sub: SavedSubscription,
+geoBypass: Boolean = true
+): Pair<SavedSubscription, List<MediaItemModel>> = withContext(Dispatchers.IO) {
+val client = buildClient(geoBypass)
+val items = mutableListOf<MediaItemModel>()
+var updatedSub = sub
+
+try {
+when (sub.type) {
 "XTREAM" -> {
-OutlinedTextField(
-value = smartPasteInput,
-onValueChange = { parseXtreamOnly(it) },
-singleLine = true,
-label = { Text("لصق رابط Xtream للتعبئة التلقائية", fontSize = 11.sp) },
-trailingIcon = {
-IconButton(onClick = {
-val clip = clipboardManager.getText()?.text ?: ""
-if (clip.isNotEmpty()) parseXtreamOnly(clip)
-}) {
-Icon(Icons.Default.ContentPaste, contentDescription = "Paste", tint = gold)
-}
-},
-modifier = Modifier.fillMaxWidth()
-)
-if (autoDetectedBanner) {
-Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-Icon(Icons.Default.CheckCircle, contentDescription = null, tint = Color(0xFF4ADE80), modifier = Modifier.size(16.dp))
-Text("تم اكتشاف بيانات Xtream تلقائياً", color = Color(0xFF4ADE80), fontSize = 12.sp, fontWeight = FontWeight.Bold)
-}
-}
-OutlinedTextField(value = host, onValueChange = { host = it }, label = { Text("رابط الخادم (http://server:port)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-OutlinedTextField(value = username, onValueChange = { username = it }, label = { Text("اسم المستخدم") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-OutlinedTextField(
-value = password,
-onValueChange = { password = it },
-label = { Text("كلمة المرور") },
-singleLine = true,
-visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-trailingIcon = {
-IconButton(onClick = { passwordVisible = !passwordVisible }) {
-Icon(if (passwordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility, contentDescription = null)
-}
-},
-modifier = Modifier.fillMaxWidth()
+val cleanHost = sub.host.trimEnd('/')
+val u = URLEncoder.encode(sub.username, "UTF-8")
+val p = URLEncoder.encode(sub.password, "UTF-8")
+val baseApi = "$cleanHost/player_api.php?username=$u&password=$p"
+
+coroutineScope {
+val infoTask = async {
+try {
+client.newCall(Request.Builder().url(baseApi).build()).execute().use { resp ->
+val userInfo = JSONObject(resp.body?.string() ?: "{}").optJSONObject("user_info")
+if (userInfo != null) {
+val status = userInfo.optString("status", "Active")
+val expRaw = userInfo.optString("exp_date", "")
+val expFormatted = if (expRaw.isNotEmpty() && expRaw != "null") {
+val millis = expRaw.toLongOrNull()?.times(1000L) ?: 0L
+if (millis > 0L) SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date(millis)) else "Unlimited"
+} else "Unlimited"
+val allowedRaw = userInfo.optString("allowed_countries", "")
+val countries = if (allowedRaw.isNotEmpty() && allowedRaw != "[]" && allowedRaw != "null") allowedRaw else "Global / All Countries"
+updatedSub = updatedSub.copy(
+status = status,
+expDateFormatted = expFormatted,
+allowedCountries = countries,
+activeCons = userInfo.optString("active_cons", "1"),
+maxCons = userInfo.optString("max_connections", "1")
 )
 }
+}
+} catch (_: Exception) { }
+}
+
+val liveCatTask = async {
+val map = mutableMapOf<String, String>()
+try {
+client.newCall(Request.Builder().url("$baseApi&action=get_live_categories").build()).execute().use { resp ->
+val arr = JSONArray(resp.body?.string() ?: "[]")
+for (i in 0 until arr.length()) {
+val obj = arr.getJSONObject(i)
+map[obj.optString("category_id")] = obj.optString("category_name", "Live TV")
+}
+}
+} catch (_: Exception) { }
+map
+}
+
+val vodCatTask = async {
+val map = mutableMapOf<String, String>()
+try {
+client.newCall(Request.Builder().url("$baseApi&action=get_vod_categories").build()).execute().use { resp ->
+val arr = JSONArray(resp.body?.string() ?: "[]")
+for (i in 0 until arr.length()) {
+val obj = arr.getJSONObject(i)
+map[obj.optString("category_id")] = obj.optString("category_name", "Movies")
+}
+}
+} catch (_: Exception) { }
+map
+}
+
+val seriesCatTask = async {
+val map = mutableMapOf<String, String>()
+try {
+client.newCall(Request.Builder().url("$baseApi&action=get_series_categories").build()).execute().use { resp ->
+val arr = JSONArray(resp.body?.string() ?: "[]")
+for (i in 0 until arr.length()) {
+val obj = arr.getJSONObject(i)
+map[obj.optString("category_id")] = obj.optString("category_name", "Series")
+}
+}
+} catch (_: Exception) { }
+map
+}
+
+val liveStreamsTask = async {
+val list = mutableListOf<MediaItemModel>()
+try {
+client.newCall(Request.Builder().url("$baseApi&action=get_live_streams").build()).execute().use { resp ->
+val arr = JSONArray(resp.body?.string() ?: "[]")
+val cats = liveCatTask.await()
+for (i in 0 until arr.length()) {
+val obj = arr.getJSONObject(i)
+val id = obj.optString("stream_id")
+val name = obj.optString("name", "Channel $i")
+val icon = obj.optString("stream_icon", "")
+val catName = cats[obj.optString("category_id")] ?: "Live Channels"
+list.add(
+MediaItemModel(
+id = "live_$id",
+rawId = id,
+title = name,
+url = "$cleanHost/live/${sub.username}/${sub.password}/$id.m3u8",
+fallbackUrl = "$cleanHost/live/${sub.username}/${sub.password}/$id.ts",
+group = catName,
+logo = icon,
+contentType = "LIVE"
+)
+)
+}
+}
+} catch (_: Exception) { }
+list
+}
+
+val vodStreamsTask = async {
+val list = mutableListOf<MediaItemModel>()
+try {
+client.newCall(Request.Builder().url("$baseApi&action=get_vod_streams").build()).execute().use { resp ->
+val arr = JSONArray(resp.body?.string() ?: "[]")
+val cats = vodCatTask.await()
+val maxLimit = minOf(arr.length(), 8000)
+for (i in 0 until maxLimit) {
+val obj = arr.getJSONObject(i)
+val id = obj.optString("stream_id")
+val name = obj.optString("name", "Movie $i")
+val icon = obj.optString("stream_icon", "")
+val rating = obj.optString("rating", "")
+val addedTs = obj.optString("added", "0").toLongOrNull() ?: 0L
+val ext = obj.optString("container_extension", "mp4").ifEmpty { "mp4" }
+val catName = cats[obj.optString("category_id")] ?: "Movies"
+val yearMatch = Regex("(19|20)\\d{2}").find(name)?.value ?: ""
+list.add(
+MediaItemModel(
+id = "vod_$id",
+rawId = id,
+title = name,
+url = "$cleanHost/movie/${sub.username}/${sub.password}/$id.$ext",
+group = catName,
+logo = icon,
+contentType = "MOVIE",
+rating = rating,
+year = yearMatch,
+originTag = detectOriginTag(catName, name),
+genreTag = detectGenreTag(catName, name),
+addedTimestamp = addedTs,
+is4k = checkIs4K(catName, name)
+)
+)
+}
+}
+} catch (_: Exception) { }
+list
+}
+
+val seriesStreamsTask = async {
+val list = mutableListOf<MediaItemModel>()
+try {
+client.newCall(Request.Builder().url("$baseApi&action=get_series").build()).execute().use { resp ->
+val arr = JSONArray(resp.body?.string() ?: "[]")
+val cats = seriesCatTask.await()
+val maxLimit = minOf(arr.length(), 8000)
+for (i in 0 until maxLimit) {
+val obj = arr.getJSONObject(i)
+val id = obj.optString("series_id")
+val name = obj.optString("name", "Series $i")
+val cover = obj.optString("cover", "")
+val rating = obj.optString("rating", "")
+val lastMod = obj.optString("last_modified", "0").toLongOrNull() ?: 0L
+val release = obj.optString("releaseDate", "").take(4).ifEmpty {
+Regex("(19|20)\\d{2}").find(name)?.value ?: ""
+}
+val catName = cats[obj.optString("category_id")] ?: "Series"
+list.add(
+MediaItemModel(
+id = "ser_$id",
+rawId = id,
+title = name,
+url = "",
+group = catName,
+logo = cover,
+contentType = "SERIES",
+rating = rating,
+year = release,
+originTag = detectOriginTag(catName, name),
+genreTag = detectGenreTag(catName, name),
+addedTimestamp = lastMod,
+is4k = checkIs4K(catName, name)
+)
+)
+}
+}
+} catch (_: Exception) { }
+list
+}
+
+infoTask.await()
+items.addAll(liveStreamsTask.await())
+items.addAll(vodStreamsTask.await())
+items.addAll(seriesStreamsTask.await())
+}
+}
+
 "M3U" -> {
-OutlinedTextField(value = m3uUrl, onValueChange = { m3uUrl = it }, label = { Text("رابط M3U / M3U8 (إدخال يدوي)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+client.newCall(Request.Builder().url(sub.m3uUrl).build()).execute().use { resp ->
+items.addAll(parseM3uLines((resp.body?.string() ?: "").lines()))
 }
+updatedSub = updatedSub.copy(status = "Active (M3U)", expDateFormatted = "M3U Playlist")
+}
+
 "STALKER" -> {
-OutlinedTextField(value = host, onValueChange = { host = it }, label = { Text("رابط البورتال (http://portal.com/c)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-OutlinedTextField(value = macAddress, onValueChange = { macAddress = it }, label = { Text("عنوان MAC (إدخال يدوي)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+val cleanPortal = sub.host.trimEnd('/')
+val macEncoded = URLEncoder.encode(sub.macAddress.trim(), "UTF-8")
+val req = Request.Builder()
+.url("$cleanPortal/portal.php?type=stb&action=handshake&token=&JsHttpRequest=1-xml")
+.header("Cookie", "mac=$macEncoded; stb_lang=en; timezone=Europe/Berlin")
+.build()
+var token = ""
+client.newCall(req).execute().use { resp ->
+token = JSONObject(resp.body?.string() ?: "{}").optJSONObject("js")?.optString("token", "") ?: ""
+}
+if (token.isNotEmpty()) {
+val channelsReq = Request.Builder()
+.url("$cleanPortal/portal.php?type=itv&action=get_all_channels&JsHttpRequest=1-xml")
+.header("Cookie", "mac=$macEncoded; stb_lang=en")
+.header("Authorization", "Bearer $token")
+.build()
+client.newCall(channelsReq).execute().use { resp ->
+val dataArr = JSONObject(resp.body?.string() ?: "{}").optJSONObject("js")?.optJSONArray("data") ?: JSONArray()
+for (i in 0 until dataArr.length()) {
+val ch = dataArr.getJSONObject(i)
+val name = ch.optString("name", "Stalker CH $i")
+val cmd = ch.optString("cmd", "").removePrefix("ffmpeg ").trim()
+val logo = ch.optString("logo", "")
+if (cmd.isNotEmpty()) {
+items.add(MediaItemModel("stk_$i", "$i", name, cmd, "", "Stalker TV", logo, "LIVE"))
 }
 }
 }
-},
-confirmButton = {
-Button(
-colors = ButtonDefaults.buttonColors(containerColor = gold),
-onClick = {
-val finalLabel = subLabel.trim().ifEmpty {
-when (selectedMode) {
-"XTREAM" -> username.trim().ifEmpty { "Xtream VIP" }
-"STALKER" -> "Stalker MAC"
-else -> "M3U Playlist"
+updatedSub = updatedSub.copy(status = "Active (Stalker MAC)", expDateFormatted = "Portal Connected")
 }
 }
-val sub = when (selectedMode) {
-"XTREAM" -> SavedSubscription(
-id = editingSub?.id ?: UUID.randomUUID().toString(),
-label = finalLabel,
-type = "XTREAM",
-host = host.trim(),
-username = username.trim(),
-password = password.trim()
+}
+} catch (_: Exception) { }
+
+updatedSub to items
+}
+
+suspend fun fetchVodDetails(sub: SavedSubscription, vodRawId: String, fallbackTitle: String, fallbackPoster: String): VodDetailedInfo = withContext(Dispatchers.IO) {
+val client = buildClient(true)
+try {
+val cleanHost = sub.host.trimEnd('/')
+val url = "$cleanHost/player_api.php?username=${URLEncoder.encode(sub.username, "UTF-8")}&password=${URLEncoder.encode(sub.password, "UTF-8")}&action=get_vod_info&vod_id=$vodRawId"
+client.newCall(Request.Builder().url(url).build()).execute().use { resp ->
+val info = JSONObject(resp.body?.string() ?: "{}").optJSONObject("info")
+if (info != null) {
+val backdrops = info.optJSONArray("backdrop_path")
+val bg = if (backdrops != null && backdrops.length() > 0) backdrops.optString(0) else fallbackPoster
+return@withContext VodDetailedInfo(
+title = info.optString("name", fallbackTitle).ifEmpty { fallbackTitle },
+plot = info.optString("plot", "لا يتوفر وصف تفصيلي لهذا الفيلم حالياً.").ifEmpty { "لا يتوفر وصف تفصيلي لهذا الفيلم حالياً." },
+cast = info.optString("cast", "غير متوفر"),
+director = info.optString("director", "غير متوفر"),
+releaseDate = info.optString("releasedate", "2025"),
+duration = info.optString("duration", "01:45:00"),
+rating = info.optString("rating", "7.8"),
+backdropUrl = bg.ifEmpty { fallbackPoster }
 )
-"M3U" -> SavedSubscription(
-id = editingSub?.id ?: UUID.randomUUID().toString(),
-label = finalLabel,
-type = "M3U",
-host = m3uUrl.trim(),
-m3uUrl = m3uUrl.trim()
+}
+}
+} catch (_: Exception) { }
+VodDetailedInfo(fallbackTitle, "جاهز للمشاهدة بجودة عالية.", "غير متوفر", "غير متوفر", "2025", "HD", "8.0", fallbackPoster)
+}
+
+suspend fun fetchSeriesDetails(sub: SavedSubscription, seriesRawId: String, fallbackTitle: String, fallbackPoster: String): SeriesDetailedInfo = withContext(Dispatchers.IO) {
+val client = buildClient(true)
+val seasonsMap = sortedMapOf<Int, MutableList<SeriesEpisodeModel>>()
+try {
+val cleanHost = sub.host.trimEnd('/')
+val url = "$cleanHost/player_api.php?username=${URLEncoder.encode(sub.username, "UTF-8")}&password=${URLEncoder.encode(sub.password, "UTF-8")}&action=get_series_info&series_id=$seriesRawId"
+client.newCall(Request.Builder().url(url).build()).execute().use { resp ->
+val root = JSONObject(resp.body?.string() ?: "{}")
+val info = root.optJSONObject("info")
+val episodesObj = root.optJSONObject("episodes")
+if (episodesObj != null) {
+val keys = episodesObj.keys()
+while (keys.hasNext()) {
+val seasonKey = keys.next()
+val sNum = seasonKey.toIntOrNull() ?: 1
+val epArr = episodesObj.optJSONArray(seasonKey) ?: continue
+val list = seasonsMap.getOrPut(sNum) { mutableListOf() }
+for (i in 0 until epArr.length()) {
+val ep = epArr.getJSONObject(i)
+val epId = ep.optString("id")
+val epNum = ep.optInt("episode_num", i + 1)
+val epTitle = ep.optString("title", "الحلقة $epNum")
+val ext = ep.optString("container_extension", "mp4").ifEmpty { "mp4" }
+val dur = ep.optJSONObject("info")?.optString("duration", "") ?: ""
+val epUrl = "$cleanHost/series/${sub.username}/${sub.password}/$epId.$ext"
+list.add(SeriesEpisodeModel("ep_$epId", epNum, sNum, epTitle, epUrl, dur))
+}
+}
+}
+if (info != null) {
+return@withContext SeriesDetailedInfo(
+title = info.optString("name", fallbackTitle).ifEmpty { fallbackTitle },
+plot = info.optString("plot", "مسلسل متكامل المواسم والحلقات.").ifEmpty { "مسلسل متكامل المواسم والحلقات." },
+cast = info.optString("cast", "غير متوفر"),
+releaseDate = info.optString("releaseDate", "2025"),
+rating = info.optString("rating", "8.4"),
+backdropUrl = info.optString("cover", fallbackPoster).ifEmpty { fallbackPoster },
+seasons = seasonsMap
 )
-else -> SavedSubscription(
-id = editingSub?.id ?: UUID.randomUUID().toString(),
-label = finalLabel,
-type = "STALKER",
-host = host.trim(),
-macAddress = macAddress.trim()
+}
+}
+} catch (_: Exception) { }
+SeriesDetailedInfo(fallbackTitle, "اختر الموسم والحلقة للمشاهدة.", "غير متوفر", "2025", "8.2", fallbackPoster, seasonsMap)
+}
+
+fun parseM3uLines(lines: List<String>): List<MediaItemModel> {
+val result = mutableListOf<MediaItemModel>()
+var name = "Channel"
+var group = "General"
+var logo = ""
+lines.forEachIndexed { idx, line ->
+val t = line.trim()
+if (t.startsWith("#EXTINF:")) {
+name = t.substringAfterLast(",").trim().ifEmpty { "Channel $idx" }
+group = Regex("""group-title="([^"]*)"""").find(t)?.groupValues?.get(1)?.ifEmpty { "General" } ?: "General"
+logo = Regex("""tvg-logo="([^"]*)"""").find(t)?.groupValues?.get(1) ?: ""
+} else if (t.startsWith("http://") || t.startsWith("https://") || t.startsWith("rtsp://")) {
+val isMovie = t.endsWith(".mp4", true) || t.endsWith(".mkv", true) || t.endsWith(".avi", true)
+result.add(
+MediaItemModel(
+id = "m3u_$idx",
+rawId = "$idx",
+title = name,
+url = t,
+group = group,
+logo = logo,
+contentType = if (isMovie) "MOVIE" else "LIVE",
+originTag = detectOriginTag(group, name),
+genreTag = detectGenreTag(group, name),
+is4k = checkIs4K(group, name)
+)
 )
 }
-onSaveAndConnect(sub)
 }
-) {
-Text("حفظ واتصال", color = Color.Black, fontWeight = FontWeight.Bold)
+return result
 }
-},
-dismissButton = {
-TextButton(onClick = onDismiss) { Text("إلغاء", color = Color.Gray) }
+
+suspend fun parseLocalUri(context: Context, uri: Uri): List<MediaItemModel> = withContext(Dispatchers.IO) {
+try {
+context.contentResolver.openInputStream(uri)?.use { input ->
+return@withContext parseM3uLines(BufferedReader(InputStreamReader(input)).readLines())
 }
+} catch (_: Exception) { }
+emptyList()
+}
+}
+
+object RealSportsDataSource {
+private fun mapLeagueToBroadcaster(league: String): String {
+val l = league.lowercase()
+return when {
+l.contains("saudi") || l.contains("roshn") -> "SSC Sports"
+l.contains("iraq") || l.contains("afc") || l.contains("asian") -> "الرابعة الرياضية / الكأس"
+l.contains("serie a") || l.contains("italian") -> "AD SPORTS Premium"
+else -> "beIN SPORTS"
+}
+}
+
+suspend fun fetchTodayRealMatches(): List<RealSportsMatch> = withContext(Dispatchers.IO) {
+val client = OkHttpClient.Builder()
+.connectTimeout(8, TimeUnit.SECONDS)
+.readTimeout(10, TimeUnit.SECONDS)
+.build()
+val matches = mutableListOf<RealSportsMatch>()
+val endpoints = listOf(
+"https://site.api.espn.com/apis/site/v2/sports/soccer/all/scoreboard",
+"https://site.api.espn.com/apis/site/v2/sports/soccer/uefa.champions/scoreboard",
+"https://site.api.espn.com/apis/site/v2/sports/soccer/eng.1/scoreboard",
+"https://site.api.espn.com/apis/site/v2/sports/soccer/esp.1/scoreboard"
 )
+val baghdadFmt = SimpleDateFormat("hh:mm a", Locale.US).apply {
+timeZone = TimeZone.getTimeZone("Asia/Baghdad")
+}
+val isoFmt = SimpleDateFormat("yyyy-MM-dd'T'HH:mm'Z'", Locale.US).apply {
+timeZone = TimeZone.getTimeZone("UTC")
+}
+
+for (ep in endpoints) {
+if (matches.size >= 30) break
+try {
+client.newCall(Request.Builder().url(ep).build()).execute().use { resp ->
+val root = JSONObject(resp.body?.string() ?: "{}")
+val events = root.optJSONArray("events") ?: JSONArray()
+for (i in 0 until events.length()) {
+val ev = events.getJSONObject(i)
+val id = ev.optString("id", "$i")
+if (matches.any { it.id == id }) continue
+val comp = ev.optJSONArray("competitions")?.optJSONObject(0) ?: continue
+val competitors = comp.optJSONArray("competitors") ?: continue
+if (competitors.length() < 2) continue
+
+val c1 = competitors.getJSONObject(0)
+val c2 = competitors.getJSONObject(1)
+val homeObj = if (c1.optString("homeAway") == "home") c1 else c2
+val awayObj = if (c1.optString("homeAway") == "home") c2 else c1
+
+val homeName = homeObj.optJSONObject("team")?.optString("shortDisplayName", "") ?: ""
+val awayName = awayObj.optJSONObject("team")?.optString("shortDisplayName", "") ?: ""
+val homeLogo = homeObj.optJSONObject("team")?.optString("logo", "") ?: ""
+val awayLogo = awayObj.optJSONObject("team")?.optString("logo", "") ?: ""
+val homeScore = homeObj.optString("score", "0")
+val awayScore = awayObj.optString("score", "0")
+
+val statusObj = ev.optJSONObject("status")?.optJSONObject("type")
+val state = statusObj?.optString("state", "pre") ?: "pre"
+val detail = statusObj?.optString("shortDetail", "") ?: ""
+val isLive = state == "in"
+
+val leagueName = ev.optJSONObject("season")?.optString("slug", "")
+?.replace("-", " ")?.uppercase()
+?: root.optJSONArray("leagues")?.optJSONObject(0)?.optString("name", "Football")
+?: "Football"
+
+val rawDate = ev.optString("date", "")
+val timeStr = try {
+val d = isoFmt.parse(rawDate)
+if (d != null) baghdadFmt.format(d) else detail
+} catch (_: Exception) { detail }
+
+if (homeName.isNotEmpty() && awayName.isNotEmpty()) {
+matches.add(
+RealSportsMatch(
+id = id,
+homeTeam = homeName,
+awayTeam = awayName,
+homeLogo = homeLogo,
+awayLogo = awayLogo,
+scoreText = if (state == "pre") "VS" else "$homeScore - $awayScore",
+league = leagueName,
+matchTime = if (isLive) detail else timeStr,
+status = if (isLive) "مباشر $detail" else if (state == "post") "انتهت" else timeStr,
+isLive = isLive,
+suggestedBroadcaster = mapLeagueToBroadcaster(leagueName)
+)
+)
+}
+}
+}
+} catch (_: Exception) { }
+}
+matches.sortedByDescending { it.isLive }
+}
+}
+
+data class EpgSlot(
+val channelName: String,
+val channelLogo: String,
+val currentProgram: String,
+val nextProgram: String,
+val timeRange: String,
+val progress: Float
+)
+
+object MatchReminderManager {
+val remindedMatches = mutableStateListOf<String>()
+
+fun toggleReminder(matchTitle: String): Boolean {
+return if (remindedMatches.contains(matchTitle)) {
+remindedMatches.remove(matchTitle)
+false
+} else {
+remindedMatches.add(matchTitle)
+true
+}
+}
 }
