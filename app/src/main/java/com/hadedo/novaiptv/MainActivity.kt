@@ -49,6 +49,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -213,9 +216,11 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
 
     var selectedTab by remember { mutableIntStateOf(0) }
     var activeStream by remember { mutableStateOf<MediaItemModel?>(null) }
+    var isSportsPlayback by remember { mutableStateOf(false) }
     var selectedMovieForDetails by remember { mutableStateOf<MediaItemModel?>(null) }
     var selectedSeriesForDetails by remember { mutableStateOf<MediaItemModel?>(null) }
     var selectedMatchForChannelPicker by remember { mutableStateOf<RealSportsMatch?>(null) }
+    var selectedGroupedMatchForQuality by remember { mutableStateOf<GroupedSportsMatch?>(null) }
 
     var showAddDialog by remember { mutableStateOf(false) }
     var showEpgSheet by remember { mutableStateOf(false) }
@@ -235,7 +240,26 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
     val todayRealMatches = remember { mutableStateListOf<RealSportsMatch>() }
     val watchlistIds = remember { mutableStateListOf<String>() }
 
-    BackHandler(enabled = activeStream == null && selectedMovieForDetails == null && selectedSeriesForDetails == null && !showEpgSheet && selectedMatchForChannelPicker == null) {
+    // حالة بيانات الـ EPG الرياضي المجمّع والمصنّف زمنياً (LSH + Single-Pass)
+    var classifiedSports by remember {
+        mutableStateOf(
+            ClassifiedSportsData(
+                liveMatches = emptyList(),
+                upcoming24hMatches = emptyList(),
+                upcomingLaterMatches = emptyList(),
+                livePrograms = emptyList()
+            )
+        )
+    }
+
+    BackHandler(
+        enabled = activeStream == null &&
+            selectedMovieForDetails == null &&
+            selectedSeriesForDetails == null &&
+            !showEpgSheet &&
+            selectedMatchForChannelPicker == null &&
+            selectedGroupedMatchForQuality == null
+    ) {
         if (selectedTab != 0) {
             selectedTab = 0
         } else {
@@ -249,12 +273,18 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
         }
     }
 
-    // الفتح الفوري في 0.1 ثانية + المزامنة الصامتة في الخلفية حسب الجدول الذي يختاره المستخدم
+    // الفتح الفوري في 0.1 ثانية + المزامنة الصامتة في الخلفية لـ Catalog و Sports EPG
     LaunchedEffect(Unit) {
         val cached = DevkanVault.getCachedItems(context)
         if (cached.isNotEmpty()) {
             allItems.clear()
             allItems.addAll(cached)
+        }
+
+        // استرجاع الـ EPG الرياضي المحفوظ محلياً وتصنيفه فوراً
+        val cachedEpg = DevkanVault.getCachedSportsEpg(context)
+        if (cachedEpg.isNotEmpty()) {
+            classifiedSports = EpgSportsPipeline.classifyAndGroupSports(cachedEpg)
         }
 
         val saved = DevkanVault.getSavedSubscription(context)
@@ -269,8 +299,13 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
                     allItems.clear()
                     allItems.addAll(loadedItems)
                     DevkanVault.saveCachedItems(context, loadedItems)
+                    classifiedSports = DevkanPlaylistRepository.syncAndClassifySportsEpg(context, updatedSub, loadedItems)
                 }
                 isSyncing = false
+            }
+        } else if (saved != null && cachedEpg.isEmpty() && cached.isNotEmpty()) {
+            launch {
+                classifiedSports = DevkanPlaylistRepository.syncAndClassifySportsEpg(context, saved, cached)
             }
         }
 
@@ -285,6 +320,7 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
         if (DevkanVault.isAutoResumeEnabled(context)) {
             val last = DevkanVault.getLastChannel(context)
             if (last != null) {
+                isSportsPlayback = false
                 activeStream = MediaItemModel("resume", "0", last.second, last.first, "", "Live", "", "LIVE")
             }
         }
@@ -308,6 +344,33 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
         allItems.filter { it.contentType == "LIVE" }
     }
 
+    fun launchGroupedMatchStream(match: GroupedSportsMatch, targetProgram: EpgProgram = match.primaryStream) {
+        val matchedChannel = allItems.firstOrNull {
+            it.contentType == "LIVE" && (it.rawId == targetProgram.channelId || it.title.equals(targetProgram.channelName, ignoreCase = true))
+        }
+        isSportsPlayback = true
+        if (matchedChannel != null) {
+            activeStream = matchedChannel.copy(
+                title = "${match.homeTeam} vs ${match.awayTeam} • ${matchedChannel.title}"
+            )
+        } else if (currentSub?.type == "XTREAM" && targetProgram.channelId.isNotBlank()) {
+            val sub = currentSub!!
+            val cleanHost = sub.host.trimEnd('/')
+            val url = "$cleanHost/live/${sub.username}/${sub.password}/${targetProgram.channelId}.m3u8"
+            val tsFallback = "$cleanHost/live/${sub.username}/${sub.password}/${targetProgram.channelId}.ts"
+            activeStream = MediaItemModel(
+                id = "live_${targetProgram.channelId}",
+                rawId = targetProgram.channelId,
+                title = "${match.homeTeam} vs ${match.awayTeam} • ${targetProgram.channelName}",
+                url = url,
+                fallbackUrl = tsFallback,
+                group = targetProgram.category ?: "Sports",
+                logo = targetProgram.channelLogo.orEmpty(),
+                contentType = "LIVE"
+            )
+        }
+    }
+
     if (activeStream != null) {
         DevkanHybridPlayerScreen(
             streamUrl = activeStream!!.url,
@@ -316,9 +379,15 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
             isVodOrSeries = activeStream!!.contentType != "LIVE",
             streamId = activeStream!!.id,
             quickChannels = liveChannelsForDrawer,
-            onSwitchChannel = { nextCh -> activeStream = nextCh },
+            onSwitchChannel = { nextCh ->
+                isSportsPlayback = SportsMatchExtractor.isSportsProgram(nextCh.group, nextCh.title, null)
+                activeStream = nextCh
+            },
             lang = lang,
-            onBack = { activeStream = null }
+            onBack = {
+                activeStream = null
+                isSportsPlayback = false
+            }
         )
         return
     }
@@ -335,6 +404,7 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
             },
             onPlayMovie = { item ->
                 selectedMovieForDetails = null
+                isSportsPlayback = false
                 activeStream = item
             },
             onBack = { selectedMovieForDetails = null }
@@ -353,6 +423,7 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
                 Toast.makeText(context, if (watchlistIds.contains(s.id)) "تمت الإضافة للمشاهدة لاحقاً ✓" else "تمت الإزالة", Toast.LENGTH_SHORT).show()
             },
             onPlayEpisode = { epItem ->
+                isSportsPlayback = false
                 activeStream = epItem
             },
             onBack = { selectedSeriesForDetails = null }
@@ -377,7 +448,10 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
             onPlayChannel = { chName ->
                 val found = allItems.firstOrNull { it.title == chName }
                 showEpgSheet = false
-                if (found != null) activeStream = found
+                if (found != null) {
+                    isSportsPlayback = SportsMatchExtractor.isSportsProgram(found.group, found.title, null)
+                    activeStream = found
+                }
             },
             onClose = { showEpgSheet = false }
         )
@@ -437,11 +511,10 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
             }
 
             when (selectedTab) {
-                // 0: الشاشة الرئيسية (خوارزمية الفرز الذكي الحقيقية بدون عشوائية أو تكرار)
+                // 0: الشاشة الرئيسية الهجينة (أحدث الإصدارات + البث الرياضي المستخرج من EPG + 4K)
                 0 -> {
                     val lastCh = remember { DevkanVault.getLastChannel(context) }
 
-                    // 1. أحدث الإصدارات: فرز حقيقي حسب تاريخ الإضافة (addedTimestamp) وسنة الإنتاج الحديثة (2024-2026)
                     val latestMoviesSorted = remember(allItems.size) {
                         allItems.filter { it.contentType == "MOVIE" }
                             .sortedWith(
@@ -451,14 +524,12 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
                             .take(15)
                     }
 
-                    // 2. أفلام 4K الحقيقية: فلترة صارمة لـ 4K / UHD فقط
                     val true4kMovies = remember(allItems.size) {
                         allItems.filter { it.contentType == "MOVIE" && it.is4k }
                             .sortedByDescending { it.addedTimestamp }
                             .take(15)
                     }
 
-                    // 3. المسلسلات المميزة: مرتبة حسب التقييم العالمي (Rating) وتاريخ التحديث
                     val topSeriesSorted = remember(allItems.size) {
                         allItems.filter { it.contentType == "SERIES" }
                             .sortedWith(
@@ -478,6 +549,47 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
                             .padding(14.dp),
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
+                        // بطاقة المباراة الجارية أو القادمة المستخرجة من EPG اشتراكك (أولوية قصوى)
+                        val epgTopMatch = classifiedSports.liveMatches.firstOrNull()
+                            ?: classifiedSports.upcoming24hMatches.firstOrNull()
+
+                        if (epgTopMatch != null) {
+                            SmartEpgMatchCard(
+                                match = epgTopMatch,
+                                onPlayPrimary = { launchGroupedMatchStream(epgTopMatch) },
+                                onSelectQuality = {
+                                    if (epgTopMatch.streams.size > 1) {
+                                        selectedGroupedMatchForQuality = epgTopMatch
+                                    } else {
+                                        launchGroupedMatchStream(epgTopMatch)
+                                    }
+                                }
+                            )
+                        } else if (todayRealMatches.isNotEmpty()) {
+                            val topMatch = todayRealMatches.first()
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(16.dp))
+                                    .background(Brush.horizontalGradient(listOf(Color(0xFF1A1429), Color(0xFF0F172A))))
+                                    .border(1.dp, gold.copy(alpha = 0.5f), RoundedCornerShape(16.dp))
+                                    .clickable { selectedMatchForChannelPicker = topMatch }
+                                    .padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                    Text("⚽ ${topMatch.league} • الناقل: ${topMatch.suggestedBroadcaster}", color = goldLight, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    Text("${topMatch.homeTeam}  🆚  ${topMatch.awayTeam}", color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 14.sp)
+                                }
+                                Box(
+                                    modifier = Modifier.background(Color(0xFF16A34A).copy(alpha = 0.25f), RoundedCornerShape(8.dp)).padding(horizontal = 8.dp, vertical = 4.dp)
+                                ) {
+                                    Text(topMatch.matchTime, color = Color(0xFF4ADE80), fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                                }
+                            }
+                        }
+
                         if (heroFeatured != null) {
                             Box(
                                 modifier = Modifier
@@ -533,32 +645,6 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
                             }
                         }
 
-                        // إشعار المباريات المباشرة مع اسم القناة الناقلة الفعلية
-                        if (todayRealMatches.isNotEmpty()) {
-                            val topMatch = todayRealMatches.first()
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(16.dp))
-                                    .background(Brush.horizontalGradient(listOf(Color(0xFF1A1429), Color(0xFF0F172A))))
-                                    .border(1.dp, gold.copy(alpha = 0.5f), RoundedCornerShape(16.dp))
-                                    .clickable { selectedMatchForChannelPicker = topMatch }
-                                    .padding(12.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                                    Text("⚽ ${topMatch.league} • الناقل: ${topMatch.suggestedBroadcaster}", color = goldLight, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                                    Text("${topMatch.homeTeam}  🆚  ${topMatch.awayTeam}", color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 14.sp)
-                                }
-                                Box(
-                                    modifier = Modifier.background(Color(0xFF16A34A).copy(alpha = 0.25f), RoundedCornerShape(8.dp)).padding(horizontal = 8.dp, vertical = 4.dp)
-                                ) {
-                                    Text(topMatch.matchTime, color = Color(0xFF4ADE80), fontWeight = FontWeight.Bold, fontSize = 11.sp)
-                                }
-                            }
-                        }
-
                         if (lastCh != null) {
                             Row(
                                 modifier = Modifier
@@ -567,6 +653,7 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
                                     .background(Color(0xFF14141D))
                                     .border(1.dp, gold.copy(alpha = 0.35f), RoundedCornerShape(14.dp))
                                     .clickable {
+                                        isSportsPlayback = false
                                         activeStream = MediaItemModel("last", "0", lastCh.second, lastCh.first, "", "Live", "", "LIVE")
                                     }
                                     .padding(12.dp),
@@ -623,7 +710,6 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
                                 )
                             }
 
-                            // يظهر صف 4K فقط إذا كان السيرفر يحتوي فعلاً على أفلام 4K حقيقية
                             if (true4kMovies.isNotEmpty()) {
                                 CinemaHorizontalRow(
                                     title = strings.movies4k,
@@ -683,7 +769,10 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
                                         .fillMaxWidth()
                                         .clip(RoundedCornerShape(14.dp))
                                         .background(Color(0xFF13131B))
-                                        .clickable { activeStream = ch }
+                                        .clickable {
+                                            isSportsPlayback = SportsMatchExtractor.isSportsProgram(ch.group, ch.title, null)
+                                            activeStream = ch
+                                        }
                                         .padding(12.dp),
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.SpaceBetween
@@ -710,26 +799,17 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
                     }
                 }
 
-                // 2: مركز الرياضة الذكي (دمج القنوات المكررة + مطابقة القناة الناقلة لكل مباراة)
+                // 2: مركز الرياضة الذكي (EPG Live + Upcoming 24h عبر LSH + القنوات الموحدة)
                 2 -> {
                     var selectedSportNetwork by remember { mutableStateOf("ALL") }
                     val networks = listOf("ALL" to "الكل", "BEIN" to "beIN SPORTS", "SSC" to "SSC", "ALKASS" to "الكأس", "AD" to "أبو ظبي", "RABIAA" to "الرابعة")
 
                     val rawSportChannels = remember(allItems.size) {
                         allItems.filter { item ->
-                            item.contentType == "LIVE" && (
-                                item.group.contains("sport", true) ||
-                                    item.group.contains("bein", true) ||
-                                    item.group.contains("رياض", true) ||
-                                    item.title.contains("sport", true) ||
-                                    item.title.contains("bein", true) ||
-                                    item.title.contains("ssc", true) ||
-                                    item.title.contains("kass", true)
-                                )
+                            item.contentType == "LIVE" && SportsMatchExtractor.isSportsProgram(item.group, item.title, null)
                         }
                     }
 
-                    // دمج القنوات المكررة (FHD/HD/SD) للقضاء على الفوضى
                     val deduplicatedSports = remember(rawSportChannels.size, selectedSportNetwork) {
                         val deduped = DevkanPlaylistRepository.deduplicateSportChannels(rawSportChannels)
                         deduped.filter { item ->
@@ -757,7 +837,40 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
                         }
 
                         LazyColumn(state = sportsListState, verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                            if (todayRealMatches.isNotEmpty() && selectedSportNetwork == "ALL") {
+                            // 1. المباريات الجارية الآن من دليل EPG
+                            if (classifiedSports.liveMatches.isNotEmpty() && selectedSportNetwork == "ALL") {
+                                item {
+                                    Text("🔴 جارية الآن على قنواتك (${classifiedSports.liveMatches.size})", color = Color(0xFFF87171), fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                                }
+                                items(classifiedSports.liveMatches, key = { "live_${it.matchKey}" }) { match ->
+                                    SmartEpgMatchCard(
+                                        match = match,
+                                        onPlayPrimary = { launchGroupedMatchStream(match) },
+                                        onSelectQuality = {
+                                            if (match.streams.size > 1) selectedGroupedMatchForQuality = match else launchGroupedMatchStream(match)
+                                        }
+                                    )
+                                }
+                            }
+
+                            // 2. المباريات القادمة خلال 24 ساعة من دليل EPG
+                            if (classifiedSports.upcoming24hMatches.isNotEmpty() && selectedSportNetwork == "ALL") {
+                                item {
+                                    Text("🟢 قادمة خلال 24 ساعة (${classifiedSports.upcoming24hMatches.size})", color = Color(0xFF4ADE80), fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                                }
+                                items(classifiedSports.upcoming24hMatches, key = { "up_${it.matchKey}" }) { match ->
+                                    SmartEpgMatchCard(
+                                        match = match,
+                                        onPlayPrimary = { launchGroupedMatchStream(match) },
+                                        onSelectQuality = {
+                                            if (match.streams.size > 1) selectedGroupedMatchForQuality = match else launchGroupedMatchStream(match)
+                                        }
+                                    )
+                                }
+                            }
+
+                            // 3. جدول مباريات اليوم العام (احتياطي في حال عدم توفر EPG كافٍ)
+                            if (classifiedSports.liveMatches.isEmpty() && classifiedSports.upcoming24hMatches.isEmpty() && todayRealMatches.isNotEmpty() && selectedSportNetwork == "ALL") {
                                 item {
                                     Text("🏆 مباريات اليوم والقنوات الناقلة", color = goldLight, fontWeight = FontWeight.Bold, fontSize = 15.sp)
                                 }
@@ -794,6 +907,7 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
                                 }
                             }
 
+                            // 4. القنوات الرياضية الموحدة (تُشغّل عبر Media3 ExoPlayer حتمياً)
                             item {
                                 Text("📺 القنوات الرياضية الموحدة (${deduplicatedSports.size})", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
                             }
@@ -803,7 +917,10 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
                                         .fillMaxWidth()
                                         .clip(RoundedCornerShape(14.dp))
                                         .background(Color(0xFF13131B))
-                                        .clickable { activeStream = ch }
+                                        .clickable {
+                                            isSportsPlayback = true
+                                            activeStream = ch
+                                        }
                                         .padding(12.dp),
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.SpaceBetween
@@ -946,7 +1063,7 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
                     }
                 }
 
-                // 4: الإعدادات (تتضمن جدولة التحديث التلقائي: يومي / أسبوعي / شهري / يدوي)
+                // 4: الإعدادات
                 4 -> {
                     DevkanSettingsScreen(
                         strings = strings,
@@ -964,15 +1081,17 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
                                     allItems.clear()
                                     allItems.addAll(items)
                                     DevkanVault.saveCachedItems(context, items)
+                                    classifiedSports = DevkanPlaylistRepository.syncAndClassifySportsEpg(context, updated, items)
                                 }
                                 isSyncing = false
-                                Toast.makeText(context, "تم تحديث البيانات وحفظها محلياً!", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, "تم تحديث البيانات والجدول الرياضي بنجاح!", Toast.LENGTH_SHORT).show()
                             }
                         },
                         onDeleteSub = {
                             DevkanVault.clearSubscription(context)
                             currentSub = null
                             allItems.clear()
+                            classifiedSports = ClassifiedSportsData(emptyList(), emptyList(), emptyList(), emptyList())
                             Toast.makeText(context, "تم حذف الاشتراك", Toast.LENGTH_SHORT).show()
                         },
                         onOpenAddDialog = { showAddDialog = true },
@@ -983,18 +1102,57 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
         }
     }
 
-    // نافذة اختيار القناة الناقلة السريعة عند الضغط على أي مباراة
+    // نافذة اختيار الجودة عند وجود أكثر من قناة ناقلة لنفس المباراة (4K / FHD / HD)
+    selectedGroupedMatchForQuality?.let { match ->
+        AlertDialog(
+            onDismissRequest = { selectedGroupedMatchForQuality = null },
+            containerColor = Color(0xFF14141D),
+            title = {
+                Column {
+                    Text("${match.homeTeam} vs ${match.awayTeam}", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                    Text("اختر القناة أو الجودة المناسبة:", color = goldLight, fontSize = 12.sp)
+                }
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    match.streams.forEach { prog ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(Color(0xFF1E1E2B))
+                                .clickable {
+                                    selectedGroupedMatchForQuality = null
+                                    launchGroupedMatchStream(match, prog)
+                                }
+                                .padding(10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(prog.channelName, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                            Box(
+                                modifier = Modifier.background(gold.copy(alpha = 0.2f), RoundedCornerShape(6.dp)).padding(horizontal = 6.dp, vertical = 2.dp)
+                            ) {
+                                Text(prog.streamQuality ?: "HD", color = goldLight, fontWeight = FontWeight.Bold, fontSize = 10.sp)
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { selectedGroupedMatchForQuality = null }) {
+                    Text("إغلاق", color = gold)
+                }
+            }
+        )
+    }
+
+    // نافذة اختيار القناة الناقلة السريعة للمباريات العامة
     selectedMatchForChannelPicker?.let { match ->
         val matchingChannels = remember(allItems.size, match.id) {
             val allSports = DevkanPlaylistRepository.deduplicateSportChannels(
                 allItems.filter {
-                    it.contentType == "LIVE" && (
-                        it.group.contains("sport", true) ||
-                            it.group.contains("bein", true) ||
-                            it.group.contains("رياض", true) ||
-                            it.title.contains("bein", true) ||
-                            it.title.contains("ssc", true)
-                        )
+                    it.contentType == "LIVE" && SportsMatchExtractor.isSportsProgram(it.group, it.title, null)
                 }
             )
             val broadcasterKeyword = match.suggestedBroadcaster.substringBefore(" ").lowercase()
@@ -1024,6 +1182,7 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
                                     .background(Color(0xFF1E1E2B))
                                     .clickable {
                                         selectedMatchForChannelPicker = null
+                                        isSportsPlayback = true
                                         activeStream = ch.copy(title = "${match.homeTeam} vs ${match.awayTeam} • ${ch.title}")
                                     }
                                     .padding(10.dp),
@@ -1063,6 +1222,7 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
                         allItems.clear()
                         allItems.addAll(loadedItems)
                         DevkanVault.saveCachedItems(context, loadedItems)
+                        classifiedSports = DevkanPlaylistRepository.syncAndClassifySportsEpg(context, updatedSub, loadedItems)
                         Toast.makeText(context, "تم الاتصال وحفظ ${loadedItems.size} قناة وفيلم ومسلسل!", Toast.LENGTH_SHORT).show()
                         showAddDialog = false
                     } else {
@@ -1072,6 +1232,99 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
                 }
             }
         )
+    }
+}
+
+@Composable
+fun SmartEpgMatchCard(
+    match: GroupedSportsMatch,
+    onPlayPrimary: () -> Unit,
+    onSelectQuality: () -> Unit
+) {
+    val gold = Color(0xFFD4AF37)
+    val goldLight = Color(0xFFFDE047)
+    val timeFormatted = remember(match.startTime) {
+        SimpleDateFormat("hh:mm a", Locale.getDefault()).format(Date(match.startTime))
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(Brush.horizontalGradient(listOf(Color(0xFF171626), Color(0xFF101522))))
+            .border(1.dp, if (match.isLive) Color(0xFFEF4444).copy(alpha = 0.55f) else gold.copy(alpha = 0.4f), RoundedCornerShape(16.dp))
+            .clickable { onPlayPrimary() }
+            .padding(13.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = match.competition ?: "بث رياضي",
+                color = goldLight,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f)
+            )
+            Box(
+                modifier = Modifier
+                    .background(
+                        if (match.isLive) Color(0xFFEF4444).copy(alpha = 0.22f) else Color(0xFF16A34A).copy(alpha = 0.22f),
+                        RoundedCornerShape(8.dp)
+                    )
+                    .padding(horizontal = 8.dp, vertical = 3.dp)
+            ) {
+                Text(
+                    text = if (match.isLive) "🔴 مباشر الآن" else "🟢 $timeFormatted",
+                    color = if (match.isLive) Color(0xFFF87171) else Color(0xFF4ADE80),
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 11.sp
+                )
+            }
+        }
+
+        Text(
+            text = "${match.homeTeam}   🆚   ${match.awayTeam}",
+            color = Color.White,
+            fontWeight = FontWeight.ExtraBold,
+            fontSize = 15.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "📺 ${match.primaryStream.channelName}",
+                color = Color(0xFF93C5FD),
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f)
+            )
+            if (match.streams.size > 1) {
+                Text(
+                    text = "+${match.streams.size - 1} جودات ▾",
+                    color = goldLight,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(gold.copy(alpha = 0.16f))
+                        .clickable { onSelectQuality() }
+                        .padding(horizontal = 8.dp, vertical = 3.dp)
+                )
+            }
+        }
     }
 }
 
@@ -1548,7 +1801,6 @@ fun DevkanSettingsScreen(
             }
         }
 
-        // خيار جدولة التحديث التلقائي الصامت (يومي / أسبوعي / شهري / يدوي)
         Box(
             modifier = Modifier
                 .fillMaxWidth()
