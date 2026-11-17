@@ -73,7 +73,8 @@ data class AppStrings(
 val home: String,
 val live: String,
 val sports: String,
-val cinema: String,
+val moviesTab: String,
+val seriesTab: String,
 val settings: String,
 val continueWatching: String,
 val latestMovies: String,
@@ -81,8 +82,6 @@ val featuredSeries: String,
 val movies4k: String,
 val searchHint: String,
 val all: String,
-val moviesTab: String,
-val seriesTab: String,
 val addConnection: String,
 val importFile: String,
 val epgGuide: String,
@@ -101,12 +100,12 @@ val autoResumeTitle: String
 )
 
 fun getStrings(lang: String): AppStrings = when (lang) {
-"en" -> AppStrings("Home", "Live TV", "Sports", "Cinema", "Settings", "Continue Watching", "Latest Releases", "Featured Series", "4K UHD Movies", "Search channels, movies, series...", "All", "Movies", "Series", "Add Connection", "Import M3U File", "EPG Grid", "Server Speed & Ping", "Playback Engine", "Auto-Refresh Catalog", "App Lock PIN", "Subscription Details", "Status", "Expires", "Allowed Region", "Connections", "Ultra-Low Latency (Satellite Sync)", "Smart Geo-Bypass Headers", "Auto-Resume Last Channel")
-"de" -> AppStrings("Start", "Live-TV", "Sport", "Kino", "Optionen", "Weiterschauen", "Neueste Filme", "Beliebte Serien", "4K-Filme", "Kanäle, Filme, Serien suchen...", "Alle", "Filme", "Serien", "Verbindung hinzufügen", "M3U-Datei laden", "EPG-Plan", "Server-Speedtest", "Wiedergabe-Engine", "Auto-Aktualisierung", "App-PIN-Sperre", "Abonnement-Details", "Status", "Ablaufdatum", "Region / Land", "Verbindungen", "Geringe Latenz (Satelliten-Sync)", "Geo-Bypass-Header", "Letzten Kanal fortsetzen")
-"tr" -> AppStrings("Ana Sayfa", "Canlı", "Spor", "Sinema", "Ayarlar", "Devam Et", "Yeni Filmler", "Öne Çıkan Diziler", "4K Filmler", "Kanal, film, dizi ara...", "Tümü", "Filmler", "Diziler", "Bağlantı Ekle", "M3U Dosyası", "EPG Rehberi", "Sunucu Hız Testi", "Oynatıcı Motoru", "Otomatik Yenileme", "Uygulama PIN", "Abonelik Bilgileri", "Durum", "Bitiş Tarihi", "Ülke / Bölge", "Bağlantılar", "Düşük Gecikme Modu", "Bölge Kısıtlama Aşımı", "Son Kanalı Otomatik Aç")
-"fr" -> AppStrings("Accueil", "Direct", "Sports", "Cinéma", "Réglages", "Reprendre", "Derniers Films", "Séries en Vedette", "Films 4K", "Rechercher...", "Tout", "Films", "Séries", "Ajouter Connexion", "Fichier M3U", "Guide EPG", "Test Serveur", "Moteur Vidéo", "Actualisation Auto", "Code PIN App", "Abonnement", "Statut", "Expiration", "Pays Autorisé", "Connexions", "Faible Latence", "Contournement Géo", "Reprise Auto")
-"ku" -> AppStrings("سەرەکی", "ڕاستەوخۆ", "وەرزش", "سینەما", "ڕێکخستن", "بەردەوامبە", "نوێترین فیلمەکان", "زنجیرە دیارەکان", "فیلمی 4K", "گەڕان...", "هەموو", "فیلم", "زنجیرە", "زیادکردنی بەشداری", "فایلی M3U", "خشتەی EPG", "پشکنینی خێرایی", "بزوێنەری کارپێکردن", "نوێکردنەوەی خۆکار", "قفڵی بەرنامە", "زانیاری بەشداری", "دۆخ", "بەرواری بەسەرچوون", "وڵات", "پەیوەندییەکان", "کەمکردنەوەی دواکەوتن", "کردنەوەی بلۆکی وڵات", "کردنەوەی دوایین کەناڵ")
-else -> AppStrings("الرئيسية", "مباشر", "الرياضة", "السينما", "الإعدادات", "واصل المشاهدة", "أحدث الإصدارات", "المسلسلات المميزة", "أفلام 4K الحقيقية", "ابحث عن قناة أو فيلم أو مسلسل...", "الكل", "الأفلام", "المسلسلات", "إضافة اتصال", "استيراد ملف M3U", "جدول EPG", "فحص سرعة السيرفر", "محرك التشغيل", "تحديث الواجهة والمكتبة تلقائياً", "قفل التطبيق PIN", "بطاقة الاشتراك", "الحالة", "تاريخ الانتهاء", "الدولة / النطاق", "الاتصالات", "تقليل تأخير البث عن الستلايت", "تجاوز قيود السيرفر والدولة", "فتح آخر قناة تلقائياً عند التشغيل")
+"en" -> AppStrings("Home", "Live TV", "Sports", "Movies", "Series", "Settings", "Continue Watching", "Latest Releases", "Featured Series", "4K UHD Movies", "Search channels, movies, series...", "All", "Add Connection", "Import M3U File", "EPG Grid", "Server Speed & Ping", "Playback Engine", "Auto-Refresh Catalog", "App Lock PIN", "Subscription Details", "Status", "Expires", "Allowed Region", "Connections", "Ultra-Low Latency", "Smart Geo-Bypass", "Auto-Resume Last Channel")
+"de" -> AppStrings("Start", "Live-TV", "Sport", "Filme", "Serien", "Optionen", "Weiterschauen", "Neueste Filme", "Beliebte Serien", "4K-Filme", "Kanäle, Filme, Serien suchen...", "Alle", "Verbindung hinzufügen", "M3U-Datei laden", "EPG-Plan", "Server-Speedtest", "Wiedergabe-Engine", "Auto-Aktualisierung", "App-PIN-Sperre", "Abonnement-Details", "Status", "Ablaufdatum", "Region / Land", "Verbindungen", "Geringe Latenz", "Geo-Bypass-Header", "Letzten Kanal fortsetzen")
+"tr" -> AppStrings("Ana Sayfa", "Canlı", "Spor", "Filmler", "Diziler", "Ayarlar", "Devam Et", "Yeni Filmler", "Öne Çıkan Diziler", "4K Filmler", "Kanal, film, dizi ara...", "Tümü", "Bağlantı Ekle", "M3U Dosyası", "EPG Rehberi", "Sunucu Hız Testi", "Oynatıcı Motoru", "Otomatik Yenileme", "Uygulama PIN", "Abonelik Bilgileri", "Durum", "Bitiş Tarihi", "Ülke / Bölge", "Bağlantılar", "Düşük Gecikme Modu", "Bölge Kısıtlama Aşımı", "Son Kanalı Otomatik Aç")
+"fr" -> AppStrings("Accueil", "Direct", "Sports", "Films", "Séries", "Réglages", "Reprendre", "Derniers Films", "Séries en Vedette", "Films 4K", "Rechercher...", "Tout", "Ajouter Connexion", "Fichier M3U", "Guide EPG", "Test Serveur", "Moteur Vidéo", "Actualisation Auto", "Code PIN App", "Abonnement", "Statut", "Expiration", "Pays Autorisé", "Connexions", "Faible Latence", "Contournement Géo", "Reprise Auto")
+"ku" -> AppStrings("سەرەکی", "ڕاستەوخۆ", "وەرزش", "فیلم", "زنجیرە", "ڕێکخستن", "بەردەوامبە", "نوێترین فیلمەکان", "زنجیرە دیارەکان", "فیلمی 4K", "گەڕان...", "هەموو", "زیادکردنی بەشداری", "فایلی M3U", "خشتەی EPG", "پشکنینی خێرایی", "بزوێنەری کارپێکردن", "نوێکردنەوەی خۆکار", "قفڵی بەرنامە", "زانیاری بەشداری", "دۆخ", "بەرواری بەسەرچوون", "وڵات", "پەیوەندییەکان", "کەمکردنەوەی دواکەوتن", "کردنەوەی بلۆکی وڵات", "کردنەوەی دوایین کەناڵ")
+else -> AppStrings("الرئيسية", "مباشر", "الرياضة", "أفلام", "مسلسلات", "الإعدادات", "واصل المشاهدة", "أحدث الإصدارات", "المسلسلات المميزة", "أفلام 4K الحقيقية", "ابحث عن قناة أو فيلم أو مسلسل...", "الكل", "إضافة اتصال", "استيراد ملف M3U", "جدول EPG", "فحص سرعة السيرفر", "محرك التشغيل", "تحديث الواجهة والمكتبة تلقائياً", "قفل التطبيق PIN", "بطاقة الاشتراك", "الحالة", "تاريخ الانتهاء", "الدولة / النطاق", "الاتصالات", "تقليل تأخير البث عن الستلايت", "تجاوز قيود السيرفر والدولة", "فتح آخر قناة تلقائياً عند التشغيل")
 }
 
 @Composable
@@ -154,9 +153,11 @@ DevkanVault.setLanguage(context, newLang)
 
 @Composable
 fun DevkanBrandHeader(
+activeSubLabel: String,
+onSwitchSubClick: () -> Unit,
 onSearchClick: () -> Unit,
-onAddClick: () -> Unit,
 onImportClick: () -> Unit,
+onSettingsClick: () -> Unit,
 strings: AppStrings
 ) {
 val goldLight = Color(0xFFFDE047)
@@ -167,17 +168,17 @@ Row(
 modifier = Modifier
 .fillMaxWidth()
 .background(Color(0xFF0A0A0F))
-.padding(horizontal = 14.dp, vertical = 10.dp),
+.padding(horizontal = 12.dp, vertical = 9.dp),
 verticalAlignment = Alignment.CenterVertically,
 horizontalArrangement = Arrangement.SpaceBetween
 ) {
-Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
 Box(
 modifier = Modifier
-.size(34.dp)
-.clip(RoundedCornerShape(10.dp))
+.size(32.dp)
+.clip(RoundedCornerShape(9.dp))
 .background(Brush.linearGradient(listOf(goldLight, goldMid, goldDark)))
-.border(1.dp, goldLight.copy(alpha = 0.8f), RoundedCornerShape(10.dp)),
+.border(1.dp, goldLight.copy(alpha = 0.8f), RoundedCornerShape(9.dp)),
 contentAlignment = Alignment.Center
 ) {
 Image(
@@ -187,42 +188,57 @@ contentScale = ContentScale.Crop,
 modifier = Modifier.fillMaxSize()
 )
 }
-Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-Text("DEVKAN 34", color = Color.White, fontWeight = FontWeight.Black, fontSize = 15.sp, letterSpacing = 1.sp)
-Box(
-modifier = Modifier
-.background(goldMid.copy(alpha = 0.22f), RoundedCornerShape(5.dp))
-.border(1.dp, goldMid.copy(alpha = 0.85f), RoundedCornerShape(5.dp))
-.padding(horizontal = 5.dp, vertical = 1.dp)
-) {
-Text("VIP", color = goldLight, fontWeight = FontWeight.ExtraBold, fontSize = 9.sp)
-}
-}
+Text("DEVKAN", color = Color.White, fontWeight = FontWeight.Black, fontSize = 14.sp, letterSpacing = 0.8.sp)
 }
 
-Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+// زر تبديل الاشتراك السريع بالشريط العلوي (مثل Maya IPTV)
+Row(
+modifier = Modifier
+.clip(RoundedCornerShape(50))
+.background(Color(0xFF171723))
+.border(1.dp, goldMid.copy(alpha = 0.45f), RoundedCornerShape(50))
+.clickable { onSwitchSubClick() }
+.padding(horizontal = 10.dp, vertical = 5.dp),
+verticalAlignment = Alignment.CenterVertically,
+horizontalArrangement = Arrangement.spacedBy(5.dp)
+) {
+Icon(Icons.Default.SwapHoriz, contentDescription = null, tint = goldLight, modifier = Modifier.size(16.dp))
+Text(
+text = activeSubLabel.ifEmpty { "إضافة اشتراك" },
+color = Color.White,
+fontWeight = FontWeight.Bold,
+fontSize = 11.5.sp,
+maxLines = 1,
+overflow = TextOverflow.Ellipsis,
+modifier = Modifier.widthIn(max = 105.dp)
+)
+Icon(Icons.Default.KeyboardArrowDown, contentDescription = null, tint = goldMid, modifier = Modifier.size(15.dp))
+}
+
+Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
 IconButton(
 onClick = onSearchClick,
-modifier = Modifier.size(34.dp).background(Color(0xFF161620), CircleShape)
+modifier = Modifier.size(32.dp).background(Color(0xFF161620), CircleShape)
 ) {
-Icon(Icons.Default.Search, contentDescription = "بحث", tint = Color.White, modifier = Modifier.size(18.dp))
+Icon(Icons.Default.Search, contentDescription = "بحث", tint = Color.White, modifier = Modifier.size(17.dp))
 }
 IconButton(
 onClick = onImportClick,
-modifier = Modifier.size(34.dp).background(Color(0xFF161620), CircleShape)
+modifier = Modifier.size(32.dp).background(Color(0xFF161620), CircleShape)
 ) {
-Icon(Icons.Default.FolderOpen, contentDescription = strings.importFile, tint = goldLight, modifier = Modifier.size(18.dp))
+Icon(Icons.Default.FolderOpen, contentDescription = strings.importFile, tint = goldLight, modifier = Modifier.size(17.dp))
 }
 IconButton(
-onClick = onAddClick,
-modifier = Modifier.size(34.dp).background(goldMid, CircleShape)
+onClick = onSettingsClick,
+modifier = Modifier.size(32.dp).background(Color(0xFF161620), CircleShape)
 ) {
-Icon(Icons.Default.Add, contentDescription = strings.addConnection, tint = Color.Black, modifier = Modifier.size(20.dp))
+Icon(Icons.Default.Settings, contentDescription = strings.settings, tint = goldMid, modifier = Modifier.size(17.dp))
 }
 }
 }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
 val context = LocalContext.current
@@ -232,6 +248,7 @@ val strings = remember(lang) { getStrings(lang) }
 val gold = Color(0xFFD4AF37)
 val goldLight = Color(0xFFFDE047)
 
+// 0: الرئيسية | 1: مباشر | 2: الرياضة | 3: أفلام | 4: مسلسلات | 5: الإعدادات
 var selectedTab by remember { mutableIntStateOf(0) }
 var selectedSportNetwork by remember { mutableStateOf("ALL") }
 var activeStream by remember { mutableStateOf<MediaItemModel?>(null) }
@@ -242,6 +259,7 @@ var selectedMatchForChannelPicker by remember { mutableStateOf<RealSportsMatch?>
 var selectedGroupedMatchForQuality by remember { mutableStateOf<GroupedSportsMatch?>(null) }
 
 var showAddDialog by remember { mutableStateOf(false) }
+var showQuickSubSwitcher by remember { mutableStateOf(false) }
 var subToEdit by remember { mutableStateOf<SavedSubscription?>(null) }
 var showEpgSheet by remember { mutableStateOf(false) }
 var showQuickSearch by remember { mutableStateOf(false) }
@@ -251,9 +269,18 @@ var liveFilterQuery by remember { mutableStateOf("") }
 var isSyncing by remember { mutableStateOf(false) }
 var lastBackPressTime by remember { mutableLongStateOf(0L) }
 
-var cinemaSubTab by remember { mutableStateOf("MOVIE") }
-var selectedOrigin by remember { mutableStateOf("ALL") }
-var cinemaFilterQuery by remember { mutableStateOf("") }
+// حالات قسم الأفلام المستقل
+var movieSmartFilter by remember { mutableStateOf("ALL") }
+var movieServerGroup by remember { mutableStateOf("ALL") }
+var movieQuery by remember { mutableStateOf("") }
+var showMovieGroupsSheet by remember { mutableStateOf(false) }
+
+// حالات قسم المسلسلات المستقل
+var seriesSmartFilter by remember { mutableStateOf("ALL") }
+var seriesServerGroup by remember { mutableStateOf("ALL") }
+var seriesQuery by remember { mutableStateOf("") }
+var showSeriesGroupsSheet by remember { mutableStateOf(false) }
+
 val moviesGridState = rememberLazyGridState()
 val seriesGridState = rememberLazyGridState()
 val liveListState = rememberLazyListState()
@@ -268,10 +295,44 @@ var cachedSportsChannels by remember { mutableStateOf<List<MediaItemModel>>(empt
 var cachedLiveChannels by remember { mutableStateOf<List<MediaItemModel>>(emptyList()) }
 var cachedLiveGroups by remember { mutableStateOf<List<String>>(listOf("ALL")) }
 var filteredLiveList by remember { mutableStateOf<List<MediaItemModel>>(emptyList()) }
-var filteredCinemaList by remember { mutableStateOf<List<MediaItemModel>>(emptyList()) }
+var filteredMoviesList by remember { mutableStateOf<List<MediaItemModel>>(emptyList()) }
+var filteredSeriesList by remember { mutableStateOf<List<MediaItemModel>>(emptyList()) }
 var vodProgressCache by remember { mutableStateOf(mapOf("" to 0f)) }
 val emptySports = ClassifiedSportsData(emptyList(), emptyList(), emptyList(), emptyList())
 var classifiedSports by remember { mutableStateOf(emptySports) }
+
+fun switchSubscriptionFast(targetSub: SavedSubscription) {
+DevkanVault.switchActiveSubscription(context, targetSub.id)
+currentSub = targetSub
+selectedLiveCategory = "ALL"
+movieSmartFilter = "ALL"
+movieServerGroup = "ALL"
+seriesSmartFilter = "ALL"
+seriesServerGroup = "ALL"
+
+scope.launch {
+val subCache = withContext(Dispatchers.IO) { DevkanVault.getCachedItems(context, targetSub.id) }
+if (subCache.isNotEmpty()) {
+allItems.clear()
+allItems.addAll(subCache)
+Toast.makeText(context, "تم التبديل إلى: ${targetSub.label}", Toast.LENGTH_SHORT).show()
+}
+isSyncing = true
+val (updated, freshItems) = DevkanPlaylistRepository.loadSubscriptionContent(targetSub, DevkanVault.isGeoBypassEnabled(context))
+currentSub = updated
+DevkanVault.saveSubscription(context, updated)
+if (freshItems.isNotEmpty()) {
+allItems.clear()
+allItems.addAll(freshItems)
+withContext(Dispatchers.IO) { DevkanVault.saveCachedItems(context, freshItems, updated.id) }
+classifiedSports = DevkanPlaylistRepository.syncAndClassifySportsEpg(context, updated, freshItems)
+if (subCache.isEmpty()) {
+Toast.makeText(context, "تم الاتصال بـ: ${updated.label}", Toast.LENGTH_SHORT).show()
+}
+}
+isSyncing = false
+}
+}
 
 LaunchedEffect(allItems.size) {
 if (allItems.isEmpty()) {
@@ -305,30 +366,60 @@ cachedLiveChannels.filter { ch ->
 }
 }
 
-LaunchedEffect(allItems.size, cinemaSubTab, selectedOrigin, cinemaFilterQuery, activeStream) {
+// فلترة قسم الأفلام المستقل بتفرعاته الذكية والحقيقية
+LaunchedEffect(allItems.size, movieSmartFilter, movieServerGroup, movieQuery, activeStream) {
 if (allItems.isEmpty()) {
-filteredCinemaList = emptyList()
+filteredMoviesList = emptyList()
 } else {
 val snapshot = allItems.toList()
-val q = cinemaFilterQuery.trim()
+val q = movieQuery.trim()
 val result = withContext(Dispatchers.Default) {
-snapshot.filter { item ->
-item.contentType == cinemaSubTab &&
-(selectedOrigin == "ALL" || item.originTag == selectedOrigin) &&
-(q.isEmpty() || item.title.contains(q, ignoreCase = true))
+val moviesOnly = snapshot.filter { it.contentType == "MOVIE" }
+val byGroup = if (movieServerGroup == "ALL") moviesOnly else moviesOnly.filter { it.group == movieServerGroup }
+val byFilter = when (movieSmartFilter) {
+"ALL" -> byGroup
+"RECENT" -> byGroup.sortedByDescending { it.addedTimestamp }
+"4K" -> byGroup.filter { it.is4k }
+"TOP" -> byGroup.sortedByDescending { it.rating.toDoubleOrNull() ?: 0.0 }
+"عربي", "كوري", "تركي", "هندي", "أجنبي" -> byGroup.filter { it.originTag == movieSmartFilter }
+else -> byGroup.filter { it.genreTag == movieSmartFilter }
 }
+if (q.isEmpty()) byFilter else byFilter.filter { it.title.contains(q, ignoreCase = true) }
 }
-filteredCinemaList = result
+filteredMoviesList = result
 
 val progressMap = withContext(Dispatchers.IO) {
 val map = HashMap<String, Float>()
-for (item in result.take(200)) {
+for (item in result.take(250)) {
 val p = DevkanVault.getVodProgressFraction(context, item.id)
 if (p > 0.02f) map[item.id] = p
 }
 map
 }
 vodProgressCache = progressMap
+}
+}
+
+// فلترة قسم المسلسلات المستقل بتفرعاته الذكية والحقيقية
+LaunchedEffect(allItems.size, seriesSmartFilter, seriesServerGroup, seriesQuery, activeStream) {
+if (allItems.isEmpty()) {
+filteredSeriesList = emptyList()
+} else {
+val snapshot = allItems.toList()
+val q = seriesQuery.trim()
+val result = withContext(Dispatchers.Default) {
+val seriesOnly = snapshot.filter { it.contentType == "SERIES" }
+val byGroup = if (seriesServerGroup == "ALL") seriesOnly else seriesOnly.filter { it.group == seriesServerGroup }
+val byFilter = when (seriesSmartFilter) {
+"ALL" -> byGroup
+"RECENT" -> byGroup.sortedByDescending { it.addedTimestamp }
+"TOP" -> byGroup.sortedByDescending { it.rating.toDoubleOrNull() ?: 0.0 }
+"عربي", "كوري", "تركي", "هندي", "أجنبي" -> byGroup.filter { it.originTag == seriesSmartFilter }
+else -> byGroup.filter { it.genreTag == seriesSmartFilter }
+}
+if (q.isEmpty()) byFilter else byFilter.filter { it.title.contains(q, ignoreCase = true) }
+}
+filteredSeriesList = result
 }
 }
 
@@ -355,7 +446,8 @@ Toast.makeText(context, "اضغط رجوع مرة أخرى للخروج من DEV
 }
 
 LaunchedEffect(Unit) {
-val cached = withContext(Dispatchers.IO) { DevkanVault.getCachedItems(context) }
+val saved = DevkanVault.getSavedSubscription(context)
+val cached = withContext(Dispatchers.IO) { DevkanVault.getCachedItems(context, saved?.id ?: "default") }
 if (cached.isNotEmpty()) {
 allItems.clear()
 allItems.addAll(cached)
@@ -368,7 +460,6 @@ EpgSportsPipeline.classifyAndGroupSports(cachedEpg)
 }
 }
 
-val saved = DevkanVault.getSavedSubscription(context)
 if (saved != null && (cached.isEmpty() || DevkanVault.shouldRunBackgroundSync(context))) {
 launch {
 if (cached.isEmpty()) isSyncing = true
@@ -379,7 +470,7 @@ DevkanVault.saveSubscription(context, updatedSub)
 if (loadedItems.isNotEmpty()) {
 allItems.clear()
 allItems.addAll(loadedItems)
-withContext(Dispatchers.IO) { DevkanVault.saveCachedItems(context, loadedItems) }
+withContext(Dispatchers.IO) { DevkanVault.saveCachedItems(context, loadedItems, updatedSub.id) }
 classifiedSports = DevkanPlaylistRepository.syncAndClassifySportsEpg(context, updatedSub, loadedItems)
 }
 isSyncing = false
@@ -477,7 +568,7 @@ subscription = currentSub,
 isInWatchlist = watchlistIds.contains(m.id),
 onToggleWatchlist = {
 if (watchlistIds.contains(m.id)) watchlistIds.remove(m.id) else watchlistIds.add(m.id)
-Toast.makeText(context, if (watchlistIds.contains(m.id)) "تمت الإضافة للمشاهدة لاحقاً ✓" else "تمت الإزالة", Toast.LENGTH_SHORT).show()
+Toast.makeText(context, if (watchlistIds.contains(m.id)) "تمت الإضافة للمفضلة ✓" else "تمت الإزالة", Toast.LENGTH_SHORT).show()
 },
 onPlayMovie = { item ->
 selectedMovieForDetails = null
@@ -497,7 +588,7 @@ subscription = currentSub,
 isInWatchlist = watchlistIds.contains(s.id),
 onToggleWatchlist = {
 if (watchlistIds.contains(s.id)) watchlistIds.remove(s.id) else watchlistIds.add(s.id)
-Toast.makeText(context, if (watchlistIds.contains(s.id)) "تمت الإضافة للمشاهدة لاحقاً ✓" else "تمت الإزالة", Toast.LENGTH_SHORT).show()
+Toast.makeText(context, if (watchlistIds.contains(s.id)) "تمت الإضافة للمفضلة ✓" else "تمت الإزالة", Toast.LENGTH_SHORT).show()
 },
 onPlayEpisode = { epItem ->
 isSportsPlayback = false
@@ -539,12 +630,11 @@ Scaffold(
 containerColor = Color(0xFF07070A),
 topBar = {
 DevkanBrandHeader(
+activeSubLabel = currentSub?.label ?: "إضافة اتصال",
+onSwitchSubClick = { showQuickSubSwitcher = true },
 onSearchClick = { showQuickSearch = true },
-onAddClick = {
-subToEdit = null
-showAddDialog = true
-},
 onImportClick = { m3uFileLauncher.launch("*/*") },
+onSettingsClick = { selectedTab = 5 },
 strings = strings
 )
 },
@@ -554,8 +644,8 @@ val navItems = listOf(
 Triple(strings.home, Icons.Default.Home, 0),
 Triple(strings.live, Icons.Default.LiveTv, 1),
 Triple(strings.sports, Icons.Default.SportsSoccer, 2),
-Triple(strings.cinema, Icons.Default.Movie, 3),
-Triple(strings.settings, Icons.Default.Settings, 4)
+Triple(strings.moviesTab, Icons.Default.Movie, 3),
+Triple(strings.seriesTab, Icons.Default.VideoLibrary, 4)
 )
 navItems.forEach { (label, icon, index) ->
 NavigationBarItem(
@@ -572,7 +662,7 @@ modifier = Modifier.size(21.dp)
 label = {
 Text(
 text = label,
-fontSize = 9.5.sp,
+fontSize = 10.sp,
 maxLines = 1,
 softWrap = false,
 overflow = TextOverflow.Ellipsis,
@@ -592,10 +682,13 @@ LinearProgressIndicator(color = gold, modifier = Modifier.fillMaxWidth().align(A
 }
 
 when (selectedTab) {
+// ================================================================
+// 0. الشاشة الرئيسية (Home)
+// ================================================================
 0 -> {
 val lastCh = remember { DevkanVault.getLastChannel(context) }
 var selectedHomePill by remember { mutableStateOf("الكل") }
-val homePills = listOf("الكل", "Live", "رياضة", "أفلام", "مسلسلات", "مفضلة", "EPG")
+val homePills = listOf("الكل", "مباشر", "رياضة", "أفلام", "مسلسلات", "EPG")
 
 val latestMoviesSorted = remember(allItems.size) {
 allItems.filter { it.contentType == "MOVIE" }
@@ -649,27 +742,14 @@ modifier = Modifier
 .clickable {
 selectedHomePill = pill
 when (pill) {
-"Live" -> selectedTab = 1
+"مباشر" -> selectedTab = 1
 "رياضة" -> {
 selectedSportNetwork = "ALL"
 selectedTab = 2
 }
-"أفلام" -> {
-cinemaSubTab = "MOVIE"
-selectedTab = 3
-}
-"مسلسلات" -> {
-cinemaSubTab = "SERIES"
-selectedTab = 3
-}
+"أفلام" -> selectedTab = 3
+"مسلسلات" -> selectedTab = 4
 "EPG" -> showEpgSheet = true
-"مفضلة" -> {
-if (watchlistIds.isEmpty()) {
-Toast.makeText(context, "قائمة المفضلة فارغة حالياً", Toast.LENGTH_SHORT).show()
-} else {
-selectedTab = 3
-}
-}
 }
 }
 .padding(horizontal = 15.dp, vertical = 7.dp)
@@ -684,7 +764,7 @@ fontSize = 12.sp
 }
 }
 
-// بطاقة المباراة الرئيسية (تعمل من EPG أو من API المباريات الحي تلقائياً)
+// بطاقة المباراة الرئيسية الحية (ESPN + EPG)
 if (featuredMatch != null) {
 Box(
 modifier = Modifier
@@ -737,31 +817,9 @@ modifier = Modifier.fillMaxWidth(),
 horizontalArrangement = Arrangement.SpaceBetween,
 verticalAlignment = Alignment.CenterVertically
 ) {
-Text(
-text = featuredMatch.homeTeam,
-color = Color.White,
-fontWeight = FontWeight.Black,
-fontSize = 17.sp,
-modifier = Modifier.weight(1f),
-maxLines = 1,
-overflow = TextOverflow.Ellipsis
-)
-Text(
-text = "VS",
-color = gold,
-fontWeight = FontWeight.ExtraBold,
-fontSize = 14.sp,
-modifier = Modifier.padding(horizontal = 10.dp)
-)
-Text(
-text = featuredMatch.awayTeam,
-color = Color.White,
-fontWeight = FontWeight.Black,
-fontSize = 17.sp,
-modifier = Modifier.weight(1f),
-maxLines = 1,
-overflow = TextOverflow.Ellipsis
-)
+Text(featuredMatch.homeTeam, color = Color.White, fontWeight = FontWeight.Black, fontSize = 17.sp, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+Text("VS", color = gold, fontWeight = FontWeight.ExtraBold, fontSize = 14.sp, modifier = Modifier.padding(horizontal = 10.dp))
+Text(featuredMatch.awayTeam, color = Color.White, fontWeight = FontWeight.Black, fontSize = 17.sp, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
 }
 
 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -777,11 +835,7 @@ Text("مشاهدة البث (${featuredMatch.streams.size})", color = Color.Whit
 }
 OutlinedButton(
 onClick = {
-if (featuredMatch.streams.size > 1) {
-selectedGroupedMatchForQuality = featuredMatch
-} else {
-launchGroupedMatchStream(featuredMatch)
-}
+if (featuredMatch.streams.size > 1) selectedGroupedMatchForQuality = featuredMatch else launchGroupedMatchStream(featuredMatch)
 },
 shape = RoundedCornerShape(12.dp),
 border = BorderStroke(1.dp, gold.copy(alpha = 0.5f))
@@ -804,7 +858,7 @@ Brush.linearGradient(
 colors = listOf(Color(0xFF18192C), Color(0xFF111625), Color(0xFF0A0A0F))
 )
 )
-.border(1.dp, gold.copy(alpha = 0.55f), RoundedCornerShape(20.dp))
+.border(1.dp, if (fallbackRealMatch.isLive) Color(0xFFEF4444).copy(alpha = 0.65f) else gold.copy(alpha = 0.55f), RoundedCornerShape(20.dp))
 .padding(16.dp)
 ) {
 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -825,12 +879,12 @@ modifier = Modifier.weight(1f)
 Box(
 modifier = Modifier
 .clip(RoundedCornerShape(6.dp))
-.background(Color(0xFF16A34A).copy(alpha = 0.22f))
+.background(if (fallbackRealMatch.isLive) Color(0xFFEF4444).copy(alpha = 0.24f) else Color(0xFF16A34A).copy(alpha = 0.22f))
 .padding(horizontal = 8.dp, vertical = 3.dp)
 ) {
 Text(
-text = "⏰ ${fallbackRealMatch.matchTime} • ${fallbackRealMatch.status}",
-color = Color(0xFF4ADE80),
+text = if (fallbackRealMatch.isLive) "🔴 ${fallbackRealMatch.status}" else "⏰ ${fallbackRealMatch.matchTime}",
+color = if (fallbackRealMatch.isLive) Color(0xFFF87171) else Color(0xFF4ADE80),
 fontWeight = FontWeight.Bold,
 fontSize = 11.sp
 )
@@ -842,31 +896,26 @@ modifier = Modifier.fillMaxWidth(),
 horizontalArrangement = Arrangement.SpaceBetween,
 verticalAlignment = Alignment.CenterVertically
 ) {
-Text(
-text = fallbackRealMatch.homeTeam,
-color = Color.White,
-fontWeight = FontWeight.Black,
-fontSize = 17.sp,
-modifier = Modifier.weight(1f),
-maxLines = 1,
-overflow = TextOverflow.Ellipsis
-)
-Text(
-text = "VS",
-color = gold,
-fontWeight = FontWeight.ExtraBold,
-fontSize = 14.sp,
-modifier = Modifier.padding(horizontal = 10.dp)
-)
-Text(
-text = fallbackRealMatch.awayTeam,
-color = Color.White,
-fontWeight = FontWeight.Black,
-fontSize = 17.sp,
-modifier = Modifier.weight(1f),
-maxLines = 1,
-overflow = TextOverflow.Ellipsis
-)
+Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+if (fallbackRealMatch.homeLogo.isNotEmpty()) {
+AsyncImage(model = fallbackRealMatch.homeLogo, contentDescription = null, modifier = Modifier.size(28.dp))
+}
+Text(fallbackRealMatch.homeTeam, color = Color.White, fontWeight = FontWeight.Black, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+}
+Box(
+modifier = Modifier
+.background(Color(0xFF222232), RoundedCornerShape(8.dp))
+.padding(horizontal = 10.dp, vertical = 4.dp)
+) {
+Text(fallbackRealMatch.scoreText, color = goldLight, fontWeight = FontWeight.Black, fontSize = 14.sp)
+}
+Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.End) {
+Text(fallbackRealMatch.awayTeam, color = Color.White, fontWeight = FontWeight.Black, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+if (fallbackRealMatch.awayLogo.isNotEmpty()) {
+Spacer(Modifier.width(6.dp))
+AsyncImage(model = fallbackRealMatch.awayLogo, contentDescription = null, modifier = Modifier.size(28.dp))
+}
+}
 }
 
 Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -910,34 +959,15 @@ else selectedMovieForDetails = heroFeatured
 }
 ) {
 AsyncImage(
-model = ImageRequest.Builder(context)
-.data(heroFeatured.logo)
-.size(640, 420)
-.crossfade(true)
-.build(),
+model = ImageRequest.Builder(context).data(heroFeatured.logo).size(640, 420).crossfade(true).build(),
 contentDescription = heroFeatured.title,
 contentScale = ContentScale.Crop,
 modifier = Modifier.fillMaxSize()
 )
 Box(
-modifier = Modifier
-.fillMaxSize()
-.background(
-Brush.verticalGradient(
-colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.88f))
+modifier = Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.88f))))
 )
-)
-)
-Column(
-modifier = Modifier.align(Alignment.BottomStart).padding(16.dp),
-verticalArrangement = Arrangement.spacedBy(6.dp)
-) {
-Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-Box(modifier = Modifier.background(gold, RoundedCornerShape(6.dp)).padding(horizontal = 6.dp, vertical = 2.dp)) {
-Text("TOP PICKS • VIP", color = Color.Black, fontWeight = FontWeight.Black, fontSize = 10.sp)
-}
-Text("${heroFeatured.originTag} • ${heroFeatured.genreTag}", color = goldLight, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-}
+Column(modifier = Modifier.align(Alignment.BottomStart).padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
 Text(heroFeatured.title, color = Color.White, fontWeight = FontWeight.Black, fontSize = 18.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
 Button(
 onClick = {
@@ -945,8 +975,7 @@ if (heroFeatured.contentType == "SERIES") selectedSeriesForDetails = heroFeature
 else selectedMovieForDetails = heroFeatured
 },
 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626)),
-shape = RoundedCornerShape(10.dp),
-contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp)
+shape = RoundedCornerShape(10.dp)
 ) {
 Icon(Icons.Default.PlayArrow, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
 Spacer(Modifier.width(4.dp))
@@ -956,10 +985,10 @@ Text("شاهد الآن", color = Color.White, fontWeight = FontWeight.Bold, fon
 }
 }
 
-// شريط ملخص الرياضة بالرئيسية
-val liveMatchesCount = classifiedSports.liveMatches.size
-val totalMatchesCount = classifiedSports.liveMatches.size + classifiedSports.upcoming24hMatches.size + todayRealMatches.size
-if (totalMatchesCount > 0) {
+// شريط ملخص الرياضة الأخضر بالرئيسية (مثل Maya IPTV)
+val liveCount = classifiedSports.liveMatches.size + todayRealMatches.count { it.isLive }
+val totalCount = classifiedSports.liveMatches.size + classifiedSports.upcoming24hMatches.size + todayRealMatches.size
+if (totalCount > 0) {
 Row(
 modifier = Modifier
 .fillMaxWidth()
@@ -978,146 +1007,42 @@ verticalAlignment = Alignment.CenterVertically
 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
 Icon(Icons.Default.SportsSoccer, contentDescription = null, tint = Color(0xFF4ADE80), modifier = Modifier.size(24.dp))
 Column {
-Text("جدول المباريات المباشر", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-Text("🔴 $liveMatchesCount مباشر  •  ⚽ $totalMatchesCount مباراة اليوم", color = Color(0xFF4ADE80), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+Text("رياضة • جدول المباريات الحية", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+Text("🔴 $liveCount مباشر   •   ⚽ $totalCount مباراة اليوم", color = Color(0xFF4ADE80), fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold)
 }
 }
 Icon(Icons.Default.ChevronRight, contentDescription = null, tint = Color(0xFF4ADE80))
 }
 }
 
-if (classifiedSports.liveMatches.isNotEmpty()) {
-Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-Text(
-text = "🔴 الآن يُبث مباشرة (Live Now)",
-color = Color(0xFFF87171),
-fontWeight = FontWeight.Bold,
-fontSize = 15.sp,
-modifier = Modifier.padding(horizontal = 14.dp)
-)
-LazyRow(
-contentPadding = PaddingValues(horizontal = 14.dp),
-horizontalArrangement = Arrangement.spacedBy(10.dp)
-) {
-itemsIndexed(classifiedSports.liveMatches, key = { idx, it -> "home_live_${idx}_${it.matchKey}" }) { _, match ->
-Box(modifier = Modifier.width(270.dp)) {
-SmartEpgMatchCard(
-match = match,
-onPlayPrimary = { launchGroupedMatchStream(match) },
-onSelectQuality = {
-if (match.streams.size > 1) selectedGroupedMatchForQuality = match else launchGroupedMatchStream(match)
-}
-)
-}
-}
-}
-}
-}
-
-if (classifiedSports.upcoming24hMatches.isNotEmpty()) {
+if (todayRealMatches.size > 1) {
 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
 Row(
 modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp),
 horizontalArrangement = Arrangement.SpaceBetween,
 verticalAlignment = Alignment.CenterVertically
 ) {
-Text("🏆 رياضة اليوم", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-Text(
-text = "كل المباريات",
-color = goldLight,
-fontSize = 12.sp,
-fontWeight = FontWeight.Bold,
-modifier = Modifier.clickable {
-selectedSportNetwork = "ALL"
-selectedTab = 2
+Text("⚽ مباريات اليوم المباشرة", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+Text("عرض الكل", color = goldLight, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { selectedTab = 2 })
 }
-)
-}
-LazyRow(
-contentPadding = PaddingValues(horizontal = 14.dp),
-horizontalArrangement = Arrangement.spacedBy(10.dp)
-) {
-itemsIndexed(classifiedSports.upcoming24hMatches, key = { idx, it -> "home_up_${idx}_${it.matchKey}" }) { _, match ->
-Box(modifier = Modifier.width(270.dp)) {
-SmartEpgMatchCard(
-match = match,
-onPlayPrimary = { launchGroupedMatchStream(match) },
-onSelectQuality = {
-if (match.streams.size > 1) selectedGroupedMatchForQuality = match else launchGroupedMatchStream(match)
-}
-)
-}
-}
-}
-}
-} else if (todayRealMatches.isNotEmpty()) {
-Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-Text(
-text = "🏆 مباريات اليوم",
-color = Color.White,
-fontWeight = FontWeight.Bold,
-fontSize = 16.sp,
-modifier = Modifier.padding(horizontal = 14.dp)
-)
-LazyRow(
-contentPadding = PaddingValues(horizontal = 14.dp),
-horizontalArrangement = Arrangement.spacedBy(10.dp)
-) {
-itemsIndexed(todayRealMatches.take(10), key = { idx, it -> "home_real_${idx}_${it.id}" }) { _, match ->
+LazyRow(contentPadding = PaddingValues(horizontal = 14.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+itemsIndexed(todayRealMatches.drop(1).take(12), key = { idx, it -> "home_espn_${idx}_${it.id}" }) { _, match ->
 Column(
 modifier = Modifier
-.width(250.dp)
+.width(245.dp)
 .clip(RoundedCornerShape(14.dp))
 .background(Color(0xFF151522))
-.border(1.dp, gold.copy(alpha = 0.4f), RoundedCornerShape(14.dp))
+.border(1.dp, if (match.isLive) Color(0xFFEF4444).copy(alpha = 0.5f) else gold.copy(alpha = 0.35f), RoundedCornerShape(14.dp))
 .clickable { selectedMatchForChannelPicker = match }
 .padding(12.dp),
-verticalArrangement = Arrangement.spacedBy(4.dp)
+verticalArrangement = Arrangement.spacedBy(5.dp)
 ) {
-Text("⚽ ${match.league}", color = goldLight, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1)
-Text("${match.homeTeam} vs ${match.awayTeam}", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 1)
-Text("📺 ${match.suggestedBroadcaster} • ${match.matchTime}", color = Color(0xFF4ADE80), fontSize = 11.sp)
+Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+Text(match.league, color = goldLight, fontSize = 10.sp, fontWeight = FontWeight.Bold, maxLines = 1, modifier = Modifier.weight(1f))
+Text(if (match.isLive) "🔴 ${match.matchTime}" else match.matchTime, color = if (match.isLive) Color(0xFFF87171) else Color(0xFF4ADE80), fontSize = 10.sp, fontWeight = FontWeight.Bold)
 }
-}
-}
-}
-}
-
-if (cachedSportsChannels.isNotEmpty()) {
-val networkCards = listOf(
-"BEIN" to "beIN SPORTS",
-"SSC" to "SSC Sports",
-"AD" to "AD Sports",
-"ALKASS" to "Alkass الكأس",
-"RABIAA" to "الرابعة الرياضية"
-)
-Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-Text(
-text = "📺 قنوات رياضية مميزة",
-color = Color.White,
-fontWeight = FontWeight.Bold,
-fontSize = 16.sp,
-modifier = Modifier.padding(horizontal = 14.dp)
-)
-LazyRow(
-contentPadding = PaddingValues(horizontal = 14.dp),
-horizontalArrangement = Arrangement.spacedBy(10.dp)
-) {
-items(networkCards, key = { it.first }) { (code, title) ->
-Box(
-modifier = Modifier
-.width(135.dp)
-.height(58.dp)
-.clip(RoundedCornerShape(14.dp))
-.background(Color(0xFF13131E))
-.border(1.dp, gold.copy(alpha = 0.35f), RoundedCornerShape(14.dp))
-.clickable {
-selectedSportNetwork = code
-selectedTab = 2
-},
-contentAlignment = Alignment.Center
-) {
-Text(title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+Text("${match.homeTeam}  (${match.scoreText})  ${match.awayTeam}", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+Text("📺 ${match.suggestedBroadcaster}", color = Color(0xFF93C5FD), fontSize = 11.sp)
 }
 }
 }
@@ -1175,10 +1100,7 @@ Box(modifier = Modifier.padding(horizontal = 14.dp)) {
 CinemaHorizontalRow(
 title = strings.latestMovies,
 items = latestMoviesSorted,
-onMoreClick = {
-cinemaSubTab = "MOVIE"
-selectedTab = 3
-},
+onMoreClick = { selectedTab = 3 },
 onItemClick = { selectedMovieForDetails = it }
 )
 }
@@ -1189,10 +1111,7 @@ Box(modifier = Modifier.padding(horizontal = 14.dp)) {
 CinemaHorizontalRow(
 title = strings.featuredSeries,
 items = topSeriesSorted,
-onMoreClick = {
-cinemaSubTab = "SERIES"
-selectedTab = 3
-},
+onMoreClick = { selectedTab = 4 },
 onItemClick = { selectedSeriesForDetails = it }
 )
 }
@@ -1204,7 +1123,7 @@ CinemaHorizontalRow(
 title = strings.movies4k,
 items = true4kMovies,
 onMoreClick = {
-cinemaSubTab = "MOVIE"
+movieSmartFilter = "4K"
 selectedTab = 3
 },
 onItemClick = { selectedMovieForDetails = it }
@@ -1215,6 +1134,9 @@ onItemClick = { selectedMovieForDetails = it }
 }
 }
 
+// ================================================================
+// 1. قسم البث المباشر (Live TV)
+// ================================================================
 1 -> {
 Column(modifier = Modifier.fillMaxSize().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
 Row(
@@ -1263,11 +1185,7 @@ label = { Text(if (grp == "ALL") strings.all else grp, fontSize = 12.sp) }
 }
 
 LazyColumn(state = liveListState, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-items(
-items = filteredLiveList,
-key = { it.id },
-contentType = { "live_channel" }
-) { ch ->
+items(items = filteredLiveList, key = { it.id }, contentType = { "live_channel" }) { ch ->
 Row(
 modifier = Modifier
 .fillMaxWidth()
@@ -1281,17 +1199,10 @@ activeStream = ch
 verticalAlignment = Alignment.CenterVertically,
 horizontalArrangement = Arrangement.SpaceBetween
 ) {
-Row(
-modifier = Modifier.weight(1f),
-verticalAlignment = Alignment.CenterVertically,
-horizontalArrangement = Arrangement.spacedBy(10.dp)
-) {
+Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
 if (ch.logo.isNotEmpty()) {
 AsyncImage(
-model = ImageRequest.Builder(context)
-.data(ch.logo)
-.size(120, 120)
-.build(),
+model = ImageRequest.Builder(context).data(ch.logo).size(120, 120).build(),
 contentDescription = null,
 modifier = Modifier.size(38.dp).clip(RoundedCornerShape(8.dp))
 )
@@ -1310,6 +1221,9 @@ Icon(Icons.Default.PlayArrow, contentDescription = null, tint = gold)
 }
 }
 
+// ================================================================
+// 2. قسم الرياضة (Sports Hub)
+// ================================================================
 2 -> {
 val networks = listOf("ALL" to "الكل", "BEIN" to "beIN SPORTS", "SSC" to "SSC", "ALKASS" to "الكأس", "AD" to "أبو ظبي", "RABIAA" to "الرابعة")
 
@@ -1343,41 +1257,11 @@ label = { Text(label, fontSize = 12.sp, fontWeight = FontWeight.Bold) }
 }
 
 LazyColumn(state = sportsListState, verticalArrangement = Arrangement.spacedBy(10.dp)) {
-if (classifiedSports.liveMatches.isNotEmpty() && selectedSportNetwork == "ALL") {
-item(key = "header_live_epg") {
-Text("🔴 جارية الآن على قنواتك (${classifiedSports.liveMatches.size})", color = Color(0xFFF87171), fontWeight = FontWeight.Bold, fontSize = 15.sp)
-}
-itemsIndexed(classifiedSports.liveMatches, key = { idx, it -> "live_${idx}_${it.matchKey}" }) { _, match ->
-SmartEpgMatchCard(
-match = match,
-onPlayPrimary = { launchGroupedMatchStream(match) },
-onSelectQuality = {
-if (match.streams.size > 1) selectedGroupedMatchForQuality = match else launchGroupedMatchStream(match)
-}
-)
-}
-}
-
-if (classifiedSports.upcoming24hMatches.isNotEmpty() && selectedSportNetwork == "ALL") {
-item(key = "header_upcoming_epg") {
-Text("🟢 قادمة خلال 24 ساعة (${classifiedSports.upcoming24hMatches.size})", color = Color(0xFF4ADE80), fontWeight = FontWeight.Bold, fontSize = 15.sp)
-}
-itemsIndexed(classifiedSports.upcoming24hMatches, key = { idx, it -> "up_${idx}_${it.matchKey}" }) { _, match ->
-SmartEpgMatchCard(
-match = match,
-onPlayPrimary = { launchGroupedMatchStream(match) },
-onSelectQuality = {
-if (match.streams.size > 1) selectedGroupedMatchForQuality = match else launchGroupedMatchStream(match)
-}
-)
-}
-}
-
 if (todayRealMatches.isNotEmpty() && selectedSportNetwork == "ALL") {
 item(key = "header_today_matches") {
-Text("🏆 مباريات اليوم والقنوات الناقلة", color = goldLight, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+Text("🏆 مباريات اليوم والنتائج الحية (${todayRealMatches.size})", color = goldLight, fontWeight = FontWeight.Bold, fontSize = 15.sp)
 }
-itemsIndexed(todayRealMatches.take(15), key = { idx, it -> "real_${idx}_${it.id}" }) { _, match ->
+itemsIndexed(todayRealMatches, key = { idx, it -> "real_${idx}_${it.id}" }) { _, match ->
 val title = "${match.homeTeam} vs ${match.awayTeam}"
 val isReminded = MatchReminderManager.remindedMatches.contains(title)
 Row(
@@ -1385,16 +1269,24 @@ modifier = Modifier
 .fillMaxWidth()
 .clip(RoundedCornerShape(14.dp))
 .background(Color(0xFF151522))
-.border(1.dp, Color(0xFF28283E), RoundedCornerShape(14.dp))
+.border(1.dp, if (match.isLive) Color(0xFFEF4444).copy(alpha = 0.55f) else Color(0xFF28283E), RoundedCornerShape(14.dp))
 .clickable { selectedMatchForChannelPicker = match }
 .padding(12.dp),
 verticalAlignment = Alignment.CenterVertically,
 horizontalArrangement = Arrangement.SpaceBetween
 ) {
-Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-Text(title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-Text("${match.league}  •  ${match.matchTime}", color = Color(0xFF9CA3AF), fontSize = 11.sp)
-Text("📺 القناة الناقلة: ${match.suggestedBroadcaster}", color = Color(0xFF4ADE80), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+Text(
+text = if (match.isLive) "🔴 ${match.matchTime}" else "⏰ ${match.matchTime}",
+color = if (match.isLive) Color(0xFFF87171) else Color(0xFF4ADE80),
+fontSize = 11.sp,
+fontWeight = FontWeight.Bold
+)
+Text("• ${match.league}", color = Color(0xFF9CA3AF), fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+}
+Text("${match.homeTeam}   (${match.scoreText})   ${match.awayTeam}", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.5.sp)
+Text("📺 القناة الناقلة: ${match.suggestedBroadcaster}", color = Color(0xFF93C5FD), fontSize = 11.sp, fontWeight = FontWeight.Bold)
 }
 IconButton(onClick = {
 val added = MatchReminderManager.toggleReminder(title)
@@ -1427,11 +1319,7 @@ activeStream = ch
 verticalAlignment = Alignment.CenterVertically,
 horizontalArrangement = Arrangement.SpaceBetween
 ) {
-Row(
-modifier = Modifier.weight(1f),
-verticalAlignment = Alignment.CenterVertically,
-horizontalArrangement = Arrangement.spacedBy(10.dp)
-) {
+Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
 if (ch.logo.isNotEmpty()) {
 AsyncImage(
 model = ImageRequest.Builder(context).data(ch.logo).size(120, 120).build(),
@@ -1453,33 +1341,60 @@ Icon(Icons.Default.PlayArrow, contentDescription = null, tint = gold)
 }
 }
 
+// ================================================================
+// 3. قسم الأفلام المستقل (Movies Hub بتفرعات ذكية حقيقية)
+// ================================================================
 3 -> {
-Column(modifier = Modifier.fillMaxSize().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-listOf("MOVIE" to strings.moviesTab, "SERIES" to strings.seriesTab).forEach { (type, label) ->
-val active = cinemaSubTab == type
-Box(
-modifier = Modifier
-.weight(1f)
-.clip(RoundedCornerShape(12.dp))
-.background(if (active) gold else Color(0xFF14141E))
-.clickable { cinemaSubTab = type }
-.padding(vertical = 10.dp),
-contentAlignment = Alignment.Center
-) {
-Text(label, color = if (active) Color.Black else Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+val allMovies = remember(allItems.size) { allItems.filter { it.contentType == "MOVIE" } }
+val movieGroups = remember(allMovies.size) { listOf("ALL") + allMovies.map { it.group }.distinct() }
+
+// بناء قائمة الفلاتر الحقيقية فقط (أي قسم فارغ يختفي تلقائياً)
+val availableMovieFilters = remember(allMovies.size) {
+val list = mutableListOf("ALL" to "الكل", "RECENT" to "مضاف حديثاً", "TOP" to "أعلى تقييماً ⭐")
+if (allMovies.any { it.is4k }) list.add("4K" to "4K UHD")
+listOf("دراما", "أكشن", "خيال علمي", "رومانسي", "كوميدي", "رعب وإثارة", "تاريخي", "أنمي وعائلي").forEach { g ->
+if (allMovies.any { it.genreTag == g }) list.add(g to g)
 }
+listOf("عربي", "كوري", "تركي", "هندي", "أجنبي").forEach { o ->
+if (allMovies.any { it.originTag == o }) list.add(o to "أفلام $o")
+}
+list
+}
+
+Column(modifier = Modifier.fillMaxSize().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+Row(
+modifier = Modifier.fillMaxWidth(),
+horizontalArrangement = Arrangement.SpaceBetween,
+verticalAlignment = Alignment.CenterVertically
+) {
+Text("🎬 ${strings.moviesTab} (${filteredMoviesList.size})", color = Color.White, fontWeight = FontWeight.Black, fontSize = 17.sp)
+OutlinedButton(
+onClick = { showMovieGroupsSheet = true },
+shape = RoundedCornerShape(10.dp),
+contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+border = BorderStroke(1.dp, gold.copy(alpha = 0.5f))
+) {
+Icon(Icons.Default.FolderSpecial, contentDescription = null, tint = goldLight, modifier = Modifier.size(15.dp))
+Spacer(Modifier.width(4.dp))
+Text(
+text = if (movieServerGroup == "ALL") "أقسام السيرفر" else movieServerGroup,
+color = goldLight,
+fontSize = 11.sp,
+maxLines = 1,
+overflow = TextOverflow.Ellipsis,
+modifier = Modifier.widthIn(max = 120.dp)
+)
 }
 }
 
 OutlinedTextField(
-value = cinemaFilterQuery,
-onValueChange = { cinemaFilterQuery = it },
-placeholder = { Text("ابحث في ${if (cinemaSubTab == "MOVIE") strings.moviesTab else strings.seriesTab} (${filteredCinemaList.size})...", fontSize = 12.sp) },
+value = movieQuery,
+onValueChange = { movieQuery = it },
+placeholder = { Text("ابحث في مكتبة الأفلام...", fontSize = 12.sp) },
 leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = gold, modifier = Modifier.size(18.dp)) },
 trailingIcon = {
-if (cinemaFilterQuery.isNotEmpty()) {
-IconButton(onClick = { cinemaFilterQuery = "" }) {
+if (movieQuery.isNotEmpty()) {
+IconButton(onClick = { movieQuery = "" }) {
 Icon(Icons.Default.Close, contentDescription = null, tint = Color.Gray, modifier = Modifier.size(16.dp))
 }
 }
@@ -1490,126 +1405,187 @@ modifier = Modifier.fillMaxWidth()
 )
 
 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-items(listOf("ALL" to strings.all, "عربي" to "عربي", "كوري" to "كوري", "هندي" to "هندي", "أجنبي" to "أجنبي"), key = { it.first }) { (tag, label) ->
+items(availableMovieFilters, key = { it.first }) { (code, label) ->
 FilterChip(
-selected = selectedOrigin == tag,
-onClick = { selectedOrigin = tag },
-label = { Text(label, fontSize = 12.sp) }
+selected = movieSmartFilter == code,
+onClick = { movieSmartFilter = code },
+label = { Text(label, fontSize = 12.sp, fontWeight = if (movieSmartFilter == code) FontWeight.Bold else FontWeight.Normal) }
 )
 }
 }
 
 LazyVerticalGrid(
-state = if (cinemaSubTab == "MOVIE") moviesGridState else seriesGridState,
+state = moviesGridState,
 columns = GridCells.Fixed(2),
 horizontalArrangement = Arrangement.spacedBy(10.dp),
 verticalArrangement = Arrangement.spacedBy(10.dp),
 modifier = Modifier.fillMaxSize()
 ) {
-items(
-items = filteredCinemaList,
-key = { it.id },
-contentType = { "cinema_poster" }
-) { item ->
+items(items = filteredMoviesList, key = { it.id }, contentType = { "movie_poster" }) { item ->
 val progress = vodProgressCache[item.id] ?: 0f
-Column(
-modifier = Modifier
-.clip(RoundedCornerShape(16.dp))
-.background(Color(0xFF13131B))
-.border(1.dp, Color(0xFF232332), RoundedCornerShape(16.dp))
-.clickable {
-if (item.contentType == "SERIES") selectedSeriesForDetails = item
-else selectedMovieForDetails = item
-}
-.padding(8.dp),
-verticalArrangement = Arrangement.spacedBy(6.dp)
-) {
-Box {
-if (item.logo.isNotEmpty()) {
-AsyncImage(
-model = ImageRequest.Builder(context)
-.data(item.logo)
-.size(320, 440)
-.crossfade(false)
-.build(),
-contentDescription = item.title,
-contentScale = ContentScale.Crop,
-modifier = Modifier.fillMaxWidth().height(160.dp).clip(RoundedCornerShape(12.dp))
+MediaPosterCard(
+item = item,
+progress = progress,
+onClick = { selectedMovieForDetails = item }
 )
-} else {
-Box(
-modifier = Modifier.fillMaxWidth().height(150.dp).background(Color(0xFF1D1D29), RoundedCornerShape(12.dp)),
-contentAlignment = Alignment.Center
-) {
-Icon(Icons.Default.MovieFilter, contentDescription = null, tint = gold, modifier = Modifier.size(36.dp))
 }
 }
+}
+
+if (showMovieGroupsSheet) {
+ModalBottomSheet(onDismissRequest = { showMovieGroupsSheet = false }, containerColor = Color(0xFF14141E)) {
+Column(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+Text("مجلدات الأفلام في السيرفر", color = goldLight, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+LazyColumn(modifier = Modifier.heightIn(max = 380.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+items(movieGroups, key = { it }) { grp ->
 Row(
-modifier = Modifier.align(Alignment.TopStart).padding(6.dp),
-horizontalArrangement = Arrangement.spacedBy(4.dp)
-) {
-Box(
-modifier = Modifier.background(Color.Black.copy(alpha = 0.78f), RoundedCornerShape(6.dp)).padding(horizontal = 6.dp, vertical = 2.dp)
-) {
-Text(item.originTag, color = goldLight, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+modifier = Modifier
+.fillMaxWidth()
+.clip(RoundedCornerShape(10.dp))
+.background(if (movieServerGroup == grp) gold.copy(alpha = 0.2f) else Color(0xFF1C1C28))
+.clickable {
+movieServerGroup = grp
+showMovieGroupsSheet = false
 }
-if (item.rating.isNotEmpty() && item.rating != "0") {
-Box(
-modifier = Modifier.background(Color.Black.copy(alpha = 0.78f), RoundedCornerShape(6.dp)).padding(horizontal = 6.dp, vertical = 2.dp)
+.padding(12.dp),
+horizontalArrangement = Arrangement.SpaceBetween
 ) {
-Text("IMDb ${item.rating}", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+Text(if (grp == "ALL") "كل مجلدات الأفلام (${allMovies.size})" else grp, color = Color.White, fontSize = 13.sp)
+if (movieServerGroup == grp) Icon(Icons.Default.Check, contentDescription = null, tint = goldLight)
+}
+}
+}
 }
 }
 }
 }
 
-if (progress > 0.02f) {
-LinearProgressIndicator(
-progress = { progress },
-color = gold,
-trackColor = Color(0xFF2B2B3C),
-modifier = Modifier.fillMaxWidth().height(4.dp).clip(CircleShape)
-)
+// ================================================================
+// 4. قسم المسلسلات المستقل (Series Hub بتفرعات ذكية حقيقية)
+// ================================================================
+4 -> {
+val allSeries = remember(allItems.size) { allItems.filter { it.contentType == "SERIES" } }
+val seriesGroups = remember(allSeries.size) { listOf("ALL") + allSeries.map { it.group }.distinct() }
+
+val availableSeriesFilters = remember(allSeries.size) {
+val list = mutableListOf("ALL" to "الكل", "RECENT" to "مضاف حديثاً", "TOP" to "أعلى تقييماً ⭐")
+listOf("عربي", "كوري", "تركي", "هندي", "أجنبي").forEach { o ->
+if (allSeries.any { it.originTag == o }) list.add(o to "مسلسلات $o")
+}
+listOf("دراما", "أكشن", "خيال علمي", "رومانسي", "تاريخي", "كوميدي", "رعب وإثارة").forEach { g ->
+if (allSeries.any { it.genreTag == g }) list.add(g to g)
+}
+list
 }
 
-Text(item.title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+Column(modifier = Modifier.fillMaxSize().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+Row(
+modifier = Modifier.fillMaxWidth(),
+horizontalArrangement = Arrangement.SpaceBetween,
+verticalAlignment = Alignment.CenterVertically
+) {
+Text("📺 ${strings.seriesTab} (${filteredSeriesList.size})", color = Color.White, fontWeight = FontWeight.Black, fontSize = 17.sp)
+OutlinedButton(
+onClick = { showSeriesGroupsSheet = true },
+shape = RoundedCornerShape(10.dp),
+contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+border = BorderStroke(1.dp, gold.copy(alpha = 0.5f))
+) {
+Icon(Icons.Default.FolderSpecial, contentDescription = null, tint = goldLight, modifier = Modifier.size(15.dp))
+Spacer(Modifier.width(4.dp))
 Text(
-text = if (item.year.isNotEmpty()) "${item.year} • ${item.genreTag}" else item.genreTag,
-color = Color(0xFF8E929F),
+text = if (seriesServerGroup == "ALL") "أقسام السيرفر" else seriesServerGroup,
+color = goldLight,
 fontSize = 11.sp,
 maxLines = 1,
-overflow = TextOverflow.Ellipsis
+overflow = TextOverflow.Ellipsis,
+modifier = Modifier.widthIn(max = 120.dp)
 )
+}
+}
+
+OutlinedTextField(
+value = seriesQuery,
+onValueChange = { seriesQuery = it },
+placeholder = { Text("ابحث في مكتبة المسلسلات...", fontSize = 12.sp) },
+leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = gold, modifier = Modifier.size(18.dp)) },
+trailingIcon = {
+if (seriesQuery.isNotEmpty()) {
+IconButton(onClick = { seriesQuery = "" }) {
+Icon(Icons.Default.Close, contentDescription = null, tint = Color.Gray, modifier = Modifier.size(16.dp))
+}
+}
+},
+singleLine = true,
+shape = RoundedCornerShape(12.dp),
+modifier = Modifier.fillMaxWidth()
+)
+
+LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+items(availableSeriesFilters, key = { it.first }) { (code, label) ->
+FilterChip(
+selected = seriesSmartFilter == code,
+onClick = { seriesSmartFilter = code },
+label = { Text(label, fontSize = 12.sp, fontWeight = if (seriesSmartFilter == code) FontWeight.Bold else FontWeight.Normal) }
+)
+}
+}
+
+LazyVerticalGrid(
+state = seriesGridState,
+columns = GridCells.Fixed(2),
+horizontalArrangement = Arrangement.spacedBy(10.dp),
+verticalArrangement = Arrangement.spacedBy(10.dp),
+modifier = Modifier.fillMaxSize()
+) {
+items(items = filteredSeriesList, key = { it.id }, contentType = { "series_poster" }) { item ->
+MediaPosterCard(
+item = item,
+progress = 0f,
+onClick = { selectedSeriesForDetails = item }
+)
+}
+}
+}
+
+if (showSeriesGroupsSheet) {
+ModalBottomSheet(onDismissRequest = { showSeriesGroupsSheet = false }, containerColor = Color(0xFF14141E)) {
+Column(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+Text("مجلدات المسلسلات في السيرفر", color = goldLight, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+LazyColumn(modifier = Modifier.heightIn(max = 380.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+items(seriesGroups, key = { it }) { grp ->
+Row(
+modifier = Modifier
+.fillMaxWidth()
+.clip(RoundedCornerShape(10.dp))
+.background(if (seriesServerGroup == grp) gold.copy(alpha = 0.2f) else Color(0xFF1C1C28))
+.clickable {
+seriesServerGroup = grp
+showSeriesGroupsSheet = false
+}
+.padding(12.dp),
+horizontalArrangement = Arrangement.SpaceBetween
+) {
+Text(if (grp == "ALL") "كل مجلدات المسلسلات (${allSeries.size})" else grp, color = Color.White, fontSize = 13.sp)
+if (seriesServerGroup == grp) Icon(Icons.Default.Check, contentDescription = null, tint = goldLight)
+}
+}
 }
 }
 }
 }
 }
 
-4 -> {
+// ================================================================
+// 5. شاشة الإعدادات الخفيفة (Settings)
+// ================================================================
+5 -> {
 DevkanSettingsScreen(
 strings = strings,
 lang = lang,
 onLanguageChange = onLanguageChange,
 subscription = currentSub,
-onSwitchSub = { selectedSub ->
-DevkanVault.switchActiveSubscription(context, selectedSub.id)
-currentSub = selectedSub
-scope.launch {
-isSyncing = true
-val (updated, items) = DevkanPlaylistRepository.loadSubscriptionContent(selectedSub, DevkanVault.isGeoBypassEnabled(context))
-currentSub = updated
-DevkanVault.saveSubscription(context, updated)
-if (items.isNotEmpty()) {
-allItems.clear()
-allItems.addAll(items)
-withContext(Dispatchers.IO) { DevkanVault.saveCachedItems(context, items) }
-classifiedSports = DevkanPlaylistRepository.syncAndClassifySportsEpg(context, updated, items)
-}
-isSyncing = false
-Toast.makeText(context, "تم التبديل إلى: ${selectedSub.label}", Toast.LENGTH_SHORT).show()
-}
-},
+onSwitchSub = { selectedSub -> switchSubscriptionFast(selectedSub) },
 onEditSub = { sub ->
 subToEdit = sub
 showAddDialog = true
@@ -1624,7 +1600,7 @@ DevkanVault.saveSubscription(context, updated)
 if (items.isNotEmpty()) {
 allItems.clear()
 allItems.addAll(items)
-withContext(Dispatchers.IO) { DevkanVault.saveCachedItems(context, items) }
+withContext(Dispatchers.IO) { DevkanVault.saveCachedItems(context, items, updated.id) }
 classifiedSports = DevkanPlaylistRepository.syncAndClassifySportsEpg(context, updated, items)
 }
 isSyncing = false
@@ -1640,6 +1616,8 @@ allItems.clear()
 cachedLiveChannels = emptyList()
 cachedSportsChannels = emptyList()
 classifiedSports = emptySports
+} else {
+switchSubscriptionFast(nextSub)
 }
 Toast.makeText(context, "تم حذف الاشتراك", Toast.LENGTH_SHORT).show()
 },
@@ -1650,6 +1628,78 @@ showAddDialog = true
 sampleTestUrl = allItems.firstOrNull()?.url ?: "https://www.google.com"
 )
 }
+}
+}
+}
+
+// النافذة السفلية السريعة لتبديل الاشتراك من الشريط العلوي (مثل Maya IPTV)
+if (showQuickSubSwitcher) {
+val subsList = remember(currentSub?.id, currentSub?.label) { DevkanVault.getAllSubscriptions(context) }
+ModalBottomSheet(
+onDismissRequest = { showQuickSubSwitcher = false },
+containerColor = Color(0xFF14141E)
+) {
+Column(
+modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 10.dp),
+verticalArrangement = Arrangement.spacedBy(10.dp)
+) {
+Text("تبديل الاتصال", color = goldLight, fontWeight = FontWeight.Bold, fontSize = 17.sp)
+if (subsList.isEmpty()) {
+Text("لا توجد اشتراكات محفوظة حالياً", color = Color.Gray, fontSize = 13.sp)
+} else {
+subsList.forEach { subItem ->
+val isSelected = subItem.id == currentSub?.id
+Row(
+modifier = Modifier
+.fillMaxWidth()
+.clip(RoundedCornerShape(12.dp))
+.background(if (isSelected) gold.copy(alpha = 0.18f) else Color(0xFF1B1B27))
+.clickable {
+showQuickSubSwitcher = false
+if (!isSelected) switchSubscriptionFast(subItem)
+}
+.padding(horizontal = 14.dp, vertical = 12.dp),
+horizontalArrangement = Arrangement.SpaceBetween,
+verticalAlignment = Alignment.CenterVertically
+) {
+Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+RadioButton(selected = isSelected, onClick = null, colors = RadioButtonDefaults.colors(selectedColor = goldLight))
+Column {
+Text(subItem.label, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+Text("${subItem.type} • ${subItem.expDateFormatted}", color = Color.Gray, fontSize = 11.sp)
+}
+}
+IconButton(onClick = {
+showQuickSubSwitcher = false
+subToEdit = subItem
+showAddDialog = true
+}) {
+Icon(Icons.Default.Edit, contentDescription = "Edit", tint = Color(0xFF60A5FA), modifier = Modifier.size(18.dp))
+}
+}
+}
+}
+
+HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
+Row(
+modifier = Modifier
+.fillMaxWidth()
+.clip(RoundedCornerShape(12.dp))
+.background(gold.copy(alpha = 0.15f))
+.clickable {
+showQuickSubSwitcher = false
+subToEdit = null
+showAddDialog = true
+}
+.padding(14.dp),
+verticalAlignment = Alignment.CenterVertically,
+horizontalArrangement = Arrangement.Center
+) {
+Icon(Icons.Default.AddCircleOutline, contentDescription = null, tint = goldLight)
+Spacer(Modifier.width(8.dp))
+Text("إضافة اتصال جديد", color = goldLight, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+}
+Spacer(Modifier.height(20.dp))
 }
 }
 }
@@ -1838,7 +1888,7 @@ DevkanVault.saveSubscription(context, updatedSub)
 if (loadedItems.isNotEmpty()) {
 allItems.clear()
 allItems.addAll(loadedItems)
-withContext(Dispatchers.IO) { DevkanVault.saveCachedItems(context, loadedItems) }
+withContext(Dispatchers.IO) { DevkanVault.saveCachedItems(context, loadedItems, updatedSub.id) }
 classifiedSports = DevkanPlaylistRepository.syncAndClassifySportsEpg(context, updatedSub, loadedItems)
 Toast.makeText(context, "تم الحفظ والاتصال (${loadedItems.size} عنصر)!", Toast.LENGTH_SHORT).show()
 showAddDialog = false
@@ -1849,6 +1899,84 @@ Toast.makeText(context, "تعذر جلب القنوات، تأكد من البي
 isSyncing = false
 }
 }
+)
+}
+}
+
+@Composable
+fun MediaPosterCard(
+item: MediaItemModel,
+progress: Float,
+onClick: () -> Unit
+) {
+val context = LocalContext.current
+val gold = Color(0xFFD4AF37)
+val goldLight = Color(0xFFFDE047)
+
+Column(
+modifier = Modifier
+.clip(RoundedCornerShape(16.dp))
+.background(Color(0xFF13131B))
+.border(1.dp, Color(0xFF232332), RoundedCornerShape(16.dp))
+.clickable { onClick() }
+.padding(8.dp),
+verticalArrangement = Arrangement.spacedBy(6.dp)
+) {
+Box {
+if (item.logo.isNotEmpty()) {
+AsyncImage(
+model = ImageRequest.Builder(context)
+.data(item.logo)
+.size(320, 440)
+.crossfade(false)
+.build(),
+contentDescription = item.title,
+contentScale = ContentScale.Crop,
+modifier = Modifier.fillMaxWidth().height(165.dp).clip(RoundedCornerShape(12.dp))
+)
+} else {
+Box(
+modifier = Modifier.fillMaxWidth().height(165.dp).background(Color(0xFF1D1D29), RoundedCornerShape(12.dp)),
+contentAlignment = Alignment.Center
+) {
+Icon(Icons.Default.MovieFilter, contentDescription = null, tint = gold, modifier = Modifier.size(36.dp))
+}
+}
+Row(
+modifier = Modifier.align(Alignment.TopStart).padding(6.dp),
+horizontalArrangement = Arrangement.spacedBy(4.dp)
+) {
+Box(
+modifier = Modifier.background(Color.Black.copy(alpha = 0.78f), RoundedCornerShape(6.dp)).padding(horizontal = 6.dp, vertical = 2.dp)
+) {
+Text(item.originTag, color = goldLight, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+}
+if (item.rating.isNotEmpty() && item.rating != "0") {
+Box(
+modifier = Modifier.background(Color.Black.copy(alpha = 0.78f), RoundedCornerShape(6.dp)).padding(horizontal = 6.dp, vertical = 2.dp)
+) {
+Text("IMDb ${item.rating}", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+}
+}
+}
+}
+
+if (progress > 0.02f) {
+LinearProgressIndicator(
+progress = { progress },
+color = gold,
+trackColor = Color(0xFF2B2B3C),
+modifier = Modifier.fillMaxWidth().height(4.dp).clip(CircleShape)
+)
+}
+
+Text(item.title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+Text(
+text = if (item.year.isNotEmpty()) "${item.year} • ${item.genreTag}" else item.genreTag,
+color = Color(0xFF8E929F),
+fontSize = 11.sp,
+maxLines = 1,
+overflow = TextOverflow.Ellipsis
 )
 }
 }
@@ -2838,7 +2966,7 @@ Text(label, color = if (active) Color.Black else Color.White, fontWeight = FontW
 OutlinedTextField(
 value = subLabel,
 onValueChange = { subLabel = it },
-label = { Text("اسم الاشتراك (مثلاً: اشتراك 1)", fontSize = 11.sp) },
+label = { Text("اسم الاشتراك (اختياري)", fontSize = 11.sp) },
 singleLine = true,
 modifier = Modifier.fillMaxWidth()
 )
