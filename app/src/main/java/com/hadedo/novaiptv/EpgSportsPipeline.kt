@@ -1,9 +1,6 @@
-package com.devkan.vip.domain.sports
+package com.hadedo.novaiptv
 
 import android.util.Base64
-import com.devkan.vip.domain.model.ClassifiedSportsData
-import com.devkan.vip.domain.model.EpgProgram
-import com.devkan.vip.domain.model.GroupedSportsMatch
 import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.TimeZone
@@ -12,9 +9,6 @@ object EpgSportsPipeline {
 
     private const val TWENTY_FOUR_HOURS_MS = 24L * 60L * 60L * 1000L
 
-    /**
-     * يُستدعى مرة واحدة عند مزامنة الـ EPG في الخلفية قبل التخزين في Room
-     */
     fun enrichProgramForStorage(raw: EpgProgram): EpgProgram {
         val decodedTitle = smartDecodeBase64(raw.title)
         val decodedDesc = raw.description?.let { smartDecodeBase64(it) }
@@ -40,9 +34,6 @@ object EpgSportsPipeline {
         )
     }
 
-    /**
-     * مرور واحد (Single-Pass) لتصنيف البرامج الرياضية وتجميع القنوات المكررة لنفس المباراة
-     */
     fun classifyAndGroupSports(
         programs: List<EpgProgram>,
         now: Long = System.currentTimeMillis()
@@ -53,7 +44,7 @@ object EpgSportsPipeline {
         val allLive = mutableListOf<EpgProgram>()
 
         for (program in programs) {
-            if (program.endTime <= now) continue // تجاهل المنتهية فوراً
+            if (program.endTime <= now) continue
 
             val isCurrentlyLive = now in program.startTime until program.endTime
             if (isCurrentlyLive) {
@@ -85,7 +76,7 @@ object EpgSportsPipeline {
         val validMatches = programs.filter { !it.homeTeam.isNullOrBlank() && !it.awayTeam.isNullOrBlank() }
 
         return validMatches
-            .groupBy { "${it.homeTeam}_${it.awayTeam}_${it.startTime / (30 * 60 * 1000)}" } // تجميع نفس المباراة
+            .groupBy { "${it.homeTeam}_${it.awayTeam}_${it.startTime / (30 * 60 * 1000)}" }
             .map { (key, group) ->
                 val sortedStreams = group.sortedByDescending { qualityScore(it.streamQuality, it.channelName) }
                 val first = sortedStreams.first()
@@ -123,8 +114,7 @@ object EpgSportsPipeline {
 
     fun resolveXtreamTimestamp(unixSeconds: Long?, rawDateStr: String?): Long {
         val fromUnix = (unixSeconds ?: 0L) * 1000L
-        // التحقق من أن السيرفر لم يرسل تاريخاً قديماً خاطئاً في الـ Timestamp
-        if (fromUnix > 1_767_225_600_000L) return fromUnix // >= 2026-01-01
+        if (fromUnix > 1_767_225_600_000L) return fromUnix
         if (!rawDateStr.isNullOrBlank()) {
             return try {
                 val sdf = SimpleDateFormat("yyyyMMddHHmmss", Locale.US).apply {
