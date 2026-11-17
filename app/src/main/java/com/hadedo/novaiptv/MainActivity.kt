@@ -267,7 +267,8 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
     var cachedLiveGroups by remember { mutableStateOf<List<String>>(listOf("ALL")) }
     var filteredLiveList by remember { mutableStateOf<List<MediaItemModel>>(emptyList()) }
     var filteredCinemaList by remember { mutableStateOf<List<MediaItemModel>>(emptyList()) }
-    var vodProgressCache by remember { mutableStateOf>(emptyMap()) }
+    var classifiedSports by remember { mutableStateOf(ClassifiedSportsData(emptyList(), emptyList(), emptyList(), emptyList())) }
+
 
     var classifiedSports by remember {
         mutableStateOf(
