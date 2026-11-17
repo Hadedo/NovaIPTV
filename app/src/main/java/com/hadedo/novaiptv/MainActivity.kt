@@ -261,27 +261,14 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
     val todayRealMatches = remember { mutableStateListOf<RealSportsMatch>() }
     val watchlistIds = remember { mutableStateListOf<String>() }
 
-    // قوائم مُعالجة ومُفهرسة مسبقاً في الخلفية لمنع أي ثقل في (القنوات + الرياضة + السينما)
     var cachedSportsChannels by remember { mutableStateOf<List<MediaItemModel>>(emptyList()) }
     var cachedLiveChannels by remember { mutableStateOf<List<MediaItemModel>>(emptyList()) }
     var cachedLiveGroups by remember { mutableStateOf<List<String>>(listOf("ALL")) }
     var filteredLiveList by remember { mutableStateOf<List<MediaItemModel>>(emptyList()) }
     var filteredCinemaList by remember { mutableStateOf<List<MediaItemModel>>(emptyList()) }
+    var vodProgressCache by remember { mutableStateOf>(emptyMap()) }
     var classifiedSports by remember { mutableStateOf(ClassifiedSportsData(emptyList(), emptyList(), emptyList(), emptyList())) }
 
-
-    var classifiedSports by remember {
-        mutableStateOf(
-            ClassifiedSportsData(
-                liveMatches = emptyList(),
-                upcoming24hMatches = emptyList(),
-                upcomingLaterMatches = emptyList(),
-                livePrograms = emptyList()
-            )
-        )
-    }
-
-    // 1. معالجة القنوات الحية والرياضية في الخلفية عند تحميل أو تحديث البيانات
     LaunchedEffect(allItems.size) {
         if (allItems.isEmpty()) {
             cachedLiveChannels = emptyList()
@@ -304,7 +291,6 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
         }
     }
 
-    // 2. فلترة قائمة القنوات الحية في الخلفية (Dispatchers.Default) لمنع أي تقطيع
     LaunchedEffect(cachedLiveChannels, selectedLiveCategory, liveFilterQuery) {
         val q = liveFilterQuery.trim()
         filteredLiveList = withContext(Dispatchers.Default) {
@@ -315,7 +301,6 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
         }
     }
 
-    // 3. فلترة قسم السينما + تخزين نسب المشاهدة في الذاكرة لمنع قراءة EncryptedSharedPreferences أثناء التمرير
     LaunchedEffect(allItems.size, cinemaSubTab, selectedOrigin, cinemaFilterQuery, activeStream) {
         if (allItems.isEmpty()) {
             filteredCinemaList = emptyList()
@@ -331,7 +316,6 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
             }
             filteredCinemaList = result
 
-            // تحميل نسب المشاهدة للعناصر الظاهرة في الخلفية مرة واحدة
             val progressMap = withContext(Dispatchers.IO) {
                 val map = HashMap<String, Float>()
                 for (item in result.take(200)) {
@@ -644,7 +628,6 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
                             .padding(vertical = 10.dp),
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        // 1. شريط الكبسولات السريع (Quick Pill Bar)
                         LazyRow(
                             contentPadding = PaddingValues(horizontal = 14.dp),
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -694,7 +677,6 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
                             }
                         }
 
-                        // 2. واجهة العرض البطولية الديناميكية (Dynamic Hybrid Hero Banner)
                         if (featuredMatch != null) {
                             Box(
                                 modifier = Modifier
@@ -861,7 +843,6 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
                             }
                         }
 
-                        // 3. صف 🔴 الآن يُبث مباشرة (Live Now)
                         if (classifiedSports.liveMatches.isNotEmpty()) {
                             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Text(
@@ -890,7 +871,6 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
                             }
                         }
 
-                        // 4. صف 🏆 رياضة اليوم
                         if (classifiedSports.upcoming24hMatches.isNotEmpty()) {
                             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Row(
@@ -960,7 +940,6 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
                             }
                         }
 
-                        // 5. صف 📺 قنوات رياضية مميزة
                         if (cachedSportsChannels.isNotEmpty()) {
                             val networkCards = listOf(
                                 "BEIN" to "beIN SPORTS",
@@ -1002,7 +981,6 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
                             }
                         }
 
-                        // واصل المشاهدة
                         if (lastCh != null) {
                             Row(
                                 modifier = Modifier
@@ -1027,7 +1005,6 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
                             }
                         }
 
-                        // 6. صفوف السينما
                         if (allItems.isEmpty() && !isSyncing) {
                             Column(
                                 modifier = Modifier
@@ -1092,7 +1069,7 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
                     }
                 }
 
-                // 1: البث المباشر وقوائم القنوات (خفيف وسريع بدون ثقل)
+                // 1: البث المباشر وقوائم القنوات
                 1 -> {
                     Column(modifier = Modifier.fillMaxSize().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Row(
@@ -1113,7 +1090,6 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
                             }
                         }
 
-                        // شريط بحث سريع داخل قوائم القنوات
                         OutlinedTextField(
                             value = liveFilterQuery,
                             onValueChange = { liveFilterQuery = it },
@@ -1333,7 +1309,7 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
                     }
                 }
 
-                // 3: السينما (تمرير 120fps بفضل الفلترة في الخلفية وتحديد أبعاد الصور)
+                // 3: السينما
                 3 -> {
                     Column(modifier = Modifier.fillMaxSize().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1353,7 +1329,6 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
                             }
                         }
 
-                        // بحث سريع داخل قسم السينما
                         OutlinedTextField(
                             value = cinemaFilterQuery,
                             onValueChange = { cinemaFilterQuery = it },
@@ -1509,7 +1484,6 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
         }
     }
 
-    // نافذة البحث الفوري الشامل
     if (showQuickSearch) {
         val searchResults = remember(quickSearchQuery, allItems.size) {
             if (quickSearchQuery.trim().length < 2) emptyList()
@@ -1578,7 +1552,6 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
         )
     }
 
-    // نافذة اختيار الجودة عند وجود أكثر من قناة ناقلة لنفس المباراة
     selectedGroupedMatchForQuality?.let { match ->
         AlertDialog(
             onDismissRequest = { selectedGroupedMatchForQuality = null },
@@ -1623,7 +1596,6 @@ fun DevkanMainDashboard(lang: String, onLanguageChange: (String) -> Unit) {
         )
     }
 
-    // نافذة اختيار القناة الناقلة السريعة للمباريات العامة
     selectedMatchForChannelPicker?.let { match ->
         val matchingChannels = remember(cachedSportsChannels, match.id) {
             val broadcasterKeyword = match.suggestedBroadcaster.substringBefore(" ").lowercase()
