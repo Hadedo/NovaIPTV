@@ -13,16 +13,13 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
-import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import okhttp3.dnsoverhttps.DnsOverHttps
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.BufferedReader
 import java.io.File
 import java.io.InputStreamReader
-import java.net.InetAddress
 import java.net.URLEncoder
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -235,9 +232,6 @@ fun markCatalogSyncedNow(context: Context) {
 getSecurePrefs(context).edit().putLong("last_catalog_sync_ms", System.currentTimeMillis()).apply()
 }
 
-// ==========================================
-// إدارة تعدد الاشتراكات + التعديل + التبديل
-// ==========================================
 fun getAllSubscriptions(context: Context): MutableList<SavedSubscription> {
 val prefs = getSecurePrefs(context)
 val raw = prefs.getString("multi_subs_json", null)
@@ -267,7 +261,6 @@ maxCons = o.optString("maxCons", "1")
 }
 } catch (_: Exception) { }
 }
-// ترحيل الاشتراك القديم تلقائياً إن وجد
 if (list.isEmpty()) {
 val oldType = prefs.getString("sub_type", null)
 if (oldType != null) {
@@ -578,9 +571,6 @@ ping to String.format(Locale.US, "%.1f", mbps.coerceIn(1.5, 150.0)).toDouble()
 }
 }
 
-// ============================================================================
-// 3. مستورد الاشتراكات المتوازي (Parallel Fetching - يفتح بثواني بدل دقيقة)
-// ============================================================================
 object DevkanPlaylistRepository {
 private fun buildClient(geoBypass: Boolean, userAgent: String = "IPTVSmartersPro/3.1.5 (Linux; Android 14)"): OkHttpClient {
 return OkHttpClient.Builder()
@@ -744,9 +734,6 @@ if (nowTitle.isNotBlank()) return@withContext (nowTitle.trim() to nextTitle.trim
 "البث المباشر المستمر" to "البرنامج التالي على الجدول"
 }
 
-// =========================================================================
-// تحميل متوازي فائق السرعة (7 طلبات بالتوازي بدل الانتظار التسلسلي)
-// =========================================================================
 suspend fun loadSubscriptionContent(
 sub: SavedSubscription,
 geoBypass: Boolean = true
