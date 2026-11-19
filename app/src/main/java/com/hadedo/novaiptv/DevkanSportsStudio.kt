@@ -33,12 +33,11 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 
 private fun cleanStudioLeagueName(raw: String): String {
-    var cleaned = raw
-        .replace(Regex("""(?i)\b(fr|uk|us|ar|de|tr|es|be|nl|it|pt)\b\s*([|/\\•\-]|\s{2,})\s*"""), "")
-        .replace(Regex("""[|\\/_•]+"""), " ")
+    val cleaned = raw
+        .replace(Regex("""[|┃┆┇┊┋︱︲∣║‖•/_\\]+"""), " ")
+        .replace(Regex("""(?i)^\s*(fr|uk|us|ar|de|tr|es|be|nl|it|pt)\b\s*"""), "")
         .replace(Regex("""\s{2,}"""), " ")
         .trim()
-    if (cleaned.length < 2) cleaned = raw.replace("|", "").trim()
     return cleaned.ifEmpty { "بطولة دولية" }
 }
 
@@ -190,7 +189,9 @@ fun DevkanSportsStudioScreen(
                                         model = ImageRequest.Builder(context).data(ch.logo).size(72, 72).build(),
                                         contentDescription = null,
                                         contentScale = ContentScale.Fit,
-                                        modifier = Modifier.size(22.dp).clip(RoundedCornerShape(5.dp))
+                                        modifier = Modifier
+                                            .size(22.dp)
+                                            .clip(RoundedCornerShape(5.dp))
                                     )
                                 } else {
                                     Icon(Icons.Default.LiveTv, contentDescription = null, tint = gold, modifier = Modifier.size(16.dp))
