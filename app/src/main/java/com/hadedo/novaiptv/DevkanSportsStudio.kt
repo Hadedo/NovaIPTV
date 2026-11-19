@@ -143,7 +143,7 @@ private fun getStudioTexts(lang: String): StudioUiTexts = when (lang) {
         autoChannelLabel = "Otomatik Seçilen Kanal",
         netQualityLabel = "Hıza Göre Kalite",
         matchSummaryLabel = "Maç Özeti",
-        liveFlowDesc = { h, a, s -> "$h ve$a arasındaki canlı karşılaşma devam ediyor ($s). Kanal dilinize ve internet hızınıza göre seçildi." }
+        liveFlowDesc = { h, a, s -> "$h ve $a arasındaki canlı karşılaşma devam ediyor ($s). Kanal dilinize ve internet hızınıza göre seçildi." }
     )
     "de" -> StudioUiTexts(
         headerTitle = "Live-Spiele Studio",
@@ -163,7 +163,7 @@ private fun getStudioTexts(lang: String): StudioUiTexts = when (lang) {
         autoChannelLabel = "Automatischer Sender",
         netQualityLabel = "Netz-Qualität",
         matchSummaryLabel = "Spielverlauf",
-        liveFlowDesc = { h, a, s -> "Das Live-Spiel zwischen $h und$a läuft aktuell ($s). Sender passend zu Sprache und Internet gewählt." }
+        liveFlowDesc = { h, a, s -> "Das Live-Spiel zwischen $h und $a läuft aktuell ($s). Sender passend zu Sprache und Internet gewählt." }
     )
     else -> StudioUiTexts(
         headerTitle = "استوديو المباريات المباشرة",
@@ -207,7 +207,7 @@ private fun pickSmartChannelForMatch(
 
     return sportsChannels.maxByOrNull { ch ->
         var score = 0
-        val combined = "${ch.group}${ch.title}".lowercase()
+        val combined = "${ch.group} ${ch.title}".lowercase()
 
         if (match.directChannelId.isNotEmpty() && ch.id == match.directChannelId) {
             score += 40
@@ -243,6 +243,223 @@ private fun pickSmartChannelForMatch(
         }
 
         score
+    }
+}
+
+@Composable
+private fun StudioLivePulseBadge(text: String) {
+    val pulse by rememberInfiniteTransition(label = "live_pulse").animateFloat(
+        initialValue = 0.85f,
+        targetValue = 1.15f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 750, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "pulse_scale"
+    )
+
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(50))
+            .background(Color(0xFFEF4444).copy(alpha = 0.18f))
+            .border(1.dp, Color(0xFFEF4444).copy(alpha = 0.55f), RoundedCornerShape(50))
+            .padding(horizontal = 9.dp, vertical = 3.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(5.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(7.dp)
+                .scale(pulse)
+                .clip(CircleShape)
+                .background(Color(0xFFEF4444))
+        )
+        Text(
+            text = text,
+            color = Color(0xFFF87171),
+            fontWeight = FontWeight.ExtraBold,
+            fontSize = 10.5.sp,
+            maxLines = 1
+        )
+    }
+}
+
+@Composable
+private fun LiveMatchBroadcastCard(
+    match: RealSportsMatch,
+    autoChannel: MediaItemModel?,
+    speedTier: NetSpeedTier,
+    texts: StudioUiTexts,
+    onSmartWatch: () -> Unit,
+    onDetailsClick: () -> Unit,
+    onOtherChannelsClick: () -> Unit
+) {
+    val gold = Color(0xFFD4AF37)
+    val goldLight = Color(0xFFFDE047)
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(18.dp))
+            .background(
+                Brush.verticalGradient(
+                    colors = listOf(Color(0xFF151724), Color(0xFF10111A))
+                )
+            )
+            .border(1.dp, Color(0xFF25283C), RoundedCornerShape(18.dp))
+            .padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = cleanStudioLeagueName(match.league),
+                color = Color(0xFF9CA3AF),
+                fontSize = 11.5.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f)
+            )
+            StudioLivePulseBadge(text = match.status.ifEmpty { match.matchTime.ifEmpty { "LIVE" } })
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(
+                modifier = Modifier.weight(1f),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                if (match.homeLogo.isNotEmpty()) {
+                    AsyncImage(
+                        model = ImageRequest.Builder(LocalContext.current).data(match.homeLogo).size(96, 96).build(),
+                        contentDescription = match.homeTeam,
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier.size(30.dp)
+                    )
+                }
+                Text(
+                    text = match.homeTeam,
+                    color = Color.White,
+                    fontWeight = FontWeight.Black,
+                    fontSize = 14.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            Box(
+                modifier = Modifier
+                    .padding(horizontal = 8.dp)
+                    .clip(RoundedCornerShape(9.dp))
+                    .background(Color(0xFF212436))
+                    .border(1.dp, gold.copy(alpha = 0.4f), RoundedCornerShape(9.dp))
+                    .padding(horizontal = 10.dp, vertical = 4.dp)
+            ) {
+                Text(
+                    text = match.scoreText.ifEmpty { "VS" },
+                    color = goldLight,
+                    fontWeight = FontWeight.Black,
+                    fontSize = 13.sp,
+                    maxLines = 1
+                )
+            }
+
+            Row(
+                modifier = Modifier.weight(1f),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.End
+            ) {
+                Text(
+                    text = match.awayTeam,
+                    color = Color.White,
+                    fontWeight = FontWeight.Black,
+                    fontSize = 14.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = TextAlign.End
+                )
+                if (match.awayLogo.isNotEmpty()) {
+                    Spacer(Modifier.width(8.dp))
+                    AsyncImage(
+                        model = ImageRequest.Builder(LocalContext.current).data(match.awayLogo).size(96, 96).build(),
+                        contentDescription = match.awayTeam,
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier.size(30.dp)
+                    )
+                }
+            }
+        }
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(10.dp))
+                .background(Color(0xFF1A1D2C))
+                .padding(horizontal = 10.dp, vertical = 6.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "📺 ${autoChannel?.title ?: match.suggestedBroadcaster}",
+                color = goldLight,
+                fontSize = 11.5.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f)
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = speedTier.badge,
+                color = Color(0xFF4ADE80),
+                fontSize = 10.5.sp,
+                fontWeight = FontWeight.ExtraBold
+            )
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Button(
+                onClick = onSmartWatch,
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626)),
+                shape = RoundedCornerShape(11.dp),
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp),
+                modifier = Modifier.weight(1.3f)
+            ) {
+                Icon(Icons.Default.PlayArrow, contentDescription = null, tint = Color.White, modifier = Modifier.size(17.dp))
+                Spacer(Modifier.width(4.dp))
+                Text(texts.autoPlayBtn, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+
+            OutlinedButton(
+                onClick = onDetailsClick,
+                shape = RoundedCornerShape(11.dp),
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
+                modifier = Modifier.weight(1f)
+            ) {
+                Text(texts.detailsBtn, color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 11.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+
+            OutlinedButton(
+                onClick = onOtherChannelsClick,
+                shape = RoundedCornerShape(11.dp),
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
+                modifier = Modifier.weight(1f)
+            ) {
+                Text(texts.otherChannelsBtn, color = goldLight, fontWeight = FontWeight.SemiBold, fontSize = 11.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
     }
 }
 
@@ -564,4 +781,76 @@ fun DevkanSportsStudioScreen(
                     Text(m.homeTeam, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp, modifier = Modifier.weight(1f), textAlign = TextAlign.Center)
                     Box(
                         modifier = Modifier
-                            .clip(RoundedCorner
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(Color(0xFF26293B))
+                            .padding(horizontal = 12.dp, vertical = 6.dp)
+                    ) {
+                        Text(
+                            text = m.scoreText.ifEmpty { "VS" },
+                            color = goldLight,
+                            fontWeight = FontWeight.Black,
+                            fontSize = 14.sp
+                        )
+                    }
+                    Text(m.awayTeam, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp, modifier = Modifier.weight(1f), textAlign = TextAlign.Center)
+                }
+
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("${texts.leagueLabel}: ${cleanStudioLeagueName(m.league)}", color = Color(0xFFD0D4DF), fontSize = 12.5.sp)
+                    Text("${texts.statusLabel}: ${m.status.ifEmpty { m.matchTime }}", color = Color(0xFF4ADE80), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        text = "${texts.autoChannelLabel}: ${autoChannel?.title ?: m.suggestedBroadcaster}",
+                        color = goldLight,
+                        fontSize = 12.5.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "${texts.netQualityLabel}: ${if (lang == "ar" || lang == "ku") speedTier.labelAr else speedTier.labelEn}",
+                        color = Color(0xFF93C5FD),
+                        fontSize = 12.sp
+                    )
+                    Text(texts.matchSummaryLabel, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.5.sp, modifier = Modifier.padding(top = 4.dp))
+                    Text(
+                        text = texts.liveFlowDesc(m.homeTeam, m.awayTeam, m.status.ifEmpty { m.matchTime }),
+                        color = Color(0xFF9CA3AF),
+                        fontSize = 12.sp,
+                        lineHeight = 18.sp
+                    )
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 14.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Button(
+                        onClick = {
+                            val targetMatch = m
+                            detailsMatch = null
+                            if (autoChannel != null) onSmartPlayChannel(targetMatch, autoChannel)
+                            else onOpenChannelPicker(targetMatch)
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626)),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(Icons.Default.PlayArrow, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text(texts.autoPlayBtn, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.5.sp, maxLines = 1)
+                    }
+
+                    OutlinedButton(
+                        onClick = {
+                            val targetMatch = m
+                            detailsMatch = null
+                            onOpenChannelPicker(targetMatch)
+                        },
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(texts.otherChannelsBtn, color = goldLight, fontWeight = FontWeight.Bold, fontSize = 12.5.sp, maxLines = 1)
+                    }
+                }
+            }
+        }
+    }
+}
