@@ -34,12 +34,10 @@ object PlayerEngineRouter {
         media3FailedFallback: Boolean = false,
         tuningConfig: AdaptiveTuningConfig? = null
     ): PlaybackConfig {
-        val effectiveLowLatency = if (media3FailedFallback) {
-            false
-        } else if (isSportsSection) {
-            userLowLatencyEnabled
-        } else {
-            userLowLatencyEnabled && (tuningConfig?.tier != PerformanceTier.LOW_TIER)
+        val effectiveLowLatency = when {
+            media3FailedFallback -> false
+            isSportsSection -> userLowLatencyEnabled
+            else -> userLowLatencyEnabled && (tuningConfig?.tier != PerformanceTier.LOW_TIER)
         }
 
         if (externalPlayerMode == ExternalPlayerMode.EXTERNAL_CHOOSER && manualOverrideEngine == null && !media3FailedFallback) {
