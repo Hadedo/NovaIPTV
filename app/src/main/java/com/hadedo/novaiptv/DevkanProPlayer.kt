@@ -54,6 +54,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackException
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionOverride
@@ -261,6 +262,7 @@ fun DevkanHybridPlayerScreen(
     fallbackUrl: String = "",
     streamTitle: String,
     isVodOrSeries: Boolean = false,
+    isSportsSection: Boolean = false,
     streamId: String = "",
     subId: String = "default",
     isFavorite: Boolean = false,
@@ -272,7 +274,7 @@ fun DevkanHybridPlayerScreen(
 ) {
     val context = LocalContext.current
     val activity = remember(context) { context.findActivity() }
-    val audioManager = remember(context) { context.getSystemService(Context.AUDIO_SERVICE) as AudioManager }
+    val audioManager = remember(context) { context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager }
     val scope = rememberCoroutineScope()
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
@@ -280,11 +282,50 @@ fun DevkanHybridPlayerScreen(
     val goldLight = Color(0xFFFDE047)
 
     val preferredEngine = remember { DevkanVault.getPreferredEngine(context) }
+    val externalPlayerMode = remember { DevkanVault.getExternalPlayerMode(context) }
+    val userLowLatencyEnabled = remember { DevkanVault.isLowLatencyEnabled(context) }
+    val performanceMode = remember { DevkanVault.getPerformanceMode(context) }
+    val tuningConfig = remember(context, performanceMode) {
+        DevicePerformanceManager.buildTuningConfig(context, performanceMode)
+    }
     val geoBypass = remember { DevkanVault.isGeoBypassEnabled(context) }
     val customUserAgent = remember { DevkanVault.getUserAgent(context) }
 
-    val useVlcEngine = remember(streamUrl, preferredEngine) {
-        preferredEngine == EngineType.LIBVLC_ONLY
+    var media3FailedFallback by remember(streamUrl) { mutableStateOf(false) }
+    var useFallbackUrl by remember(streamUrl, fallbackUrl) { mutableStateOf(false) }
+
+    val playbackConfig = remember(
+        streamUrl,
+        isSportsSection,
+        preferredEngine,
+        externalPlayerMode,
+        userLowLatencyEnabled,
+        media3FailedFallback,
+        tuningConfig
+    ) {
+        val routed = PlayerEngineRouter.resolvePlaybackConfig(
+            isSportsSection = isSportsSection,
+            preferredEngineType = preferredEngine,
+            externalPlayerMode = externalPlayerMode,
+            userLowLatencyEnabled = userLowLatencyEnabled,
+            media3FailedFallback = media3FailedFallback,
+            tuningConfig = tuningConfig
+        )
+        val suggested = EngineCoordinator.selectInitialEngine(streamUrl, preferredEngine)
+        if (preferredEngine == EngineType.AUTO_HYBRID &&
+            !media3FailedFallback &&
+            routed.engine == PlayerEngine.MEDIA3_EXOPLAYER &&
+            suggested == PlayerEngine.LIB_VLC
+        ) {
+            routed.copy(engine = PlayerEngine.LIB_VLC)
+        } else {
+            routed
+        }
+    }
+
+    val useVlcEngine = playbackConfig.engine == PlayerEngine.LIB_VLC
+    val effectiveUrl = remember(streamUrl, fallbackUrl, useFallbackUrl) {
+        if (useFallbackUrl && fallbackUrl.isNotBlank()) fallbackUrl else streamUrl
     }
 
     var controlsVisible by remember { mutableStateOf(true) }
@@ -343,15 +384,36 @@ fun DevkanHybridPlayerScreen(
         scaleIndex = if (isLandscape) 1 else 0
     }
 
-    // إنشاء وتحرير ExoPlayer بشكل نظيف ومستقل عن إعادة البناء العشوائية
-    DisposableEffect(useVlcEngine, isVodOrSeries) {
+    DisposableEffect(
+        useVlcEngine,
+        isVodOrSeries,
+        playbackConfig.enableLowLatency,
+        playbackConfig.preferHighestBitrate,
+        tuningConfig
+    ) {
         var createdPlayer: ExoPlayer? = null
         if (!useVlcEngine) {
             try {
-                val minBuf = if (isVodOrSeries) 20000 else 15000
-                val maxBuf = if (isVodOrSeries) 60000 else 45000
-                val playBuf = if (isVodOrSeries) 3000 else 4000
-                val rebufferBuf = if (isVodOrSeries) 5000 else 6000
+                val minBuf = when {
+                    isVodOrSeries -> tuningConfig.playerMinBufferMs.coerceAtLeast(20000)
+                    playbackConfig.enableLowLatency -> 8000
+                    else -> tuningConfig.playerMinBufferMs
+                }
+                val maxBuf = when {
+                    isVodOrSeries -> tuningConfig.playerMaxBufferMs.coerceAtLeast(60000)
+                    playbackConfig.enableLowLatency -> 25000
+                    else -> tuningConfig.playerMaxBufferMs
+                }
+                val playBuf = when {
+                    isVodOrSeries -> tuningConfig.playerBufferForPlaybackMs.coerceAtLeast(3000)
+                    playbackConfig.enableLowLatency -> 1500
+                    else -> tuningConfig.playerBufferForPlaybackMs
+                }
+                val rebufferBuf = when {
+                    isVodOrSeries -> tuningConfig.playerBufferForRebufferMs.coerceAtLeast(5000)
+                    playbackConfig.enableLowLatency -> 3000
+                    else -> tuningConfig.playerBufferForRebufferMs
+                }
 
                 val loadControl = DefaultLoadControl.Builder()
                     .setBufferDurationsMs(minBuf, maxBuf, playBuf, rebufferBuf)
@@ -361,7 +423,7 @@ fun DevkanHybridPlayerScreen(
                 val trackSelector = DefaultTrackSelector(context).apply {
                     setParameters(
                         buildUponParameters()
-                            .setForceHighestSupportedBitrate(true)
+                            .setForceHighestSupportedBitrate(playbackConfig.preferHighestBitrate)
                             .setPreferredAudioLanguage(lang)
                             .setPreferredTextLanguage(lang)
                     )
@@ -372,14 +434,29 @@ fun DevkanHybridPlayerScreen(
                     .setUserAgent(customUserAgent)
                     .setDefaultRequestProperties(headers)
                     .setAllowCrossProtocolRedirects(true)
-                    .setConnectTimeoutMs(12_000)
-                    .setReadTimeoutMs(30_000)
+                    .setConnectTimeoutMs(tuningConfig.networkTimeoutMs)
+                    .setReadTimeoutMs(tuningConfig.networkTimeoutMs * 2)
 
                 createdPlayer = ExoPlayer.Builder(context)
                     .setTrackSelector(trackSelector)
                     .setMediaSourceFactory(DefaultMediaSourceFactory(httpFactory))
                     .setLoadControl(loadControl)
                     .build()
+
+                createdPlayer.addListener(object : Player.Listener {
+                    override fun onPlayerError(error: PlaybackException) {
+                        if (preferredEngine == EngineType.AUTO_HYBRID) {
+                            if (!useFallbackUrl && fallbackUrl.isNotBlank()) {
+                                useFallbackUrl = true
+                                seekFeedbackText = "تبديل تلقائي للسيرفر البديل..."
+                            } else if (!media3FailedFallback) {
+                                media3FailedFallback = true
+                                seekFeedbackText = "تبديل تلقائي إلى محرك LibVLC..."
+                            }
+                        }
+                    }
+                })
+
                 exoPlayer = createdPlayer
             } catch (_: Exception) {
                 createdPlayer = null
@@ -473,13 +550,13 @@ fun DevkanHybridPlayerScreen(
         }
     }
 
-    LaunchedEffect(exoPlayer, streamUrl, streamId) {
+    LaunchedEffect(exoPlayer, effectiveUrl, streamId) {
         val player = exoPlayer ?: return@LaunchedEffect
-        if (streamUrl.isNotBlank()) {
+        if (effectiveUrl.isNotBlank()) {
             try {
                 player.stop()
                 player.clearMediaItems()
-                player.setMediaItem(MediaItem.fromUri(streamUrl))
+                player.setMediaItem(MediaItem.fromUri(effectiveUrl))
                 val savedPos = if (isVodOrSeries && streamId.isNotEmpty()) {
                     withContext(Dispatchers.IO) { DevkanVault.getVodPosition(context, streamId) }
                 } else 0L
@@ -554,19 +631,19 @@ fun DevkanHybridPlayerScreen(
         }
     }
 
-    LaunchedEffect(showDiagnostics, useVlcEngine) {
+    LaunchedEffect(showDiagnostics, useVlcEngine, playbackConfig.enableLowLatency, media3FailedFallback) {
         if (!showDiagnostics) return@LaunchedEffect
         while (true) {
             val buffered = try { exoPlayer?.totalBufferedDuration ?: 4000L } catch (_: Exception) { 4000L }
             val bitrate = try { exoPlayer?.videoFormat?.bitrate?.div(1000) ?: 4500 } catch (_: Exception) { 4500 }
             EngineCoordinator.currentDiagnostics.value = StreamDiagnostics(
-                activeEngine = if (!useVlcEngine) "Hardware" else "LibVLC",
+                activeEngine = if (!useVlcEngine) "Media3 ExoPlayer" else "LibVLC",
                 pingMs = 30L,
                 startupTimeMs = 400L,
                 bitrateKbps = if (bitrate > 0) bitrate else 4200,
                 bufferDurationMs = buffered,
-                reconnectCount = 0,
-                statusNote = "مستقر"
+                reconnectCount = if (media3FailedFallback) 1 else 0,
+                statusNote = if (playbackConfig.enableLowLatency) "مستقر • كمون منخفض" else "مستقر"
             )
             delay(2000)
         }
@@ -647,14 +724,15 @@ fun DevkanHybridPlayerScreen(
                     detectVerticalDragGestures { change, dragAmount ->
                         if (isLocked) return@detectVerticalDragGestures
                         change.consume()
+                        val am = audioManager ?: return@detectVerticalDragGestures
                         val isRightSide = change.position.x > size.width / 2f
                         if (isRightSide) {
-                            val maxVol = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
-                            val curVol = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
+                            val maxVol = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+                            val curVol = am.getStreamVolume(AudioManager.STREAM_MUSIC)
                             val delta = if (dragAmount < -15f) 1 else if (dragAmount > 15f) -1 else 0
                             if (delta != 0) {
                                 val nextVol = (curVol + delta).coerceIn(0, maxVol)
-                                audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, nextVol, 0)
+                                am.setStreamVolume(AudioManager.STREAM_MUSIC, nextVol, 0)
                                 val pct = ((nextVol.toFloat() / maxVol.toFloat()) * 100).toInt()
                                 seekFeedbackText = "🔊 $pct%"
                             }
@@ -703,7 +781,11 @@ fun DevkanHybridPlayerScreen(
                             )
                         }
                         try {
-                            val cacheMs = if (isVodOrSeries) 5000 else 4000
+                            val cacheMs = when {
+                                isVodOrSeries -> 5000
+                                playbackConfig.enableLowLatency -> 1800
+                                else -> 4000
+                            }
                             val libVlc = LibVLC(
                                 ctx,
                                 arrayListOf(
@@ -717,8 +799,8 @@ fun DevkanHybridPlayerScreen(
                             val mediaPlayer = MediaPlayer(libVlc).apply {
                                 attachViews(vlcLayout, null, false, false)
                                 videoScale = vlcScaleType
-                                if (streamUrl.isNotBlank()) {
-                                    val m = Media(libVlc, Uri.parse(streamUrl))
+                                if (effectiveUrl.isNotBlank()) {
+                                    val m = Media(libVlc, Uri.parse(effectiveUrl))
                                     m.setHWDecoderEnabled(true, false)
                                     media = m
                                     m.release()
