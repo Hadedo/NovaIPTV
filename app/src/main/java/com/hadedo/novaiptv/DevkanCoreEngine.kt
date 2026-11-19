@@ -141,6 +141,24 @@ data class EpgProgram(
     val category: String?,
     val streamQuality: String?
 )
+data class GroupedSportsMatch(
+    val matchKey: String,
+    val homeTeam: String,
+    val awayTeam: String,
+    val competition: String?,
+    val startTime: Long,
+    val endTime: Long,
+    val isLive: Boolean,
+    val streams: List<EpgProgram>,
+    val primaryStream: EpgProgram
+)
+
+data class ClassifiedSportsData(
+    val liveMatches: List<GroupedSportsMatch>,
+    val upcoming24hMatches: List<GroupedSportsMatch>,
+    val upcoming7dMatches: List<GroupedSportsMatch>,
+    val allOtherSports: List<EpgProgram>
+)
 
 data class EpgSlot(
     val channelId: String = "",
