@@ -1,4 +1,4 @@
-name: Build AUREX Release APK
+name: Build DEVKAN 34 VIP Release APK
 
 on:
   push:
@@ -29,7 +29,7 @@ jobs:
       - name: Generate and Save Keystore Once
         run: |
           if [ ! -f app/nova_release.jks ]; then
-            keytool -genkeypair -v -keystore app/nova_release.jks -keyalg RSA -keysize 2048 -validity 10000 -alias nova_key -storepass NovaIptv2026Pro -keypass NovaIptv2026Pro -dname "CN=AUREX, OU=Dev, O=Hadedo, L=Baghdad, C=IQ"
+            keytool -genkeypair -v -keystore app/nova_release.jks -keyalg RSA -keysize 2048 -validity 10000 -alias nova_key -storepass NovaIptv2026Pro -keypass NovaIptv2026Pro -dname "CN=DEVKAN, OU=VIP, O=Hadedo, L=Baghdad, C=IQ"
             git config user.name "github-actions[bot]"
             git config user.email "github-actions[bot]@users.noreply.github.com"
             git add -f app/nova_release.jks
@@ -43,5 +43,5 @@ jobs:
       - name: Upload Signed APK
         uses: actions/upload-artifact@v4
         with:
-          name: AUREX-Signed-APK
+          name: DEVKAN-34-VIP-APK
           path: app/build/outputs/apk/release/*.apk
