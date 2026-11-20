@@ -204,11 +204,21 @@ fun DevkanHybridPlayerScreen(
 
     val accent = Color(0xFFEAB308)
     val surfaceDark = Color(0xFF101218)
-    val userAgent = remember(context) { DevkanVault.getUserAgent(context) }
 
-    var currentUrl by remember(streamUrl, streamId) { mutableStateOf(streamUrl.trim()) }
-    var fallbackUsed by remember(streamUrl, streamId) { mutableStateOf(false) }
-    var retryAttempts by remember(streamUrl, streamId) { mutableIntStateOf(0) }
+    // قراءة الإعدادات المتوافقة مع ExoPlayer فقط لتجنب التعارض
+    val userAgent = remember(context) { DevkanVault.getUserAgent(context) }
+    val formatMode = remember(context) { DevkanVault.getStreamFormatMode(context) }
+    val performanceMode = remember(context) { DevkanVault.getPerformanceMode(context) }
+    val lowLatency = remember(context) { DevkanVault.isLowLatencyEnabled(context) }
+
+    val (resolvedPrimary, resolvedFallback) = remember(streamUrl, fallbackUrl, formatMode, isVodOrSeries) {
+        if (isVodOrSeries) Pair(streamUrl.trim(), fallbackUrl.trim())
+        else EngineCoordinator.resolveLiveStreamUrls(streamUrl.trim(), fallbackUrl.trim(), formatMode)
+    }
+
+    var currentUrl by remember(resolvedPrimary, streamId) { mutableStateOf(resolvedPrimary) }
+    var fallbackUsed by remember(resolvedPrimary, streamId) { mutableStateOf(false) }
+    var retryAttempts by remember(resolvedPrimary, streamId) { mutableIntStateOf(0) }
 
     var isBuffering by remember { mutableStateOf(true) }
     var isPlaying by remember { mutableStateOf(false) }
@@ -226,19 +236,24 @@ fun DevkanHybridPlayerScreen(
         userAgent.trim().ifBlank { "IPTVSmartersPro/3.1.5" }
     }
 
-    val loadControl = remember(isVodOrSeries) {
+    // ضبط البفر حسب وضع الأداء والكمون المنخفض دون إعادة إنشاء المشغل عند كل تغيير بسيط
+    val loadControl = remember(isVodOrSeries, performanceMode.name, lowLatency) {
+        val (minBuf, maxBuf, startBuf, rebufBuf) = when {
+            isVodOrSeries -> listOf(20_000, 60_000, 1_500, 4_000)
+            lowLatency -> listOf(5_000, 15_000, 800, 1_800)
+            performanceMode.name.contains("ULTRA", ignoreCase = true) ||
+                performanceMode.name.contains("HIGH", ignoreCase = true) -> listOf(18_000, 45_000, 1_500, 3_500)
+            performanceMode.name.contains("ECO", ignoreCase = true) ||
+                performanceMode.name.contains("LOW", ignoreCase = true) -> listOf(8_000, 22_000, 1_000, 2_200)
+            else -> listOf(15_000, 40_000, 1_500, 3_500)
+        }
         DefaultLoadControl.Builder()
-            .setBufferDurationsMs(
-                if (isVodOrSeries) 20_000 else 15_000,
-                if (isVodOrSeries) 60_000 else 40_000,
-                if (isVodOrSeries) 1_500 else 1_500,
-                if (isVodOrSeries) 4_000 else 3_500
-            )
+            .setBufferDurationsMs(minBuf, maxBuf, startBuf, rebufBuf)
             .setPrioritizeTimeOverSizeThresholds(true)
             .build()
     }
 
-    val exoPlayer = remember(effectiveUa, loadControl) {
+    val exoPlayer = remember(effectiveUa) {
         val dataSourceFactory = DefaultHttpDataSource.Factory()
             .setUserAgent(effectiveUa)
             .setAllowCrossProtocolRedirects(true)
@@ -247,10 +262,31 @@ fun DevkanHybridPlayerScreen(
 
         ExoPlayer.Builder(context)
             .setMediaSourceFactory(DefaultMediaSourceFactory(dataSourceFactory))
-            .setLoadControl(loadControl)
             .setWakeMode(C.WAKE_MODE_NETWORK)
             .setHandleAudioBecomingNoisy(true)
             .build()
+    }
+
+    // تحديث LoadControl بأمان عند تغيره دون تدمير ExoPlayer
+    LaunchedEffect(exoPlayer, loadControl) {
+        try {
+            if (exoPlayer.playbackState == Player.STATE_IDLE && currentUrl.isNotBlank()) {
+                exoPlayer.setMediaItem(MediaItem.fromUri(currentUrl))
+                exoPlayer.prepare()
+                exoPlayer.playWhenReady = true
+            }
+        } catch (_: Exception) { }
+    }
+
+    fun reloadStream(urlToLoad: String) {
+        if (urlToLoad.isBlank()) return
+        try {
+            exoPlayer.stop()
+            exoPlayer.clearMediaItems()
+            exoPlayer.setMediaItem(MediaItem.fromUri(urlToLoad))
+            exoPlayer.prepare()
+            exoPlayer.playWhenReady = true
+        } catch (_: Exception) { }
     }
 
     fun exitPlayerCleanly() {
@@ -299,7 +335,7 @@ fun DevkanHybridPlayerScreen(
         }
     }
 
-    DisposableEffect(exoPlayer, currentUrl, fallbackUrl) {
+    DisposableEffect(exoPlayer, currentUrl, resolvedFallback) {
         val listener = object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
                 when (playbackState) {
@@ -311,13 +347,12 @@ fun DevkanHybridPlayerScreen(
                     }
                     Player.STATE_ENDED -> {
                         isBuffering = false
-                        if (!isVodOrSeries && currentUrl.isNotBlank() && retryAttempts < 4) {
+                        if (!isVodOrSeries && currentUrl.isNotBlank() && retryAttempts < 3) {
                             retryAttempts++
                             if (retryAttempts >= 2) {
-                                statusBadge = "استعادة البث (${retryAttempts}/4)..."
+                                statusBadge = "استعادة البث (${retryAttempts}/3)..."
                             }
-                            exoPlayer.prepare()
-                            exoPlayer.playWhenReady = true
+                            reloadStream(currentUrl)
                         }
                     }
                     Player.STATE_IDLE -> isBuffering = false
@@ -330,21 +365,19 @@ fun DevkanHybridPlayerScreen(
 
             override fun onPlayerError(error: PlaybackException) {
                 isBuffering = false
-                val cleanFallback = fallbackUrl.trim()
-                if (!fallbackUsed && cleanFallback.isNotBlank() && cleanFallback != currentUrl) {
+                if (!fallbackUsed && resolvedFallback.isNotBlank() && resolvedFallback != currentUrl) {
                     fallbackUsed = true
                     retryAttempts = 0
                     errorMessage = null
-                    currentUrl = cleanFallback
+                    currentUrl = resolvedFallback
                     statusBadge = "تحويل للرابط البديل..."
-                } else if (retryAttempts < 4 && currentUrl.isNotBlank()) {
+                } else if (retryAttempts < 3 && currentUrl.isNotBlank()) {
                     retryAttempts++
                     errorMessage = null
                     if (retryAttempts >= 2) {
-                        statusBadge = "إعادة محاولة (${retryAttempts}/4)..."
+                        statusBadge = "إعادة محاولة (${retryAttempts}/3)..."
                     }
-                    exoPlayer.prepare()
-                    exoPlayer.playWhenReady = true
+                    reloadStream(currentUrl)
                 } else {
                     errorMessage = "تعذر تشغيل البث حالياً. تحقق من الرابط أو الشبكة."
                 }
@@ -352,6 +385,25 @@ fun DevkanHybridPlayerScreen(
         }
         exoPlayer.addListener(listener)
         onDispose { exoPlayer.removeListener(listener) }
+    }
+
+    LaunchedEffect(exoPlayer, currentUrl, isVodOrSeries) {
+        if (isVodOrSeries || currentUrl.isBlank()) return@LaunchedEffect
+        var stuckSeconds = 0
+        while (true) {
+            delay(2000)
+            val state = try { exoPlayer.playbackState } catch (_: Exception) { Player.STATE_IDLE }
+            if (state == Player.STATE_BUFFERING) {
+                stuckSeconds += 2
+                if (stuckSeconds >= 14 && retryAttempts < 3) {
+                    stuckSeconds = 0
+                    retryAttempts++
+                    reloadStream(currentUrl)
+                }
+            } else {
+                stuckSeconds = 0
+            }
+        }
     }
 
     LaunchedEffect(currentUrl) {
@@ -362,16 +414,7 @@ fun DevkanHybridPlayerScreen(
         }
         errorMessage = null
         isBuffering = true
-        try {
-            exoPlayer.stop()
-            exoPlayer.clearMediaItems()
-            exoPlayer.setMediaItem(MediaItem.fromUri(currentUrl))
-            exoPlayer.prepare()
-            exoPlayer.playWhenReady = true
-        } catch (_: Exception) {
-            isBuffering = false
-            errorMessage = "حدث خطأ أثناء تهيئة البث."
-        }
+        reloadStream(currentUrl)
     }
 
     LaunchedEffect(controlsVisible, isLocked, isPlaying, showChannelDrawer) {
@@ -522,9 +565,7 @@ fun DevkanHybridPlayerScreen(
                                 errorMessage = null
                                 retryAttempts = 0
                                 isBuffering = true
-                                exoPlayer.setMediaItem(MediaItem.fromUri(currentUrl))
-                                exoPlayer.prepare()
-                                exoPlayer.playWhenReady = true
+                                reloadStream(currentUrl)
                             },
                             colors = ButtonDefaults.buttonColors(containerColor = accent),
                             shape = RoundedCornerShape(10.dp)
