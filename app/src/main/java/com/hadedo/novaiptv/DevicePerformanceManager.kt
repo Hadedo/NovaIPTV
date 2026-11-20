@@ -16,7 +16,7 @@ enum class PerformanceMode(
     val tierOverride: PerformanceTier?
 ) {
     AUTO_SMART("تلقائي ذكي (موازنة العتاد والنظام)", "Smart Auto (Device & OS Balanced)", null),
-    ECO_LOW("اقتصادي (أجهزة ضعيفة / أندرويد قديم)", "Eco (Low-End / Legacy Android)", PerformanceTier.LOW_TIER),
+    ECO_LOW("اقتصادي (أجهزة ضعيفة / تقليل الحرارة)", "Eco (Low-End / Cool Thermal)", PerformanceTier.LOW_TIER),
     BALANCED("متوازن (استقرار وسلاسة يومية)", "Balanced (Daily Stability)", PerformanceTier.MID_TIER),
     ULTRA_HIGH("فائق (أجهزة قوية / أندرويد حديث)", "Ultra (Flagship / Modern Android)", PerformanceTier.HIGH_TIER)
 }
@@ -32,7 +32,8 @@ data class AdaptiveTuningConfig(
     val vlcNetworkCachingMs: Int,
     val vlcLiveCachingMs: Int,
     val preferHardwareDecoder: Boolean,
-    val enableHeavyVisualEffects: Boolean
+    val enableHeavyVisualEffects: Boolean,
+    val maxVideoBitrate: Int
 )
 
 object DevicePerformanceManager {
@@ -78,52 +79,55 @@ object DevicePerformanceManager {
         val base = when (tier) {
             PerformanceTier.LOW_TIER -> AdaptiveTuningConfig(
                 tier = tier,
-                minBufferMs = if (isVodOrSeries) 8_000 else 4_000,
-                maxBufferMs = if (isVodOrSeries) 20_000 else 10_000,
-                bufferForPlaybackMs = 1_200,
-                bufferForPlaybackAfterRebufferMs = 2_500,
-                connectTimeoutMs = 8_000,
-                readTimeoutMs = 15_000,
-                vlcNetworkCachingMs = if (isVodOrSeries) 2_200 else 1_500,
-                vlcLiveCachingMs = 1_500,
+                minBufferMs = if (isVodOrSeries) 10_000 else 6_000,
+                maxBufferMs = if (isVodOrSeries) 25_000 else 18_000,
+                bufferForPlaybackMs = 1_500,
+                bufferForPlaybackAfterRebufferMs = 3_000,
+                connectTimeoutMs = 10_000,
+                readTimeoutMs = 18_000,
+                vlcNetworkCachingMs = if (isVodOrSeries) 2_500 else 2_000,
+                vlcLiveCachingMs = 2_000,
                 preferHardwareDecoder = true,
-                enableHeavyVisualEffects = false
+                enableHeavyVisualEffects = false,
+                maxVideoBitrate = 8_000_000
             )
 
             PerformanceTier.MID_TIER -> AdaptiveTuningConfig(
                 tier = tier,
-                minBufferMs = if (isVodOrSeries) 15_000 else 8_000,
-                maxBufferMs = if (isVodOrSeries) 40_000 else 22_000,
-                bufferForPlaybackMs = 1_800,
-                bufferForPlaybackAfterRebufferMs = 3_500,
-                connectTimeoutMs = 10_000,
-                readTimeoutMs = 22_000,
-                vlcNetworkCachingMs = if (isVodOrSeries) 3_500 else 2_200,
-                vlcLiveCachingMs = 2_200,
+                minBufferMs = if (isVodOrSeries) 15_000 else 10_000,
+                maxBufferMs = if (isVodOrSeries) 45_000 else 30_000,
+                bufferForPlaybackMs = 2_000,
+                bufferForPlaybackAfterRebufferMs = 4_000,
+                connectTimeoutMs = 12_000,
+                readTimeoutMs = 24_000,
+                vlcNetworkCachingMs = if (isVodOrSeries) 3_500 else 2_500,
+                vlcLiveCachingMs = 2_500,
                 preferHardwareDecoder = true,
-                enableHeavyVisualEffects = true
+                enableHeavyVisualEffects = false,
+                maxVideoBitrate = 16_000_000
             )
 
             PerformanceTier.HIGH_TIER -> AdaptiveTuningConfig(
                 tier = tier,
-                minBufferMs = if (isVodOrSeries) 25_000 else 12_000,
-                maxBufferMs = if (isVodOrSeries) 75_000 else 35_000,
-                bufferForPlaybackMs = 2_200,
-                bufferForPlaybackAfterRebufferMs = 4_000,
+                minBufferMs = if (isVodOrSeries) 20_000 else 12_000,
+                maxBufferMs = if (isVodOrSeries) 60_000 else 40_000,
+                bufferForPlaybackMs = 2_000,
+                bufferForPlaybackAfterRebufferMs = 4_500,
                 connectTimeoutMs = 12_000,
                 readTimeoutMs = 30_000,
-                vlcNetworkCachingMs = if (isVodOrSeries) 5_000 else 3_000,
+                vlcNetworkCachingMs = if (isVodOrSeries) 4_500 else 3_000,
                 vlcLiveCachingMs = 3_000,
                 preferHardwareDecoder = true,
-                enableHeavyVisualEffects = true
+                enableHeavyVisualEffects = true,
+                maxVideoBitrate = Int.MAX_VALUE
             )
         }
 
+        // في وضع تقليل التأخير: نخفض زمن البداية فقط دون تدمير مخزون الأمان (minBufferMs)
         return if (!isVodOrSeries && lowLatency) {
             base.copy(
-                minBufferMs = (base.minBufferMs * 0.75f).toInt().coerceAtLeast(2_500),
-                bufferForPlaybackMs = (base.bufferForPlaybackMs * 0.75f).toInt().coerceAtLeast(800),
-                vlcLiveCachingMs = (base.vlcLiveCachingMs * 0.75f).toInt().coerceAtLeast(1_000)
+                bufferForPlaybackMs = (base.bufferForPlaybackMs * 0.75f).toInt().coerceAtLeast(1_200),
+                vlcLiveCachingMs = (base.vlcLiveCachingMs * 0.85f).toInt().coerceAtLeast(1_500)
             )
         } else {
             base
