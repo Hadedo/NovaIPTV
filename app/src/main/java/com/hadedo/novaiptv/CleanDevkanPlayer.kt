@@ -226,16 +226,18 @@ fun DevkanHybridPlayerScreen(
         userAgent.trim().ifBlank { "IPTVSmartersPro/3.1.5" }
     }
 
-    val loadControl = remember(isVodOrSeries) {
+        val loadControl = remember(isVodOrSeries) {
         DefaultLoadControl.Builder()
             .setBufferDurationsMs(
-                if (isVodOrSeries) 15_000 else 8_000,
-                if (isVodOrSeries) 50_000 else 25_000,
-                if (isVodOrSeries) 1_500 else 1_200,
-                if (isVodOrSeries) 3_000 else 2_500
+                if (isVodOrSeries) 20_000 else 15_000,
+                if (isVodOrSeries) 60_000 else 40_000,
+                if (isVodOrSeries) 1_500 else 1_500,
+                if (isVodOrSeries) 4_000 else 3_500
             )
             .setPrioritizeTimeOverSizeThresholds(true)
             .build()
+    }
+
     }
 
     val exoPlayer = remember(effectiveUa, loadControl) {
