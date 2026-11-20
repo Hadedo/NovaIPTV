@@ -399,15 +399,15 @@ fun DevkanHybridPlayerScreen(
                     .build()
 
                 val trackSelector = DefaultTrackSelector(context).apply {
-                    val paramsBuilder = buildUponParameters()
-                        .setPreferredAudioLanguage(lang)
-                        .setPreferredTextLanguage(lang)
-                        .setAllowVideoMixedMimeTypeSupport(true)
-                    if (tuning.maxVideoBitrate < Int.MAX_VALUE) {
-                        paramsBuilder.setMaxVideoBitrate(tuning.maxVideoBitrate)
-                    }
-                    setParameters(paramsBuilder)
-                }
+    val paramsBuilder = buildUponParameters()
+        .setPreferredAudioLanguage(lang)
+        .setPreferredTextLanguage(lang)
+    if (tuning.maxVideoBitrate < Int.MAX_VALUE) {
+        paramsBuilder.setMaxVideoBitrate(tuning.maxVideoBitrate)
+    }
+    setParameters(paramsBuilder.build())
+}
+
 
                 val headers = EngineCoordinator.buildSmartHeaders(geoBypass, customUserAgent)
                 val httpFactory = DefaultHttpDataSource.Factory()
