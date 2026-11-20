@@ -302,6 +302,7 @@ fun DevkanHybridPlayerScreen(
     }
 
     DisposableEffect(exoPlayer, currentUrl, fallbackUrl) {
+        DisposableEffect(exoPlayer, currentUrl, fallbackUrl) {
         val listener = object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
                 when (playbackState) {
@@ -313,10 +314,11 @@ fun DevkanHybridPlayerScreen(
                     }
                     Player.STATE_ENDED -> {
                         isBuffering = false
-                        if (!isVodOrSeries && currentUrl.isNotBlank() && retryAttempts < 3) {
+                        if (!isVodOrSeries && currentUrl.isNotBlank() && retryAttempts < 4) {
                             retryAttempts++
-                            statusBadge = "إعادة اتصال (${retryAttempts}/3)..."
-                            exoPlayer.seekToDefaultPosition()
+                            if (retryAttempts >= 2) {
+                                statusBadge = "استعادة البث (${retryAttempts}/4)..."
+                            }
                             exoPlayer.prepare()
                             exoPlayer.playWhenReady = true
                         }
@@ -324,6 +326,37 @@ fun DevkanHybridPlayerScreen(
                     Player.STATE_IDLE -> isBuffering = false
                 }
             }
+
+            override fun onIsPlayingChanged(playing: Boolean) {
+                isPlaying = playing
+            }
+
+            override fun onPlayerError(error: PlaybackException) {
+                isBuffering = false
+                val cleanFallback = fallbackUrl.trim()
+                if (!fallbackUsed && cleanFallback.isNotBlank() && cleanFallback != currentUrl) {
+                    fallbackUsed = true
+                    retryAttempts = 0
+                    errorMessage = null
+                    currentUrl = cleanFallback
+                    statusBadge = "تحويل للرابط البديل..."
+                } else if (retryAttempts < 4 && currentUrl.isNotBlank()) {
+                    retryAttempts++
+                    errorMessage = null
+                    if (retryAttempts >= 2) {
+                        statusBadge = "إعادة محاولة (${retryAttempts}/4)..."
+                    }
+                    exoPlayer.prepare()
+                    exoPlayer.playWhenReady = true
+                } else {
+                    errorMessage = "تعذر تشغيل البث حالياً. تحقق من الرابط أو الشبكة."
+                }
+            }
+        }
+        exoPlayer.addListener(listener)
+        onDispose { exoPlayer.removeListener(listener) }
+    }
+
 
             override fun onIsPlayingChanged(playing: Boolean) {
                 isPlaying = playing
