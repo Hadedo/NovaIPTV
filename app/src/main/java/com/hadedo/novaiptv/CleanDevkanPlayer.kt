@@ -2,6 +2,7 @@ package com.hadedo.novaiptv
 
 import android.app.Activity
 import android.content.Context
+import android.content.ContextWrapper
 import android.content.pm.ActivityInfo
 import android.content.res.Configuration
 import android.media.AudioManager
@@ -36,6 +37,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
@@ -57,6 +59,15 @@ import androidx.media3.ui.PlayerView
 import kotlinx.coroutines.delay
 import java.util.Locale
 
+fun Context.findActivity(): Activity? {
+    var ctx = this
+    while (ctx is ContextWrapper) {
+        if (ctx is Activity) return ctx
+        ctx = ctx.baseContext
+    }
+    return null
+}
+
 private fun formatCleanTime(ms: Long): String {
     if (ms <= 0L) return "00:00"
     val totalSec = ms / 1000
@@ -67,17 +78,122 @@ private fun formatCleanTime(ms: Long): String {
     else String.format(Locale.US, "%02d:%02d", m, s)
 }
 
+@Composable
+fun LegalDisclaimerScreen(lang: String, onAccept: () -> Unit) {
+    val gold = Color(0xFFD4AF37)
+    val goldLight = Color(0xFFFDE047)
+    val title = when (lang) {
+        "en" -> "Terms of Use & Legal Disclaimer"
+        "de" -> "Nutzungsbedingungen & Rechtlicher Hinweis"
+        "tr" -> "Kullanım Koşulları ve Yasal Uyarı"
+        else -> "إخلاء المسؤولية القانونية وشروط الاستخدام"
+    }
+    val body = when (lang) {
+        "en" -> "DEVKAN is strictly a media player application. It does NOT provide or include any channels or subscriptions. Users must add their own legally obtained playlists."
+        "de" -> "DEVKAN ist ein reiner Medienplayer. Die App enthält keine Kanäle oder Abonnements. Nutzer müssen eigene Wiedergabelisten hinzufügen."
+        "tr" -> "DEVKAN yalnızca bir medya oynatıcıdır. Herhangi bir kanal veya abonelik içermez."
+        else -> "تطبيق DEVKAN هو مشغل وسائط تقني فقط ولا يتضمن أي قنوات أو اشتراكات مدمجة. يلتزم المستخدم بإضافة اشتراكاته وقوائم التشغيل الخاصة به."
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFF07070A))
+            .padding(24.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(24.dp))
+                .background(Color(0xFF111116))
+                .border(1.dp, gold.copy(alpha = 0.5f), RoundedCornerShape(24.dp))
+                .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Icon(Icons.Default.VerifiedUser, contentDescription = null, tint = goldLight, modifier = Modifier.size(52.dp))
+            Text("DEVKAN 34 VIP", color = goldLight, fontWeight = FontWeight.Black, fontSize = 20.sp, letterSpacing = 1.5.sp)
+            Text(title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp, textAlign = TextAlign.Center)
+            Text(body, color = Color(0xFFB0B5C0), fontSize = 13.sp, lineHeight = 20.sp, textAlign = TextAlign.Center)
+            Button(
+                onClick = onAccept,
+                colors = ButtonDefaults.buttonColors(containerColor = gold),
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(50.dp)
+            ) {
+                Text("أوافق وأتابع الدخول / Continue", color = Color.Black, fontWeight = FontWeight.ExtraBold, fontSize = 15.sp)
+            }
+        }
+    }
+}
+
+@Composable
+fun AppLockScreen(lang: String, expectedPin: String, onUnlocked: () -> Unit) {
+    var enteredPin by remember { mutableStateOf("") }
+    var isError by remember { mutableStateOf(false) }
+    val gold = Color(0xFFD4AF37)
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFF07070A))
+            .padding(24.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(24.dp))
+                .background(Color(0xFF121218))
+                .border(1.dp, gold.copy(alpha = 0.4f), RoundedCornerShape(24.dp))
+                .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Icon(Icons.Default.Lock, contentDescription = null, tint = gold, modifier = Modifier.size(44.dp))
+            Text("DEVKAN App Lock", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+            OutlinedTextField(
+                value = enteredPin,
+                onValueChange = {
+                    if (it.length <= 6) {
+                        enteredPin = it
+                        isError = false
+                        if (it == expectedPin) onUnlocked()
+                    }
+                },
+                singleLine = true,
+                label = { Text("PIN") },
+                isError = isError,
+                modifier = Modifier.fillMaxWidth()
+            )
+            Button(
+                onClick = { if (enteredPin == expectedPin) onUnlocked() else isError = true },
+                colors = ButtonDefaults.buttonColors(containerColor = gold),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Unlock / فتح", color = Color.Black, fontWeight = FontWeight.Bold)
+            }
+        }
+    }
+}
+
 @OptIn(UnstableApi::class)
 @Composable
-fun CleanDevkanPlayerScreen(
+fun DevkanHybridPlayerScreen(
     streamUrl: String,
     fallbackUrl: String = "",
     streamTitle: String,
     isVodOrSeries: Boolean = false,
     streamId: String = "",
-    userAgent: String = "IPTVSmartersPro/3.1.5",
+    subId: String = "default",
+    isFavorite: Boolean = false,
+    onToggleFavorite: () -> Unit = {},
     quickChannels: List<MediaItemModel> = emptyList(),
     onSwitchChannel: (MediaItemModel) -> Unit = {},
+    lang: String = "ar",
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
@@ -88,6 +204,7 @@ fun CleanDevkanPlayerScreen(
 
     val accent = Color(0xFFEAB308)
     val surfaceDark = Color(0xFF101218)
+    val userAgent = remember(context) { DevkanVault.getUserAgent(context) }
 
     var currentUrl by remember(streamUrl, streamId) { mutableStateOf(streamUrl.trim()) }
     var fallbackUsed by remember(streamUrl, streamId) { mutableStateOf(false) }
@@ -112,10 +229,10 @@ fun CleanDevkanPlayerScreen(
     val loadControl = remember(isVodOrSeries) {
         DefaultLoadControl.Builder()
             .setBufferDurationsMs(
-                /* minBufferMs = */ if (isVodOrSeries) 15_000 else 8_000,
-                /* maxBufferMs = */ if (isVodOrSeries) 50_000 else 25_000,
-                /* bufferForPlaybackMs = */ if (isVodOrSeries) 1_500 else 1_200,
-                /* bufferForPlaybackAfterRebufferMs = */ if (isVodOrSeries) 3_000 else 2_500
+                if (isVodOrSeries) 15_000 else 8_000,
+                if (isVodOrSeries) 50_000 else 25_000,
+                if (isVodOrSeries) 1_500 else 1_200,
+                if (isVodOrSeries) 3_000 else 2_500
             )
             .setPrioritizeTimeOverSizeThresholds(true)
             .build()
@@ -141,11 +258,12 @@ fun CleanDevkanPlayerScreen(
             exoPlayer.playWhenReady = false
             exoPlayer.stop()
             exoPlayer.clearMediaItems()
-            if (activity != null) {
-                activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
-                val window = activity.window
-                WindowInsetsControllerCompat(window, window.decorView).show(WindowInsetsCompat.Type.systemBars())
-                window.decorView.requestApplyInsets()
+            val act = activity
+            if (act != null) {
+                act.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                val win = act.window
+                WindowInsetsControllerCompat(win, win.decorView).show(WindowInsetsCompat.Type.systemBars())
+                win.decorView.requestApplyInsets()
             }
         } catch (_: Exception) { }
         onBack()
@@ -159,21 +277,22 @@ fun CleanDevkanPlayerScreen(
     }
 
     DisposableEffect(activity) {
-        val window = activity?.window
-        if (window != null) {
+        val act = activity
+        val win = act?.window
+        if (win != null) {
             try {
-                window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-                val controller = WindowInsetsControllerCompat(window, window.decorView)
+                win.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                val controller = WindowInsetsControllerCompat(win, win.decorView)
                 controller.hide(WindowInsetsCompat.Type.systemBars())
                 controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
             } catch (_: Exception) { }
         }
         onDispose {
             try {
-                if (window != null) {
-                    window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-                    WindowInsetsControllerCompat(window, window.decorView).show(WindowInsetsCompat.Type.systemBars())
-                    window.decorView.requestApplyInsets()
+                if (win != null) {
+                    win.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                    WindowInsetsControllerCompat(win, win.decorView).show(WindowInsetsCompat.Type.systemBars())
+                    win.decorView.requestApplyInsets()
                 }
                 exoPlayer.release()
             } catch (_: Exception) { }
@@ -184,9 +303,7 @@ fun CleanDevkanPlayerScreen(
         val listener = object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
                 when (playbackState) {
-                    Player.STATE_BUFFERING -> {
-                        isBuffering = true
-                    }
+                    Player.STATE_BUFFERING -> isBuffering = true
                     Player.STATE_READY -> {
                         isBuffering = false
                         errorMessage = null
@@ -202,9 +319,7 @@ fun CleanDevkanPlayerScreen(
                             exoPlayer.playWhenReady = true
                         }
                     }
-                    Player.STATE_IDLE -> {
-                        isBuffering = false
-                    }
+                    Player.STATE_IDLE -> isBuffering = false
                 }
             }
 
@@ -233,9 +348,7 @@ fun CleanDevkanPlayerScreen(
             }
         }
         exoPlayer.addListener(listener)
-        onDispose {
-            exoPlayer.removeListener(listener)
-        }
+        onDispose { exoPlayer.removeListener(listener) }
     }
 
     LaunchedEffect(currentUrl) {
@@ -382,12 +495,7 @@ fun CleanDevkanPlayerScreen(
                         .background(Color.Black.copy(alpha = 0.75f))
                         .padding(horizontal = 16.dp, vertical = 8.dp)
                 ) {
-                    Text(
-                        text = badge,
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 15.sp
-                    )
+                    Text(text = badge, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
                 }
             }
 
@@ -420,10 +528,7 @@ fun CleanDevkanPlayerScreen(
                         ) {
                             Text("إعادة المحاولة", color = Color.Black, fontWeight = FontWeight.Bold)
                         }
-                        OutlinedButton(
-                            onClick = { exitPlayerCleanly() },
-                            shape = RoundedCornerShape(10.dp)
-                        ) {
+                        OutlinedButton(onClick = { exitPlayerCleanly() }, shape = RoundedCornerShape(10.dp)) {
                             Text("رجوع", color = Color.White)
                         }
                     }
@@ -567,11 +672,7 @@ fun CleanDevkanPlayerScreen(
 
                         IconButton(
                             onClick = {
-                                if (exoPlayer.isPlaying) {
-                                    exoPlayer.pause()
-                                } else {
-                                    exoPlayer.play()
-                                }
+                                if (exoPlayer.isPlaying) exoPlayer.pause() else exoPlayer.play()
                             },
                             modifier = Modifier
                                 .size(64.dp)
@@ -653,6 +754,88 @@ fun CleanDevkanPlayerScreen(
                                 Text(resizeLabel, color = accent, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                             }
                         }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun EpgTimelineGridSheet(
+    slots: List<EpgSlot>,
+    lang: String,
+    onPlayChannel: (String) -> Unit,
+    onClose: () -> Unit
+) {
+    BackHandler { onClose() }
+    var searchQuery by remember { mutableStateOf("") }
+    val filtered = remember(slots, searchQuery) {
+        if (searchQuery.isBlank()) slots
+        else slots.filter {
+            it.channelName.contains(searchQuery, ignoreCase = true) ||
+                it.currentProgram.contains(searchQuery, ignoreCase = true)
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFF0B0A14))
+            .padding(16.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text("دليل البرامج الزمني (EPG)", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+            IconButton(onClick = onClose) {
+                Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White)
+            }
+        }
+
+        OutlinedTextField(
+            value = searchQuery,
+            onValueChange = { searchQuery = it },
+            singleLine = true,
+            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = Color(0xFFD4AF37)) },
+            placeholder = { Text("ابحث في دليل البرامج أو القنوات...") },
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 8.dp),
+            shape = RoundedCornerShape(14.dp)
+        )
+
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxSize()) {
+            items(filtered.take(200)) { slot ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(Color(0xFF171429))
+                        .border(1.dp, Color(0xFF2D274B), RoundedCornerShape(14.dp))
+                        .clickable { onPlayChannel(slot.channelName) }
+                        .padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Column(modifier = Modifier.width(105.dp)) {
+                        Text(slot.channelName, color = Color(0xFFFDE047), fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(text = slot.timeRange, color = Color(0xFF9CA3AF), fontSize = 11.sp)
+                    }
+                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(slot.currentProgram, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        LinearProgressIndicator(
+                            progress = { slot.progress },
+                            color = Color(0xFFD4AF37),
+                            trackColor = Color(0xFF2D274B),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(4.dp)
+                                .clip(CircleShape)
+                        )
+                        Text("التالي: ${slot.nextProgram}", color = Color(0xFF9CA3AF), fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                 }
             }
