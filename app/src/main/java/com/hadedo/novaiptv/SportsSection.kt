@@ -35,6 +35,7 @@ import coil.request.ImageRequest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
@@ -46,27 +47,13 @@ import java.util.TimeZone
 
 // ───────────────────────── الإعدادات ─────────────────────────
 object SportsConfig {
-    enum class Provider { FOOTBALL_DATA, API_FOOTBALL }
-
-    /** FOOTBALL_DATA: بطولات أوروبية كبرى (مجاني، نتائج متأخرة قليلاً). API_FOOTBALL: يشمل الدوريات العربية (100 طلب/يوم مجاناً). */
-    val PROVIDER = Provider.FOOTBALL_DATA
-
-    /** ضع المفتاح هنا (للتجربة فقط؛ انقله لاحقاً إلى خادم وسيط). فارغ = يعمل القسم بقنوات اشتراكك فقط. */
-    const val SPORTS_API_KEY = ""
-
-    private const val URL_FD = "https://api.football-data.org/v4/matches"
-    private const val URL_AF = "https://v3.football.api-sports.io/fixtures"
-    val SPORTS_API_URL: String get() = if (PROVIDER == Provider.FOOTBALL_DATA) URL_FD else URL_AF
+    const val MATCHES_JSON_URL =
+        "https://raw.githubusercontent.com/Hadedo/NovaIPTV/main/matches.json"
 
     const val REMINDER_LEAD_MIN = 10
 
-    /** معرّفات دوريات API-Football بترتيب الأولوية (راجعها من لوحة تحكم المزوّد). */
-    val AF_LEAGUE_IDS = listOf(307, 233, 200, 1, 4, 2, 39, 140, 135, 78, 61, 3, 6, 12, 17, 15)
-    /** أولوية رموز football-data. */
-    val FD_CODES = listOf("WC", "EC", "CL", "PL", "PD", "SA", "BL1", "FL1")
-
-    /** تحديث تلقائي أثناء فتح التبويب (0 = معطّل). */
-    fun autoRefreshMs(): Long = if (PROVIDER == Provider.FOOTBALL_DATA) 90_000L else 600_000L
+    /** تحديث تلقائي أثناء فتح التبويب (بالمللي ثانية). */
+    fun autoRefreshMs(): Long = 300_000L
 }
 
 // ───────────────────────── النماذج ─────────────────────────
@@ -117,7 +104,6 @@ object SportsChannelMatcher {
     )
     private val regexCache = HashMap<String, Regex>()
 
-    /** text يجب أن يكون lowercase مسبقاً. الكلمات القصيرة (≤3 أحرف لاتينية) تُطابق ككلمة مستقلة. */
     fun matchesLower(text: String, kw: String): Boolean {
         if (text.isEmpty()) return false
         val k = kw.lowercase()
@@ -131,7 +117,6 @@ object SportsChannelMatcher {
         return generic.any { matchesLower(t, it) }
     }
 
-    /** كلمات القنوات الأقرب لكل لغة، وتُستخدم لترتيب الباقات وللربط مع البطولات. */
     fun langBase(lang: String): List<String> = when (lang) {
         "en" -> listOf("sky sports", "tnt sports", "bt sport", "espn", "bein", "eurosport")
         "de" -> listOf("sky sport", "dazn", "sportdigital", "magenta", "eurosport")
@@ -157,7 +142,6 @@ object SportsChannelMatcher {
         }
     }
 
-    /** يختار أنسب قناة من قنوات اشتراك المستخدم الرياضية: كلمات البطولة أولاً ثم كلمات اللغة. */
     fun findChannel(league: String, lang: String, sportsChannels: List<MediaItemModel>): MediaItemModel? {
         if (sportsChannels.isEmpty()) return null
         for (kw in leagueKeywords(league) + langBase(lang)) {
@@ -168,32 +152,27 @@ object SportsChannelMatcher {
     }
 }
 
-// ───────────────────────── جلب المباريات ─────────────────────────
+// ───────────────────────── جلب المباريات من matches.json ─────────────────────────
 object SportsRepository {
     private var cacheTime = 0L
     private var cacheState: SportsState? = null
 
     suspend fun fetchToday(force: Boolean): SportsState = withContext(Dispatchers.IO) {
-        if (SportsConfig.SPORTS_API_KEY.isBlank()) return@withContext SportsState.NoKey
         val now = System.currentTimeMillis()
         val cached = cacheState
         if (!force && cached != null && now - cacheTime < 45_000L) return@withContext cached
 
         val result: SportsState = try {
-            val (dayStart, dayEnd) = localDayBounds(now)
-            val d1 = ymdUtc(dayStart)
-            val d2 = ymdUtc(dayEnd - 1)
-            val raw = when (SportsConfig.PROVIDER) {
-                SportsConfig.Provider.FOOTBALL_DATA -> fetchFootballData(d1, ymdUtc(dayEnd - 1 + 86_400_000L))
-                SportsConfig.Provider.API_FOOTBALL -> fetchApiFootball(listOf(d1, d2).distinct())
-            }
-            val today = raw.distinctBy { it.id }
-                .filter { it.kickoffMs in dayStart until dayEnd }
-                .sortedWith(compareBy<SportsMatch>({ phaseOrder(it.phase) }, { it.priority }, { it.kickoffMs }))
-            if (today.isEmpty()) SportsState.Empty else SportsState.Ready(today.take(80))
+            val body = httpGet(
+                SportsConfig.MATCHES_JSON_URL,
+                mapOf("Cache-Control" to "no-cache")
+            )
+            val parsed = parseMatchesJson(body, now)
+            if (parsed.isEmpty()) SportsState.Empty else SportsState.Ready(parsed.take(80))
         } catch (e: Exception) {
             SportsState.Error(e.message ?: "connection")
         }
+
         if (result !is SportsState.Error) {
             cacheState = result
             cacheTime = now
@@ -201,30 +180,62 @@ object SportsRepository {
         result
     }
 
-    private fun phaseOrder(p: MatchPhase) = when (p) {
-        MatchPhase.LIVE -> 0
-        MatchPhase.UPCOMING -> 1
-        MatchPhase.FINISHED -> 2
-        MatchPhase.OTHER -> 3
-    }
-
-    private fun localDayBounds(now: Long): Pair<Long, Long> {
-        val c = Calendar.getInstance().apply {
-            timeInMillis = now
-            set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+    private fun parseIsoToMs(raw: String, fallback: Long): Long {
+        if (raw.isBlank()) return fallback
+        return try {
+            SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US)
+                .apply { timeZone = TimeZone.getTimeZone("UTC") }
+                .parse(raw.take(19))?.time ?: fallback
+        } catch (_: Exception) {
+            fallback
         }
-        val start = c.timeInMillis
-        c.add(Calendar.DAY_OF_MONTH, 1)
-        return start to c.timeInMillis
     }
 
-    private fun ymdUtc(ms: Long): String =
-        SimpleDateFormat("yyyy-MM-dd", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }.format(Date(ms))
+    private fun parseMatchesJson(rawJson: String, now: Long): List<SportsMatch> {
+        if (rawJson.isBlank()) return emptyList()
+        val root = JSONObject(rawJson)
+        val arr: JSONArray = root.optJSONArray("matches") ?: return emptyList()
+        val out = ArrayList<SportsMatch>(arr.length())
 
-    private fun parseUtc(s: String): Long = try {
-        SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US)
-            .apply { timeZone = TimeZone.getTimeZone("UTC") }.parse(s.take(19))?.time ?: 0L
-    } catch (_: Exception) { 0L }
+        for (i in 0 until arr.length()) {
+            val o = arr.optJSONObject(i) ?: continue
+            val home = o.optString("homeTeam", "").trim()
+            val away = o.optString("awayTeam", "").trim()
+            if (home.isEmpty() || away.isEmpty()) continue
+
+            val isLive = o.optBoolean("isLive", false)
+            val statusStr = o.optString("status", "").uppercase(Locale.US)
+            val phase = when {
+                isLive || statusStr.contains("LIVE") || statusStr.contains("1H") || statusStr.contains("2H") || statusStr.contains("HT") -> MatchPhase.LIVE
+                statusStr.contains("FT") || statusStr.contains("FINISHED") -> MatchPhase.FINISHED
+                else -> MatchPhase.UPCOMING
+            }
+
+            var homeScore: Int? = null
+            var awayScore: Int? = null
+            val scoreStr = o.optString("scoreText", "")
+            if (scoreStr.contains("-")) {
+                val parts = scoreStr.split("-")
+                homeScore = parts.getOrNull(0)?.trim()?.toIntOrNull()
+                awayScore = parts.getOrNull(1)?.trim()?.toIntOrNull()
+            }
+
+            out.add(
+                SportsMatch(
+                    id = o.optString("id", "gh_$i"),
+                    league = o.optString("league", "بطولة دولية"),
+                    home = home,
+                    away = away,
+                    kickoffMs = parseIsoToMs(o.optString("matchTime", ""), now),
+                    phase = phase,
+                    homeScore = homeScore,
+                    awayScore = awayScore,
+                    priority = if (phase == MatchPhase.LIVE) 0 else 1
+                )
+            )
+        }
+        return out
+    }
 
     private fun httpGet(url: String, headers: Map<String, String>): String {
         val conn = (URL(url).openConnection() as HttpURLConnection).apply {
@@ -240,91 +251,6 @@ object SportsRepository {
         } finally {
             conn.disconnect()
         }
-    }
-
-    private fun scoreOrNull(o: JSONObject?, key: String): Int? =
-        if (o != null && o.has(key) && !o.isNull(key)) o.optInt(key) else null
-
-    private fun fetchFootballData(dateFrom: String, dateTo: String): List<SportsMatch> {
-        val body = httpGet(
-            "${SportsConfig.SPORTS_API_URL}?dateFrom=$dateFrom&dateTo=$dateTo",
-            mapOf("X-Auth-Token" to SportsConfig.SPORTS_API_KEY)
-        )
-        val arr = JSONObject(body).optJSONArray("matches") ?: return emptyList()
-        val out = ArrayList<SportsMatch>(arr.length())
-        for (i in 0 until arr.length()) {
-            val o = arr.optJSONObject(i) ?: continue
-            val comp = o.optJSONObject("competition")
-            val code = comp?.optString("code").orEmpty()
-            val ft = o.optJSONObject("score")?.optJSONObject("fullTime")
-            val phase = when (o.optString("status")) {
-                "IN_PLAY", "PAUSED", "LIVE" -> MatchPhase.LIVE
-                "FINISHED", "AWARDED" -> MatchPhase.FINISHED
-                "SCHEDULED", "TIMED" -> MatchPhase.UPCOMING
-                else -> MatchPhase.OTHER
-            }
-            fun team(key: String): String {
-                val t = o.optJSONObject(key) ?: return ""
-                val short = t.optString("shortName")
-                return if (short.isBlank()) t.optString("name") else short
-            }
-            val pr = SportsConfig.FD_CODES.indexOf(code).let { if (it < 0) 50 else it }
-            out.add(
-                SportsMatch(
-                    id = "fd_${o.optLong("id")}",
-                    league = comp?.optString("name").orEmpty(),
-                    home = team("homeTeam"), away = team("awayTeam"),
-                    kickoffMs = parseUtc(o.optString("utcDate")),
-                    phase = phase,
-                    homeScore = scoreOrNull(ft, "home"), awayScore = scoreOrNull(ft, "away"),
-                    priority = pr
-                )
-            )
-        }
-        return out
-    }
-
-    private fun fetchApiFootball(dates: List<String>): List<SportsMatch> {
-        val out = ArrayList<SportsMatch>()
-        for (d in dates) {
-            val body = httpGet(
-                "${SportsConfig.SPORTS_API_URL}?date=$d",
-                mapOf("x-apisports-key" to SportsConfig.SPORTS_API_KEY)
-            )
-            val root = JSONObject(body)
-            val errs = root.optJSONObject("errors")
-            if (errs != null && errs.length() > 0) throw java.io.IOException(errs.optString(errs.keys().next()))
-            val arr = root.optJSONArray("response") ?: continue
-            for (i in 0 until arr.length()) {
-                val o = arr.optJSONObject(i) ?: continue
-                val fx = o.optJSONObject("fixture") ?: continue
-                val lg = o.optJSONObject("league") ?: continue
-                val tm = o.optJSONObject("teams") ?: continue
-                val gl = o.optJSONObject("goals")
-                val leagueId = lg.optInt("id")
-                val pr = SportsConfig.AF_LEAGUE_IDS.indexOf(leagueId)
-                if (pr < 0) continue
-                val phase = when (fx.optJSONObject("status")?.optString("short").orEmpty()) {
-                    "1H", "HT", "2H", "ET", "BT", "P", "LIVE", "INT" -> MatchPhase.LIVE
-                    "FT", "AET", "PEN" -> MatchPhase.FINISHED
-                    "NS", "TBD" -> MatchPhase.UPCOMING
-                    else -> MatchPhase.OTHER
-                }
-                out.add(
-                    SportsMatch(
-                        id = "af_${fx.optLong("id")}",
-                        league = lg.optString("name"),
-                        home = tm.optJSONObject("home")?.optString("name").orEmpty(),
-                        away = tm.optJSONObject("away")?.optString("name").orEmpty(),
-                        kickoffMs = parseUtc(fx.optString("date")),
-                        phase = phase,
-                        homeScore = scoreOrNull(gl, "home"), awayScore = scoreOrNull(gl, "away"),
-                        priority = pr
-                    )
-                )
-            }
-        }
-        return out
     }
 }
 
@@ -451,7 +377,7 @@ fun SportsTabScreen(
     }
     LaunchedEffect(Unit) {
         val ms = SportsConfig.autoRefreshMs()
-        if (ms <= 0L || SportsConfig.SPORTS_API_KEY.isBlank()) return@LaunchedEffect
+        if (ms <= 0L) return@LaunchedEffect
         while (true) {
             delay(ms)
             val r = SportsRepository.fetchToday(force = true)
