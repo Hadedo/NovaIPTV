@@ -34,61 +34,71 @@ jobs:
           if not key:
               raise RuntimeError("Missing APISPORTS_KEY secret")
 
-          url = "https://v3.football.api-sports.io/fixtures?live=all"
-          req = urllib.request.Request(
-              url,
-              headers={
-                  "x-apisports-key": key,
-                  "Accept": "application/json",
-              },
-          )
+          today_utc = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+          urls = [
+              "https://v3.football.api-sports.io/fixtures?live=all",
+              f"https://v3.football.api-sports.io/fixtures?date={today_utc}",
+          ]
 
-          with urllib.request.urlopen(req, timeout=25) as resp:
-              payload = json.loads(resp.read().decode("utf-8"))
+          headers = {
+              "x-apisports-key": key,
+              "Accept": "application/json",
+          }
 
+          seen_ids = set()
           items = []
-          for entry in payload.get("response", []):
-              fixture = entry.get("fixture", {}) or {}
-              league = entry.get("league", {}) or {}
-              teams = entry.get("teams", {}) or {}
-              goals = entry.get("goals", {}) or {}
-              status_obj = fixture.get("status", {}) or {}
 
-              home = teams.get("home", {}) or {}
-              away = teams.get("away", {}) or {}
+          for url in urls:
+              req = urllib.request.Request(url, headers=headers)
+              with urllib.request.urlopen(req, timeout=25) as resp:
+                  payload = json.loads(resp.read().decode("utf-8"))
 
-              home_goals = goals.get("home")
-              away_goals = goals.get("away")
-              score_text = (
-                  f"{home_goals} - {away_goals}"
-                  if home_goals is not None and away_goals is not None
-                  else ""
-              )
+              for entry in payload.get("response", []):
+                  fixture = entry.get("fixture", {}) or {}
+                  league = entry.get("league", {}) or {}
+                  teams = entry.get("teams", {}) or {}
+                  goals = entry.get("goals", {}) or {}
+                  status_obj = fixture.get("status", {}) or {}
 
-              short_status = str(status_obj.get("short") or "LIVE")
-              elapsed = status_obj.get("elapsed")
-              status_label = f"{short_status} {elapsed}'" if elapsed is not None else short_status
-              is_live = short_status in {"1H", "2H", "HT", "ET", "BT", "P", "LIVE"}
+                  home = teams.get("home", {}) or {}
+                  away = teams.get("away", {}) or {}
 
-              fixture_id = str(fixture.get("id") or f"{home.get('id','')}_{away.get('id','')}")
-              country = str(league.get("country") or "").strip()
-              league_name = str(league.get("name") or "بطولة دولية").strip()
-              full_league = f"{country} | {league_name}" if country else league_name
+                  fixture_id = str(fixture.get("id") or f"{home.get('id','')}_{away.get('id','')}")
+                  if fixture_id in seen_ids:
+                      continue
+                  seen_ids.add(fixture_id)
 
-              items.append({
-                  "id": fixture_id,
-                  "league": full_league,
-                  "homeTeam": str(home.get("name") or ""),
-                  "awayTeam": str(away.get("name") or ""),
-                  "homeLogo": str(home.get("logo") or ""),
-                  "awayLogo": str(away.get("logo") or ""),
-                  "scoreText": score_text,
-                  "status": status_label,
-                  "matchTime": str(fixture.get("date") or ""),
-                  "isLive": is_live,
-                  "suggestedBroadcaster": "",
-                  "directChannelId": "",
-              })
+                  home_goals = goals.get("home")
+                  away_goals = goals.get("away")
+                  score_text = (
+                      f"{home_goals} - {away_goals}"
+                      if home_goals is not None and away_goals is not None
+                      else ""
+                  )
+
+                  short_status = str(status_obj.get("short") or "NS")
+                  elapsed = status_obj.get("elapsed")
+                  status_label = f"{short_status} {elapsed}'" if elapsed is not None else short_status
+                  is_live = short_status in {"1H", "2H", "HT", "ET", "BT", "P", "LIVE"}
+
+                  country = str(league.get("country") or "").strip()
+                  league_name = str(league.get("name") or "بطولة دولية").strip()
+                  full_league = f"{country} | {league_name}" if country else league_name
+
+                  items.append({
+                      "id": fixture_id,
+                      "league": full_league,
+                      "homeTeam": str(home.get("name") or ""),
+                      "awayTeam": str(away.get("name") or ""),
+                      "homeLogo": str(home.get("logo") or ""),
+                      "awayLogo": str(away.get("logo") or ""),
+                      "scoreText": score_text,
+                      "status": status_label,
+                      "matchTime": str(fixture.get("date") or ""),
+                      "isLive": is_live,
+                      "suggestedBroadcaster": "",
+                      "directChannelId": "",
+                  })
 
           out = {
               "updatedAt": datetime.now(timezone.utc).isoformat(),
@@ -98,7 +108,7 @@ jobs:
           with open("matches.json", "w", encoding="utf-8") as f:
               json.dump(out, f, ensure_ascii=False, indent=2)
 
-          print(f"Saved {len(items)} live fixtures to matches.json")
+          print(f"Saved {len(items)} fixtures to matches.json")
           EOF
 
       - name: Commit and push matches.json if changed
