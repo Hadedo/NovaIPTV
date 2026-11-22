@@ -1,0 +1,114 @@
+name: Update Live Matches JSON
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update-matches:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Fetch fixtures and write matches.json
+        env:
+          APISPORTS_KEY: ${{ secrets.APISPORTS_KEY }}
+        run: |
+          python3 - << 'EOF'
+          import json
+          import os
+          import urllib.request
+          from datetime import datetime, timezone
+
+          key = os.environ.get("APISPORTS_KEY", "").strip()
+          if not key:
+              raise RuntimeError("Missing APISPORTS_KEY secret")
+
+          url = "https://v3.football.api-sports.io/fixtures?live=all"
+          req = urllib.request.Request(
+              url,
+              headers={
+                  "x-apisports-key": key,
+                  "Accept": "application/json",
+              },
+          )
+
+          with urllib.request.urlopen(req, timeout=25) as resp:
+              payload = json.loads(resp.read().decode("utf-8"))
+
+          items = []
+          for entry in payload.get("response", []):
+              fixture = entry.get("fixture", {}) or {}
+              league = entry.get("league", {}) or {}
+              teams = entry.get("teams", {}) or {}
+              goals = entry.get("goals", {}) or {}
+              status_obj = fixture.get("status", {}) or {}
+
+              home = teams.get("home", {}) or {}
+              away = teams.get("away", {}) or {}
+
+              home_goals = goals.get("home")
+              away_goals = goals.get("away")
+              score_text = (
+                  f"{home_goals} - {away_goals}"
+                  if home_goals is not None and away_goals is not None
+                  else ""
+              )
+
+              short_status = str(status_obj.get("short") or "LIVE")
+              elapsed = status_obj.get("elapsed")
+              status_label = f"{short_status} {elapsed}'" if elapsed is not None else short_status
+              is_live = short_status in {"1H", "2H", "HT", "ET", "BT", "P", "LIVE"}
+
+              fixture_id = str(fixture.get("id") or f"{home.get('id','')}_{away.get('id','')}")
+              country = str(league.get("country") or "").strip()
+              league_name = str(league.get("name") or "بطولة دولية").strip()
+              full_league = f"{country} | {league_name}" if country else league_name
+
+              items.append({
+                  "id": fixture_id,
+                  "league": full_league,
+                  "homeTeam": str(home.get("name") or ""),
+                  "awayTeam": str(away.get("name") or ""),
+                  "homeLogo": str(home.get("logo") or ""),
+                  "awayLogo": str(away.get("logo") or ""),
+                  "scoreText": score_text,
+                  "status": status_label,
+                  "matchTime": str(fixture.get("date") or ""),
+                  "isLive": is_live,
+                  "suggestedBroadcaster": "",
+                  "directChannelId": "",
+              })
+
+          out = {
+              "updatedAt": datetime.now(timezone.utc).isoformat(),
+              "matches": items,
+          }
+
+          with open("matches.json", "w", encoding="utf-8") as f:
+              json.dump(out, f, ensure_ascii=False, indent=2)
+
+          print(f"Saved {len(items)} live fixtures to matches.json")
+          EOF
+
+      - name: Commit and push matches.json if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add matches.json
+          if git diff --staged --quiet; then
+            echo "No changes in matches.json"
+          else
+            git commit -m "chore: update matches.json"
+            git push
+          fi
